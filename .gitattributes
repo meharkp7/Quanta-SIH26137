@@ -1,0 +1,1 @@
+osm_extracts/*.graphml !text !filter !merge !diff
