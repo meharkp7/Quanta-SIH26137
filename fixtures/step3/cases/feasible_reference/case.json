@@ -1,0 +1,7 @@
+{
+  "scenario_id": "S3_CASE_FEASIBLE",
+  "base_scenario_id": "S3_BASE",
+  "mutation": "none",
+  "expected_result": "FEASIBLE",
+  "primary_assertion": "reference route satisfies capacity, connectivity, service windows, and return-to-depot."
+}

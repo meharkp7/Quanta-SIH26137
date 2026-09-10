@@ -1,0 +1,17 @@
+{
+  "scenario_id": "S3_CASE_CLOSURE",
+  "base_scenario_id": "S3_BASE",
+  "mutation": "close E12 (N1 -> N2)",
+  "expected_result": "FEASIBLE",
+  "primary_assertion": "N1 -> N2 must switch from E12 to E16,E62.",
+  "normal_path": [
+    "E12"
+  ],
+  "detour_path": [
+    "E16",
+    "E62"
+  ],
+  "normal_travel_time_s": 10.0,
+  "detour_travel_time_s": 30.0,
+  "additional_travel_time_s": 20.0
+}

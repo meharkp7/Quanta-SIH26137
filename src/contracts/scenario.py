@@ -19,6 +19,7 @@ from .core_types import (
     SpeedMps,
     TimeS,
     VehicleId,
+    ParentRoadId,
 )
 
 
@@ -91,6 +92,11 @@ class RoadEdge(Contract):
     provenance: str = "synthetic"
 
     open_by_default: bool = True
+
+    @property
+    def free_flow_time_s(self) -> float:
+        """Free-flow traversal time implied by length and speed limit."""
+        return float(self.length_m) / float(self.speed_limit_mps)
 
     @model_validator(mode="after")
     def validate_directed_edge(self):

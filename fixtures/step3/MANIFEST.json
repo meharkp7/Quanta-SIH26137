@@ -1,0 +1,15 @@
+{
+  "fixture": "SIH26137-Step3",
+  "schema_version": "1.2",
+  "base_scenario": "S3_BASE",
+  "cases": [
+    "feasible_reference",
+    "early_arrival_wait",
+    "excess_load",
+    "missed_window",
+    "wrong_way",
+    "closure_with_detour"
+  ],
+  "purpose": "hand-checkable correctness and regression fixture",
+  "performance_evidence": false
+}

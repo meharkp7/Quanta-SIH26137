@@ -1,0 +1,9 @@
+{
+  "scenario_id": "S3_CASE_MISSED_WINDOW",
+  "base_scenario_id": "S3_BASE",
+  "mutation": "set E23 travel time to 30 s and J3 window to [60,65] s",
+  "expected_result": "INFEASIBLE",
+  "primary_assertion": "J3 service starts at 75 s, exceeding latest start 65 s.",
+  "expected_j3_service_start_s": 75.0,
+  "expected_j3_latest_start_s": 65.0
+}

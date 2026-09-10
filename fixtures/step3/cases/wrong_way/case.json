@@ -1,0 +1,8 @@
+{
+  "scenario_id": "S3_CASE_WRONG_WAY",
+  "base_scenario_id": "S3_BASE",
+  "mutation": "request physical movement N7 -> N2",
+  "expected_result": "INFEASIBLE",
+  "primary_assertion": "no directed path exists from N7 to N2.",
+  "expected_path_exists": false
+}

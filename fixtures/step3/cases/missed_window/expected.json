@@ -1,0 +1,9 @@
+{
+  "status": "INFEASIBLE",
+  "validation": {
+    "time_windows": false
+  },
+  "expected_j3_arrival_s": 75.0,
+  "expected_j3_service_start_s": 75.0,
+  "expected_j3_latest_start_s": 65.0
+}

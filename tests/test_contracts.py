@@ -1,4 +1,4 @@
-"""Runtime-enforcement tests for the V1.1 contract layer.
+"""Runtime-enforcement tests for the V1.2 contract layer.
 
 These are not exhaustive property tests -- they are the minimum needed to
 prove the specific gaps identified in the V1 review are actually closed:
@@ -68,24 +68,24 @@ def make_tiny_scenario() -> Scenario:
         RoadEdge(
             edge_id="e_depot_j1", parent_road_id="r1", from_node="depot", to_node="j1",
             length_m=100, road_class=RoadClass.COLLECTOR, speed_limit_mps=10,
-            lanes_forward=1, lanes_backward=1, capacity_veh_per_hour=600,
+            lane_count=1, capacity_veh_per_hour=600,
         ),
         RoadEdge(
             edge_id="e_j1_j2", parent_road_id="r2", from_node="j1", to_node="j2",
             length_m=100, road_class=RoadClass.ARTERIAL, speed_limit_mps=14,
             # one-way: forward lane only -- this is the "asymmetric legal
             # road" the Step 3 fixture calls for.
-            lanes_forward=2, lanes_backward=0, capacity_veh_per_hour=1200,
+            lane_count=2, capacity_veh_per_hour=1200,
         ),
         RoadEdge(
             edge_id="e_j1_c1", parent_road_id="r3", from_node="j1", to_node="c1",
             length_m=50, road_class=RoadClass.ACCESS_CONNECTOR, speed_limit_mps=3,
-            lanes_forward=1, lanes_backward=1, capacity_veh_per_hour=200,
+            lane_count=1, capacity_veh_per_hour=200,
         ),
         RoadEdge(
             edge_id="e_j2_c2", parent_road_id="r4", from_node="j2", to_node="c2",
             length_m=50, road_class=RoadClass.ACCESS_CONNECTOR, speed_limit_mps=3,
-            lanes_forward=1, lanes_backward=1, capacity_veh_per_hour=200,
+            lane_count=1, capacity_veh_per_hour=200,
         ),
     )
     requests = (
@@ -160,7 +160,7 @@ def test_scenario_rejects_edge_referencing_unknown_node():
             edges=(RoadEdge(
                 edge_id="e1", parent_road_id="r1", from_node="depot", to_node="ghost",
                 length_m=10, road_class=RoadClass.LOCAL, speed_limit_mps=5,
-                lanes_forward=1, lanes_backward=1, capacity_veh_per_hour=100,
+                lane_count=1, capacity_veh_per_hour=100,
             ),),
             requests=(), fleet=(),
             seeds=RandomSeeds(scenario_seed=0, road_seed=0, traffic_seed=0,
@@ -189,12 +189,12 @@ def test_vehicle_rejects_load_exceeding_capacity():
         )
 
 
-def test_road_edge_rejects_zero_lanes_both_directions():
-    with pytest.raises(ValidationError, match="cannot be traversed"):
+def test_road_edge_rejects_zero_lane_count():
+    with pytest.raises(ValidationError, match="lane_count must be at least 1"):
         RoadEdge(
             edge_id="e1", parent_road_id="r1", from_node="a", to_node="b",
             length_m=10, road_class=RoadClass.LOCAL, speed_limit_mps=5,
-            lanes_forward=0, lanes_backward=0, capacity_veh_per_hour=100,
+            lane_count=0, capacity_veh_per_hour=100,
         )
 
 

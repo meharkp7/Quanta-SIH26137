@@ -1,0 +1,12 @@
+{
+  "scenario_id": "S3_CASE_WAIT",
+  "base_scenario_id": "S3_BASE",
+  "mutation": "none",
+  "expected_result": "FEASIBLE",
+  "primary_assertion": "J2, J3, and J4 require waiting before service start.",
+  "expected_waiting_s": {
+    "J2": 5.0,
+    "J3": 5.0,
+    "J4": 40.0
+  }
+}
