@@ -1,0 +1,12 @@
+{
+  "status": "INFEASIBLE",
+  "validation": {
+    "connectivity": false
+  },
+  "attempted_leg": {
+    "from_node": "N7",
+    "to_node": "N2"
+  },
+  "expected_path_exists": false,
+  "reason": "E27 permits N2->N7; no reverse N7->N2 edge exists."
+}

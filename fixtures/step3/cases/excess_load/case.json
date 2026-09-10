@@ -1,0 +1,8 @@
+{
+  "scenario_id": "S3_CASE_EXCESS_LOAD",
+  "base_scenario_id": "S3_BASE",
+  "mutation": "assign J1,J2,J3,J4 to V1",
+  "expected_result": "INFEASIBLE",
+  "primary_assertion": "V1 load is 9 > capacity 7.",
+  "expected_load_v1": 9.0
+}

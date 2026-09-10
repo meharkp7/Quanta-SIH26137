@@ -1,0 +1,272 @@
+{
+  "schema_version": "1.2",
+  "scenario_id": "S3_CASE_FEASIBLE",
+  "source_name": "SIH26137_step3_handcheck",
+  "source_checksum": "8bf29786375e51e10895d08d2ce7166ad50d8071ff1f3d9f3ada43377936406f",
+  "units": {
+    "distance": "m",
+    "time": "s",
+    "speed": "m/s",
+    "demand": "abstract_load_units"
+  },
+  "coordinate_transform": {
+    "kind": "synthetic_cartesian_meters",
+    "description": "Synthetic coordinates in declared meters; not geographic latitude/longitude."
+  },
+  "graph_version": "G3_BASE",
+  "nodes": [
+    {
+      "node_id": "N0",
+      "kind": "depot",
+      "x_m": 0.0,
+      "y_m": 0.0
+    },
+    {
+      "node_id": "N1",
+      "kind": "customer_access",
+      "x_m": 100.0,
+      "y_m": 0.0
+    },
+    {
+      "node_id": "N2",
+      "kind": "customer_access",
+      "x_m": 200.0,
+      "y_m": 0.0
+    },
+    {
+      "node_id": "N3",
+      "kind": "customer_access",
+      "x_m": 300.0,
+      "y_m": 0.0
+    },
+    {
+      "node_id": "N4",
+      "kind": "customer_access",
+      "x_m": 400.0,
+      "y_m": 0.0
+    },
+    {
+      "node_id": "N5",
+      "kind": "customer_access",
+      "x_m": 500.0,
+      "y_m": 0.0
+    },
+    {
+      "node_id": "N6",
+      "kind": "junction",
+      "x_m": 100.0,
+      "y_m": 150.0
+    },
+    {
+      "node_id": "N7",
+      "kind": "junction",
+      "x_m": 280.0,
+      "y_m": -80.0
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "E01",
+      "parent_road_id": "R01",
+      "from_node": "N0",
+      "to_node": "N1",
+      "length_m": 100.0,
+      "road_class": "local",
+      "speed_limit_mps": 10.0,
+      "lane_count": 1,
+      "capacity_veh_per_hour": 600.0
+    },
+    {
+      "edge_id": "E10",
+      "parent_road_id": "R01",
+      "from_node": "N1",
+      "to_node": "N0",
+      "length_m": 100.0,
+      "road_class": "local",
+      "speed_limit_mps": 10.0,
+      "lane_count": 1,
+      "capacity_veh_per_hour": 600.0
+    },
+    {
+      "edge_id": "E12",
+      "parent_road_id": "R12",
+      "from_node": "N1",
+      "to_node": "N2",
+      "length_m": 100.0,
+      "road_class": "local",
+      "speed_limit_mps": 10.0,
+      "lane_count": 1,
+      "capacity_veh_per_hour": 600.0
+    },
+    {
+      "edge_id": "E23",
+      "parent_road_id": "R23",
+      "from_node": "N2",
+      "to_node": "N3",
+      "length_m": 100.0,
+      "road_class": "local",
+      "speed_limit_mps": 10.0,
+      "lane_count": 1,
+      "capacity_veh_per_hour": 600.0
+    },
+    {
+      "edge_id": "E34",
+      "parent_road_id": "R34",
+      "from_node": "N3",
+      "to_node": "N4",
+      "length_m": 100.0,
+      "road_class": "local",
+      "speed_limit_mps": 10.0,
+      "lane_count": 1,
+      "capacity_veh_per_hour": 600.0
+    },
+    {
+      "edge_id": "E45",
+      "parent_road_id": "R45",
+      "from_node": "N4",
+      "to_node": "N5",
+      "length_m": 100.0,
+      "road_class": "local",
+      "speed_limit_mps": 10.0,
+      "lane_count": 1,
+      "capacity_veh_per_hour": 600.0
+    },
+    {
+      "edge_id": "E51",
+      "parent_road_id": "R51",
+      "from_node": "N5",
+      "to_node": "N1",
+      "length_m": 100.0,
+      "road_class": "local",
+      "speed_limit_mps": 10.0,
+      "lane_count": 1,
+      "capacity_veh_per_hour": 600.0
+    },
+    {
+      "edge_id": "E16",
+      "parent_road_id": "R16",
+      "from_node": "N1",
+      "to_node": "N6",
+      "length_m": 150.0,
+      "road_class": "collector",
+      "speed_limit_mps": 10.0,
+      "lane_count": 1,
+      "capacity_veh_per_hour": 600.0
+    },
+    {
+      "edge_id": "E62",
+      "parent_road_id": "R26",
+      "from_node": "N6",
+      "to_node": "N2",
+      "length_m": 150.0,
+      "road_class": "collector",
+      "speed_limit_mps": 10.0,
+      "lane_count": 1,
+      "capacity_veh_per_hour": 600.0
+    },
+    {
+      "edge_id": "E27",
+      "parent_road_id": "R27",
+      "from_node": "N2",
+      "to_node": "N7",
+      "length_m": 80.0,
+      "road_class": "local",
+      "speed_limit_mps": 10.0,
+      "lane_count": 1,
+      "capacity_veh_per_hour": 600.0
+    }
+  ],
+  "requests": [
+    {
+      "request_id": "J1",
+      "node_id": "N1",
+      "demand": 2.0,
+      "known_at_s": 0.0,
+      "release_s": 0.0,
+      "earliest_start_s": 0.0,
+      "latest_start_s": 30.0,
+      "service_duration_s": 10.0
+    },
+    {
+      "request_id": "J2",
+      "node_id": "N2",
+      "demand": 2.0,
+      "known_at_s": 0.0,
+      "release_s": 0.0,
+      "earliest_start_s": 35.0,
+      "latest_start_s": 60.0,
+      "service_duration_s": 10.0
+    },
+    {
+      "request_id": "J3",
+      "node_id": "N3",
+      "demand": 3.0,
+      "known_at_s": 0.0,
+      "release_s": 0.0,
+      "earliest_start_s": 60.0,
+      "latest_start_s": 90.0,
+      "service_duration_s": 15.0
+    },
+    {
+      "request_id": "J4",
+      "node_id": "N4",
+      "demand": 2.0,
+      "known_at_s": 0.0,
+      "release_s": 0.0,
+      "earliest_start_s": 80.0,
+      "latest_start_s": 120.0,
+      "service_duration_s": 10.0
+    },
+    {
+      "request_id": "J5",
+      "node_id": "N5",
+      "demand": 1.0,
+      "known_at_s": 0.0,
+      "release_s": 0.0,
+      "earliest_start_s": 100.0,
+      "latest_start_s": 140.0,
+      "service_duration_s": 10.0
+    }
+  ],
+  "fleet": [
+    {
+      "vehicle_id": "V1",
+      "capacity": 7.0,
+      "start_node": "N0",
+      "depot_node": "N0",
+      "current_node": "N0",
+      "current_edge_id": null,
+      "distance_remaining_m": 0.0,
+      "onboard_request_ids": [],
+      "remaining_load": 0.0,
+      "executed_prefix": []
+    },
+    {
+      "vehicle_id": "V2",
+      "capacity": 6.0,
+      "start_node": "N0",
+      "depot_node": "N0",
+      "current_node": "N0",
+      "current_edge_id": null,
+      "distance_remaining_m": 0.0,
+      "onboard_request_ids": [],
+      "remaining_load": 0.0,
+      "executed_prefix": []
+    }
+  ],
+  "seeds": {
+    "scenario_seed": 301,
+    "traffic_seed": 302,
+    "event_seed": 303
+  },
+  "generator_version": "step3_fixture_v1",
+  "dataset_split": "development",
+  "config_version": "step3_v1",
+  "field_provenance": {
+    "nodes": "hand-authored",
+    "edges": "hand-authored",
+    "requests": "hand-authored",
+    "fleet": "hand-authored"
+  },
+  "parent_instance_id": "S3_BASE"
+}

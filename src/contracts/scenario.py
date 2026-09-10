@@ -19,6 +19,7 @@ from .core_types import (
     SpeedMps,
     TimeS,
     VehicleId,
+    ParentRoadId,
 )
 
 

@@ -1,0 +1,13 @@
+{
+  "status": "FEASIBLE",
+  "waiting_time_s": {
+    "J2": 5.0,
+    "J3": 5.0,
+    "J4": 40.0
+  },
+  "service_start_s": {
+    "J2": 35.0,
+    "J3": 60.0,
+    "J4": 80.0
+  }
+}

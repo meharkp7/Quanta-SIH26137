@@ -1,0 +1,18 @@
+{
+  "status": "INFEASIBLE",
+  "validation": {
+    "capacity": false
+  },
+  "test_assignment": {
+    "V1": [
+      "J1",
+      "J2",
+      "J3",
+      "J4"
+    ],
+    "V2": [
+      "J5"
+    ]
+  },
+  "expected_load_v1": 9.0
+}

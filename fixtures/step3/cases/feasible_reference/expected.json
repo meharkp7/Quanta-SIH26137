@@ -1,0 +1,10 @@
+{
+  "status": "FEASIBLE",
+  "validation": {
+    "capacity": true,
+    "time_windows": true,
+    "connectivity": true,
+    "all_requests_served": true
+  },
+  "reference_route_file": "../../expected/reference_solution.json"
+}

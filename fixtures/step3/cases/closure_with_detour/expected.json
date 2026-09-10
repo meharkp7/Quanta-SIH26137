@@ -1,0 +1,25 @@
+{
+  "status": "FEASIBLE",
+  "closed_edge_ids": [
+    "E12"
+  ],
+  "normal_path": [
+    "E12"
+  ],
+  "detour_path": [
+    "E16",
+    "E62"
+  ],
+  "normal_travel_time_s": 10.0,
+  "detour_travel_time_s": 30.0,
+  "additional_travel_time_s": 20.0,
+  "required_path_change": {
+    "from": [
+      "E12"
+    ],
+    "to": [
+      "E16",
+      "E62"
+    ]
+  }
+}
