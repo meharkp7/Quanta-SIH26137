@@ -5,6 +5,5 @@
   },
   "expected_j3_arrival_s": 75.0,
   "expected_j3_service_start_s": 75.0,
-  "expected_j3_latest_start_s": 65.0,
-  "note": "The route arrives after the latest service-start time; no invalid request window is used."
+  "expected_j3_latest_start_s": 65.0
 }

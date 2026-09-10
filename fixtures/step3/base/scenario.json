@@ -1,67 +1,85 @@
 {
   "schema_version": "1.2",
   "scenario_id": "S3_BASE",
-  "source_name": "SIH26137_step3_handcheck",
-  "source_checksum": "8bf29786375e51e10895d08d2ce7166ad50d8071ff1f3d9f3ada43377936406f",
+  "source_name": "step3_handcheck_fixture",
+  "source_checksum": null,
   "units": {
     "distance": "m",
     "time": "s",
     "speed": "m/s",
-    "demand": "abstract_load_units"
+    "demand": "load_units"
   },
   "coordinate_transform": {
-    "kind": "synthetic_cartesian_meters",
-    "description": "Synthetic coordinates in declared meters; not geographic latitude/longitude."
+    "scale": 1.0,
+    "translation_x_m": 0.0,
+    "translation_y_m": 0.0,
+    "description": "Synthetic Cartesian coordinates in metres."
   },
-  "graph_version": "G3_BASE",
+  "graph_version": "S3_BASE:graph:1",
   "nodes": [
     {
       "node_id": "N0",
-      "kind": "depot",
       "x_m": 0.0,
-      "y_m": 0.0
+      "y_m": 0.0,
+      "kind": "depot",
+      "zone_id": "Z00",
+      "signalized": false
     },
     {
       "node_id": "N1",
-      "kind": "customer_access",
       "x_m": 100.0,
-      "y_m": 0.0
+      "y_m": 0.0,
+      "kind": "customer_access",
+      "zone_id": "Z00",
+      "signalized": false
     },
     {
       "node_id": "N2",
-      "kind": "customer_access",
       "x_m": 200.0,
-      "y_m": 0.0
+      "y_m": 0.0,
+      "kind": "customer_access",
+      "zone_id": "Z00",
+      "signalized": false
     },
     {
       "node_id": "N3",
-      "kind": "customer_access",
       "x_m": 300.0,
-      "y_m": 0.0
+      "y_m": 0.0,
+      "kind": "customer_access",
+      "zone_id": "Z00",
+      "signalized": false
     },
     {
       "node_id": "N4",
-      "kind": "customer_access",
       "x_m": 400.0,
-      "y_m": 0.0
+      "y_m": 0.0,
+      "kind": "customer_access",
+      "zone_id": "Z00",
+      "signalized": false
     },
     {
       "node_id": "N5",
-      "kind": "customer_access",
       "x_m": 500.0,
-      "y_m": 0.0
+      "y_m": 0.0,
+      "kind": "customer_access",
+      "zone_id": "Z00",
+      "signalized": false
     },
     {
       "node_id": "N6",
+      "x_m": 150.0,
+      "y_m": 100.0,
       "kind": "junction",
-      "x_m": 100.0,
-      "y_m": 150.0
+      "zone_id": "Z01",
+      "signalized": false
     },
     {
       "node_id": "N7",
-      "kind": "junction",
       "x_m": 280.0,
-      "y_m": -80.0
+      "y_m": 100.0,
+      "kind": "junction",
+      "zone_id": "Z01",
+      "signalized": false
     }
   ],
   "edges": [
@@ -74,7 +92,9 @@
       "road_class": "local",
       "speed_limit_mps": 10.0,
       "lane_count": 1,
-      "capacity_veh_per_hour": 600.0
+      "capacity_veh_per_hour": 600.0,
+      "provenance": "synthetic",
+      "open_by_default": true
     },
     {
       "edge_id": "E10",
@@ -85,7 +105,9 @@
       "road_class": "local",
       "speed_limit_mps": 10.0,
       "lane_count": 1,
-      "capacity_veh_per_hour": 600.0
+      "capacity_veh_per_hour": 600.0,
+      "provenance": "synthetic",
+      "open_by_default": true
     },
     {
       "edge_id": "E12",
@@ -96,7 +118,9 @@
       "road_class": "local",
       "speed_limit_mps": 10.0,
       "lane_count": 1,
-      "capacity_veh_per_hour": 600.0
+      "capacity_veh_per_hour": 600.0,
+      "provenance": "synthetic",
+      "open_by_default": true
     },
     {
       "edge_id": "E23",
@@ -107,7 +131,9 @@
       "road_class": "local",
       "speed_limit_mps": 10.0,
       "lane_count": 1,
-      "capacity_veh_per_hour": 600.0
+      "capacity_veh_per_hour": 600.0,
+      "provenance": "synthetic",
+      "open_by_default": true
     },
     {
       "edge_id": "E34",
@@ -118,7 +144,9 @@
       "road_class": "local",
       "speed_limit_mps": 10.0,
       "lane_count": 1,
-      "capacity_veh_per_hour": 600.0
+      "capacity_veh_per_hour": 600.0,
+      "provenance": "synthetic",
+      "open_by_default": true
     },
     {
       "edge_id": "E45",
@@ -129,7 +157,9 @@
       "road_class": "local",
       "speed_limit_mps": 10.0,
       "lane_count": 1,
-      "capacity_veh_per_hour": 600.0
+      "capacity_veh_per_hour": 600.0,
+      "provenance": "synthetic",
+      "open_by_default": true
     },
     {
       "edge_id": "E51",
@@ -140,7 +170,9 @@
       "road_class": "local",
       "speed_limit_mps": 10.0,
       "lane_count": 1,
-      "capacity_veh_per_hour": 600.0
+      "capacity_veh_per_hour": 600.0,
+      "provenance": "synthetic",
+      "open_by_default": true
     },
     {
       "edge_id": "E16",
@@ -151,7 +183,9 @@
       "road_class": "collector",
       "speed_limit_mps": 10.0,
       "lane_count": 1,
-      "capacity_veh_per_hour": 600.0
+      "capacity_veh_per_hour": 600.0,
+      "provenance": "synthetic",
+      "open_by_default": true
     },
     {
       "edge_id": "E62",
@@ -162,7 +196,9 @@
       "road_class": "collector",
       "speed_limit_mps": 10.0,
       "lane_count": 1,
-      "capacity_veh_per_hour": 600.0
+      "capacity_veh_per_hour": 600.0,
+      "provenance": "synthetic",
+      "open_by_default": true
     },
     {
       "edge_id": "E27",
@@ -173,99 +209,131 @@
       "road_class": "local",
       "speed_limit_mps": 10.0,
       "lane_count": 1,
-      "capacity_veh_per_hour": 600.0
+      "capacity_veh_per_hour": 600.0,
+      "provenance": "synthetic",
+      "open_by_default": true
     }
   ],
   "requests": [
     {
       "request_id": "J1",
-      "node_id": "N1",
-      "demand": 2.0,
+      "original_customer_id": "C1",
+      "original_x": 100.0,
+      "original_y": 0.0,
+      "access_node_id": "N1",
+      "access_distance_m": 0.0,
+      "demand": 2,
       "known_at_s": 0.0,
       "release_s": 0.0,
-      "earliest_start_s": 0.0,
-      "latest_start_s": 30.0,
-      "service_duration_s": 10.0
+      "earliest_service_start_s": 0,
+      "latest_service_start_s": 30,
+      "service_duration_s": 10,
+      "status": "pending"
     },
     {
       "request_id": "J2",
-      "node_id": "N2",
-      "demand": 2.0,
+      "original_customer_id": "C2",
+      "original_x": 200.0,
+      "original_y": 0.0,
+      "access_node_id": "N2",
+      "access_distance_m": 0.0,
+      "demand": 2,
       "known_at_s": 0.0,
       "release_s": 0.0,
-      "earliest_start_s": 35.0,
-      "latest_start_s": 60.0,
-      "service_duration_s": 10.0
+      "earliest_service_start_s": 35,
+      "latest_service_start_s": 60,
+      "service_duration_s": 10,
+      "status": "pending"
     },
     {
       "request_id": "J3",
-      "node_id": "N3",
-      "demand": 3.0,
+      "original_customer_id": "C3",
+      "original_x": 300.0,
+      "original_y": 0.0,
+      "access_node_id": "N3",
+      "access_distance_m": 0.0,
+      "demand": 3,
       "known_at_s": 0.0,
       "release_s": 0.0,
-      "earliest_start_s": 60.0,
-      "latest_start_s": 90.0,
-      "service_duration_s": 15.0
+      "earliest_service_start_s": 60,
+      "latest_service_start_s": 90,
+      "service_duration_s": 15,
+      "status": "pending"
     },
     {
       "request_id": "J4",
-      "node_id": "N4",
-      "demand": 2.0,
+      "original_customer_id": "C4",
+      "original_x": 400.0,
+      "original_y": 0.0,
+      "access_node_id": "N4",
+      "access_distance_m": 0.0,
+      "demand": 2,
       "known_at_s": 0.0,
       "release_s": 0.0,
-      "earliest_start_s": 80.0,
-      "latest_start_s": 120.0,
-      "service_duration_s": 10.0
+      "earliest_service_start_s": 80,
+      "latest_service_start_s": 120,
+      "service_duration_s": 10,
+      "status": "pending"
     },
     {
       "request_id": "J5",
-      "node_id": "N5",
-      "demand": 1.0,
+      "original_customer_id": "C5",
+      "original_x": 500.0,
+      "original_y": 0.0,
+      "access_node_id": "N5",
+      "access_distance_m": 0.0,
+      "demand": 1,
       "known_at_s": 0.0,
       "release_s": 0.0,
-      "earliest_start_s": 100.0,
-      "latest_start_s": 140.0,
-      "service_duration_s": 10.0
+      "earliest_service_start_s": 100,
+      "latest_service_start_s": 140,
+      "service_duration_s": 10,
+      "status": "pending"
     }
   ],
   "fleet": [
     {
       "vehicle_id": "V1",
       "capacity": 7.0,
-      "start_node": "N0",
-      "depot_node": "N0",
-      "current_node": "N0",
+      "start_node_id": "N0",
+      "depot_node_id": "N0",
       "current_edge_id": null,
+      "current_node_id": "N0",
       "distance_remaining_m": 0.0,
       "onboard_request_ids": [],
       "remaining_load": 0.0,
-      "executed_prefix": []
+      "executed_prefix_edge_ids": []
     },
     {
       "vehicle_id": "V2",
       "capacity": 6.0,
-      "start_node": "N0",
-      "depot_node": "N0",
-      "current_node": "N0",
+      "start_node_id": "N0",
+      "depot_node_id": "N0",
       "current_edge_id": null,
+      "current_node_id": "N0",
       "distance_remaining_m": 0.0,
       "onboard_request_ids": [],
       "remaining_load": 0.0,
-      "executed_prefix": []
+      "executed_prefix_edge_ids": []
     }
   ],
   "seeds": {
-    "scenario_seed": 301,
-    "traffic_seed": 302,
-    "event_seed": 303
+    "scenario_seed": 26137,
+    "road_seed": 26137,
+    "traffic_seed": 26138,
+    "incident_seed": 26139,
+    "window_seed": 26140,
+    "optimizer_seed": 26141,
+    "learning_seed": 26142
   },
-  "generator_version": "step3_fixture_v1",
-  "dataset_split": "development",
-  "config_version": "step3_v1",
+  "generator_version": "step3-fixture-v1.2",
+  "dataset_split": "test",
+  "configuration_version": "step3-v1.2",
   "field_provenance": {
-    "nodes": "hand-authored",
-    "edges": "hand-authored",
-    "requests": "hand-authored",
-    "fleet": "hand-authored"
-  }
+    "nodes": "hand-authored Step 3 fixture",
+    "edges": "hand-authored Step 3 fixture",
+    "requests": "hand-authored Step 3 fixture",
+    "fleet": "hand-authored Step 3 fixture"
+  },
+  "parent_instance_id": null
 }

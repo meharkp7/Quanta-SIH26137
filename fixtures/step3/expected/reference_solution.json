@@ -12,16 +12,15 @@
         "E01",
         "E12",
         "E23",
-        "E34",
-        "E45",
-        "E51",
+        "E23",
+        "E12",
         "E10"
       ],
       "load": 7.0,
-      "driving_time_s": 70.0,
+      "driving_time_s": 70,
       "waiting_time_s": 10.0,
       "service_time_s": 35.0,
-      "elapsed_time_s": 115.0,
+      "elapsed_time_s": 115,
       "service_starts_s": {
         "J1": 10.0,
         "J2": 35.0,
@@ -48,10 +47,10 @@
         "E10"
       ],
       "load": 3.0,
-      "driving_time_s": 70.0,
+      "driving_time_s": 70,
       "waiting_time_s": 40.0,
       "service_time_s": 20.0,
-      "elapsed_time_s": 130.0,
+      "elapsed_time_s": 130,
       "service_starts_s": {
         "J4": 80.0,
         "J5": 100.0
@@ -64,6 +63,8 @@
   },
   "total_demand": 10.0,
   "total_vehicle_capacity": 13.0,
+  "total_distance_m": 1400.0,
+  "total_driving_time_s": 140,
   "assertions": {
     "capacity_feasible": true,
     "time_window_feasible": true,
