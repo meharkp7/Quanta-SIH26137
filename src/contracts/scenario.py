@@ -61,19 +61,31 @@ class RoadNode(Contract):
 
 
 class RoadEdge(Contract):
+    """
+    One physical directed road segment.
+
+    Traversal is legal ONLY from `from_node` to `to_node`.
+
+    Reverse traversal requires a separate RoadEdge whose
+    from_node/to_node are reversed.
+
+    `lane_count` refers only to this directed movement.
+    """
+
     edge_id: RoadEdgeId
-    parent_road_id: str
+    parent_road_id: ParentRoadId
+
     from_node: RoadNodeId
     to_node: RoadNodeId
 
-    length_m: DistanceM = Field(gt=0)
+    length_m: DistanceM
     road_class: RoadClass
 
-    speed_limit_mps: SpeedMps = Field(gt=0)
-    lanes_forward: int = Field(ge=0)
-    lanes_backward: int = Field(ge=0)
+    speed_limit_mps: SpeedMps
 
-    capacity_veh_per_hour: float = Field(gt=0)
+    lane_count: int
+
+    capacity_veh_per_hour: float
 
     source_edge_id: str | None = None
     provenance: str = "synthetic"
@@ -81,16 +93,34 @@ class RoadEdge(Contract):
     open_by_default: bool = True
 
     @model_validator(mode="after")
-    def _at_least_one_direction(self) -> "RoadEdge":
-        if self.lanes_forward == 0 and self.lanes_backward == 0:
-            raise ValueError(
-                f"edge {self.edge_id!r} has zero lanes in both directions "
-                "-- it cannot be traversed either way"
-            )
+    def validate_directed_edge(self):
         if self.from_node == self.to_node:
-            raise ValueError(f"edge {self.edge_id!r} is a self-loop ({self.from_node!r})")
-        return self
+            raise ValueError(
+                "RoadEdge cannot be a self-loop."
+            )
 
+        if self.length_m <= 0:
+            raise ValueError(
+                "length_m must be positive."
+            )
+
+        if self.speed_limit_mps <= 0:
+            raise ValueError(
+                "speed_limit_mps must be positive."
+            )
+
+        if self.lane_count <= 0:
+            raise ValueError(
+                "lane_count must be at least 1."
+            )
+
+        if self.capacity_veh_per_hour <= 0:
+            raise ValueError(
+                "capacity_veh_per_hour must be positive."
+            )
+
+        return self
+    
 
 class Request(Contract):
     request_id: CustomerId

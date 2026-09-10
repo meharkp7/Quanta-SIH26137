@@ -162,3 +162,26 @@ pass: the boundary that must never be crossed is on an event's
 Do not "fix" a future `effect_start_s` by clamping or hiding it; that
 would remove legitimate, already-revealed information and produce a
 weaker, less realistic policy input than the plan intends.
+
+## Directed Road Edge Semantics
+
+A RoadEdge represents a directed physical road segment.
+
+Traversal from node A to node B is legal only if an explicit
+RoadEdge exists with:
+
+from_node = A
+to_node   = B
+
+The presence of lanes_backward > 0 on a RoadEdge does not imply
+that a reverse directed RoadEdge exists.
+
+If traversal is legal in both directions, two directed RoadEdge
+objects must exist:
+
+A → B
+B → A
+
+Routing, reachability analysis, shortest-path computation,
+closure handling and simulation must operate on explicit directed
+RoadEdge objects only.
