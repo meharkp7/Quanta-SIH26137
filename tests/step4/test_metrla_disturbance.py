@@ -21,11 +21,8 @@ def test_spatiotemporal_disturbance_detection(tmp_path):
     output = tmp_path / "output"
 
     timestamps = [
-        "1330560000000000000",
-        "1330560300000000000",
-        "1330560600000000000",
-        "1330560900000000000",
-        "1330561200000000000",
+        str(1330560000000000000 + i * 300_000_000_000)
+        for i in range(5)
     ]
 
     rows = []
@@ -120,6 +117,7 @@ def test_spatiotemporal_disturbance_detection(tmp_path):
             min_absolute_deviation=8.0,
             min_persistence_steps=2,
             min_spatial_sensors=2,
+            max_network_affected_fraction=2.0,
         ),
     )
 
