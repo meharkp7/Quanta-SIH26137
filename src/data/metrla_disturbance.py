@@ -78,14 +78,34 @@ def _load_baseline(path: str | Path):
 
 
 def _load_edges(path: str | Path):
-    adjacency: dict[str, set[str]] = defaultdict(set)
+    path = Path(path)
+
+    if not path.exists():
+        return {}
+
+    adjacency: dict[str, set[str]] = {}
 
     for row in _read_csv(path):
-        source = row["from_sensor_id"]
-        target = row["to_sensor_id"]
+        source = (
+            row.get("from_sensor_id")
+            or row.get("source_sensor_id")
+        )
+        target = (
+            row.get("to_sensor_id")
+            or row.get("target_sensor_id")
+        )
 
-        if source != target:
-            adjacency[source].add(target)
+        if source is None or target is None:
+            raise ValueError(
+                "Spatial edge file must contain either "
+                "(from_sensor_id, to_sensor_id) or "
+                "(source_sensor_id, target_sensor_id)"
+            )
+
+        source = str(source)
+        target = str(target)
+
+        adjacency.setdefault(source, set()).add(target)
 
     return adjacency
 
@@ -131,6 +151,7 @@ def detect_disturbances(
     edge_path: str | Path,
     output_dir: str | Path,
     config: DisturbanceConfig | None = None,
+    dataset_id: str = "METR-LA",
 ):
     """
     Extract empirical spatiotemporal traffic disturbances.
@@ -149,6 +170,35 @@ def detect_disturbances(
     baseline = _load_baseline(baseline_path)
     adjacency = _load_edges(edge_path)
     timestamps, values = _load_series(observations_path)
+
+    # Canonical CSV timestamps are serialized as strings.
+    # Convert them once so real timestamp gaps can be checked safely.
+    timestamps = {
+        index: int(timestamp)
+        for index, timestamp in timestamps.items()
+    }
+
+    # A consecutive sample index is only temporally consecutive when
+    # its timestamps are separated by the nominal 5-minute interval.
+    nominal_interval_ns = 300_000_000_000
+
+    valid_consecutive_pairs = set()
+
+    ordered_indices = sorted(timestamps)
+
+    for previous_index, current_index in zip(
+        ordered_indices,
+        ordered_indices[1:],
+    ):
+        if (
+            current_index == previous_index + 1
+            and timestamps[current_index]
+            - timestamps[previous_index]
+            == nominal_interval_ns
+        ):
+            valid_consecutive_pairs.add(
+                (previous_index, current_index)
+            )
 
     sensors = sorted(values)
     sensor_count = len(sensors)
@@ -220,7 +270,10 @@ def detect_disturbances(
             )
 
             if anomalous:
-                if previous is None or index == previous + 1:
+                # Sample indices are normally consecutive, but real
+                # datasets can contain timestamp gaps. A persistence
+                # run must never cross a real temporal gap.
+                if previous is None or (previous, index) in valid_consecutive_pairs:
                     run.append(index)
                 else:
                     run = [index]
@@ -412,7 +465,7 @@ def detect_disturbances(
 
         events.append(
             DisturbanceEvent(
-                event_id=f"METRLA-D-{number:06d}",
+                event_id=f"{dataset_id}-D-{number:06d}",
                 start_index=start_index,
                 peak_index=peak_index,
                 end_index=end_index,
@@ -486,7 +539,7 @@ def detect_disturbances(
 
     profile = {
         "schema": "metrla-spatiotemporal-disturbance-1.1",
-        "dataset": "METR-LA",
+        "dataset": dataset_id,
         "semantics": {
             "ground_truth": False,
             "incident_labels": False,
@@ -548,7 +601,7 @@ def detect_disturbances(
             {
                 "schema":
                     "metrla-spatiotemporal-disturbance-1.1",
-                "dataset": "METR-LA",
+                "dataset": dataset_id,
                 "inputs": {
                     "observations":
                         str(observations_path),
