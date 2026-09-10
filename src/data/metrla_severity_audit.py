@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import math
@@ -7,14 +8,46 @@ from collections import defaultdict
 from pathlib import Path
 
 
-OBS = Path("data/canonical/METR-LA/observations.csv")
-EVENTS = Path("data/canonical/METR-LA/disturbances/disturbance_events.csv")
-BASELINE = Path(
-    "data/canonical/METR-LA/baseline/sensor_context_baseline.csv"
-)
-OUT = Path("data/canonical/METR-LA/event_audit")
+# ================================================================
+# CONFIGURATION
+# ================================================================
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Audit empirical traffic disturbance severity."
+    )
+
+    parser.add_argument(
+        "--dataset",
+        default="METR-LA",
+        choices=("METR-LA", "PEMS-BAY"),
+        help="Dataset to audit.",
+    )
+
+    return parser.parse_args()
+
+
+args = parse_args()
+
+DATASET_ROOTS = {
+    "METR-LA": Path("data/canonical/METR-LA"),
+    "PEMS-BAY": Path("data/canonical/PEMS-BAY"),
+}
+
+DATASET = args.dataset
+ROOT = DATASET_ROOTS[DATASET]
+
+OBS = ROOT / "observations.csv"
+EVENTS = ROOT / "disturbances" / "disturbance_events.csv"
+BASELINE = ROOT / "baseline" / "sensor_context_baseline.csv"
+OUT = ROOT / "event_audit"
+
 OUT.mkdir(parents=True, exist_ok=True)
 
+
+# ================================================================
+# HELPERS
+# ================================================================
 
 def read_csv(path):
     with path.open(newline="", encoding="utf-8") as f:
@@ -78,7 +111,6 @@ def empirical_percentile(sensor, value):
     if not values:
         return 0.0
 
-    # Fraction of empirical observations <= value.
     count = 0
 
     for x in values:
@@ -144,7 +176,6 @@ for row in read_csv(OBS):
 
 
 def context_for(index):
-    # METR-LA canonical timestamps are nanoseconds since epoch.
     from datetime import datetime, timezone
 
     dt = datetime.fromtimestamp(
@@ -176,7 +207,6 @@ for event in events:
         start_speed = values[event["start"]]
         peak_speed = values[event["peak"]]
 
-        # Minimum positive observed speed during the event.
         event_values = [
             values[i]
             for i in range(
@@ -248,16 +278,11 @@ for event in events:
                 "contextual_baseline": contextual_baseline,
                 "absolute_drop": absolute_drop,
                 "relative_drop": relative_drop,
-                "empirical_speed_percentile":
-                    empirical_pct,
-                "event_duration_steps":
-                    event["duration"],
-                "low_speed_fraction":
-                    low_speed_fraction,
-                "zero_speed_fraction":
-                    zero_fraction,
-                "recovered":
-                    event["recovered"],
+                "empirical_speed_percentile": empirical_pct,
+                "event_duration_steps": event["duration"],
+                "low_speed_fraction": low_speed_fraction,
+                "zero_speed_fraction": zero_fraction,
+                "recovered": event["recovered"],
             }
         )
 
@@ -268,21 +293,22 @@ for event in events:
 
 detail_path = OUT / "event_severity_by_sensor.csv"
 
-with detail_path.open(
-    "w",
-    newline="",
-    encoding="utf-8",
-) as f:
+if rows:
+    with detail_path.open(
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as f:
 
-    fields = list(rows[0].keys())
+        fields = list(rows[0].keys())
 
-    writer = csv.DictWriter(
-        f,
-        fieldnames=fields,
-    )
+        writer = csv.DictWriter(
+            f,
+            fieldnames=fields,
+        )
 
-    writer.writeheader()
-    writer.writerows(rows)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 # ================================================================
@@ -346,21 +372,22 @@ for event_id, values in by_event.items():
 
 event_path = OUT / "event_severity_summary.csv"
 
-with event_path.open(
-    "w",
-    newline="",
-    encoding="utf-8",
-) as f:
+if event_rows:
+    with event_path.open(
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as f:
 
-    fields = list(event_rows[0].keys())
+        fields = list(event_rows[0].keys())
 
-    writer = csv.DictWriter(
-        f,
-        fieldnames=fields,
-    )
+        writer = csv.DictWriter(
+            f,
+            fieldnames=fields,
+        )
 
-    writer.writeheader()
-    writer.writerows(event_rows)
+        writer.writeheader()
+        writer.writerows(event_rows)
 
 
 # ================================================================
@@ -404,7 +431,7 @@ zero_fraction = [
 
 
 summary = {
-    "dataset": "METR-LA",
+    "dataset": DATASET,
     "event_count": len(events),
     "event_sensor_records": len(rows),
     "severity": {
@@ -483,7 +510,7 @@ with (OUT / "severity_summary.json").open(
 # ================================================================
 
 print("=" * 80)
-print("METR-LA EVENT SEVERITY SANITY AUDIT")
+print(f"{DATASET} EVENT SEVERITY SANITY AUDIT")
 print("=" * 80)
 
 print("\nEVENT-SENSOR RECORDS:", len(rows))
@@ -513,64 +540,111 @@ print(
 print("\nCONTEXTUAL BASELINE")
 print(
     "median:",
-    round(percentile(baseline_values, 0.50), 2),
+    round(
+        percentile(
+            baseline_values,
+            0.50,
+        ),
+        2,
+    ),
 )
 
 print("\nABSOLUTE DROP")
 print(
     "median:",
-    round(percentile(absolute, 0.50), 2),
+    round(
+        percentile(absolute, 0.50),
+        2,
+    ),
 )
 print(
     "p90:",
-    round(percentile(absolute, 0.90), 2),
+    round(
+        percentile(absolute, 0.90),
+        2,
+    ),
 )
 print(
     "p95:",
-    round(percentile(absolute, 0.95), 2),
+    round(
+        percentile(absolute, 0.95),
+        2,
+    ),
 )
 
 print("\nRELATIVE DROP")
 print(
     "median:",
-    round(percentile(relative, 0.50), 3),
+    round(
+        percentile(relative, 0.50),
+        4,
+    ),
 )
 print(
     "p90:",
-    round(percentile(relative, 0.90), 3),
+    round(
+        percentile(relative, 0.90),
+        4,
+    ),
 )
 print(
     "p95:",
-    round(percentile(relative, 0.95), 3),
+    round(
+        percentile(relative, 0.95),
+        4,
+    ),
 )
 
-print("\nEMPIRICAL SENSOR SPEED PERCENTILE")
+print("\nEMPIRICAL SPEED PERCENTILE")
 print(
     "median:",
-    round(percentile(percentiles, 0.50), 3),
+    round(
+        percentile(percentiles, 0.50),
+        4,
+    ),
 )
 print(
     "p10:",
-    round(percentile(percentiles, 0.10), 3),
+    round(
+        percentile(percentiles, 0.10),
+        4,
+    ),
 )
 print(
     "p25:",
-    round(percentile(percentiles, 0.25), 3),
-)
-
-print("\nLOW-SPEED INVOLVEMENT")
-print(
-    "median fraction <10 mph:",
-    round(percentile(low_fraction, 0.50), 3),
+    round(
+        percentile(percentiles, 0.25),
+        4,
+    ),
 )
 print(
-    "median fraction ==0:",
-    round(percentile(zero_fraction, 0.50), 3),
+    "p50:",
+    round(
+        percentile(percentiles, 0.50),
+        4,
+    ),
 )
 
-print("\nOUTPUT")
-print(detail_path)
-print(event_path)
-print(OUT / "severity_summary.json")
+print("\nLOW-SPEED AUDIT")
+print(
+    "median event low-speed fraction:",
+    round(
+        percentile(low_fraction, 0.50),
+        4,
+    ),
+)
+print(
+    "median event zero-speed fraction:",
+    round(
+        percentile(zero_fraction, 0.50),
+        4,
+    ),
+)
+
+print("\nSEMANTICS")
+print("incident ground truth: False")
+print("causal labels: False")
+print("empirical observation audit: True")
+print("source observations modified: False")
 
 print("=" * 80)
