@@ -50,8 +50,8 @@ class RoadBuildConfig:
     seed: int = 26137
 
     def __post_init__(self) -> None:
-        if self.topology_family not in {"grid", "irregular"}:
-            raise ValueError("topology_family must be 'grid' or 'irregular'")
+        if self.topology_family not in {"grid", "irregular", "radial", "hybrid"}:
+            raise ValueError("topology_family must be grid, irregular, radial, or hybrid")
         if self.junction_count < 5:
             raise ValueError("junction_count must be at least 5")
         if not 0 <= self.one_way_fraction <= 1:
@@ -272,7 +272,7 @@ def _synthetic_junction_points(
     max_y = max(point.y for point in customer_points.values())
     count = config.junction_count
 
-    if config.topology_family == "grid":
+    if config.topology_family in {"grid", "hybrid"}:
         rows, cols = _grid_shape(count, config.grid_rows, config.grid_cols)
         points: list[Point] = []
         for row in range(rows):
@@ -286,9 +286,51 @@ def _synthetic_junction_points(
                 if 0 < row < rows - 1:
                     y += rng.uniform(-jitter_y, jitter_y)
                 points.append(Point(max(0, min(max_x, x)), max(0, min(max_y, y))))
-        return points[:count]
+        if config.topology_family == "grid":
+            return points[:count]
+        # Hybrid: retain a regular urban core but perturb the outer ring.
+        cx, cy = max_x / 2.0, max_y / 2.0
+        radius = 0.38 * min(max_x, max_y)
+        return [
+            Point(
+                p.x + rng.uniform(-0.02, 0.02) * max_x if math.hypot(p.x-cx, p.y-cy) > radius else p.x,
+                p.y + rng.uniform(-0.02, 0.02) * max_y if math.hypot(p.x-cx, p.y-cy) > radius else p.y,
+            )
+            for p in points[:count]
+        ]
 
-    return [Point(rng.uniform(0, max_x), rng.uniform(0, max_y)) for _ in range(count)]
+    if config.topology_family == "radial":
+        # Keep spatial coverage comparable to the other families; radiality is
+        # expressed by the edge construction below, not by leaving the outer
+        # corners of the map empty.
+        rows, cols = _grid_shape(count, config.grid_rows, config.grid_cols)
+        points: list[Point] = []
+        for row in range(rows):
+            for col in range(cols):
+                if len(points) >= count:
+                    break
+                cell_x = max_x / max(cols, 1)
+                cell_y = max_y / max(rows, 1)
+                x = (col + rng.uniform(0.28, 0.72)) * cell_x
+                y = (row + rng.uniform(0.28, 0.72)) * cell_y
+                points.append(Point(min(max_x, x), min(max_y, y)))
+        return points
+
+    # Irregular family uses a jittered stratified lattice rather than pure
+    # uniform scattering. This preserves spatial coverage (and therefore
+    # customer snap guarantees) while still producing non-grid geometry.
+    rows, cols = _grid_shape(count, config.grid_rows, config.grid_cols)
+    points: list[Point] = []
+    for row in range(rows):
+        for col in range(cols):
+            if len(points) >= count:
+                break
+            cell_x = max_x / max(cols, 1)
+            cell_y = max_y / max(rows, 1)
+            x = (col + rng.uniform(0.18, 0.82)) * cell_x
+            y = (row + rng.uniform(0.18, 0.82)) * cell_y
+            points.append(Point(min(max_x, x), min(max_y, y)))
+    return points
 
 
 def _grid_shape(count: int, rows: int, cols: int) -> tuple[int, int]:
@@ -300,7 +342,7 @@ def _grid_shape(count: int, rows: int, cols: int) -> tuple[int, int]:
 
 
 def _candidate_segments(points: list[Point], config: RoadBuildConfig) -> list[RoadSegment]:
-    if config.topology_family == "grid":
+    if config.topology_family in {"grid", "hybrid"}:
         rows, cols = _grid_shape(len(points), config.grid_rows, config.grid_cols)
         segments: list[RoadSegment] = []
         for row in range(rows):
@@ -312,11 +354,44 @@ def _candidate_segments(points: list[Point], config: RoadBuildConfig) -> list[Ro
                     segments.append(RoadSegment(index, index + 1, f"R{index:05d}H"))
                 if row + 1 < rows and index + cols < len(points):
                     segments.append(RoadSegment(index, index + cols, f"R{index:05d}V"))
+        if config.topology_family == "grid":
+            return segments
+        # Hybrid adds a sparse nearest-neighbour diagonal network to the core grid.
+        segments.extend(
+            RoadSegment(a, b, f"X{idx:05d}")
+            for idx, (a, b) in enumerate(_nearest_neighbor_edges(points, 2))
+            if abs(points[a].x - points[b].x) > 1e-9
+            and abs(points[a].y - points[b].y) > 1e-9
+            and math.hypot(points[a].x - points[b].x, points[a].y - points[b].y) >= config.min_segment_length_m
+        )
         return segments
+
+    if config.topology_family == "radial":
+        cx = sum(p.x for p in points) / len(points)
+        cy = sum(p.y for p in points) / len(points)
+        center = min(range(len(points)), key=lambda i: math.hypot(points[i].x-cx, points[i].y-cy))
+        edges: set[tuple[int, int]] = set()
+        # Radial spokes: every junction gets a connection toward a nearer
+        # radius junction, eventually reaching the center.
+        for i, p in enumerate(points):
+            if i == center:
+                continue
+            r = math.hypot(p.x-cx, p.y-cy)
+            inward = [j for j in range(len(points)) if j != i and math.hypot(points[j].x-cx, points[j].y-cy) < r]
+            if inward:
+                j = min(inward, key=lambda j: abs(math.hypot(points[j].x-cx, points[j].y-cy)-r) + 0.35*abs(math.atan2(points[j].y-cy, points[j].x-cx)-math.atan2(p.y-cy, p.x-cx)))
+                edges.add((min(i,j), max(i,j)))
+        # Circumferential rings keep radial corridors from becoming a tree.
+        angular = sorted((i for i in range(len(points)) if i != center), key=lambda i: math.atan2(points[i].y-cy, points[i].x-cx))
+        for a, b in zip(angular, angular[1:]+angular[:1]):
+            if math.hypot(points[a].x-cx, points[a].y-cy) > min(math.hypot(p.x-cx,p.y-cy) for p in points)*1.5:
+                edges.add((min(a,b), max(a,b)))
+        return [RoadSegment(a, b, f"R{a:05d}_{b:05d}") for a, b in sorted(edges)]
+
 
     return [
         RoadSegment(a, b, f"R{index:05d}")
-        for index, (a, b) in enumerate(_nearest_neighbor_edges(points, 4))
+        for index, (a, b) in enumerate(_nearest_neighbor_edges(points, 8))
     ]
 
 
