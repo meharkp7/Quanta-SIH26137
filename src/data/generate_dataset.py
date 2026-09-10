@@ -35,6 +35,11 @@ from .metrla_analysis import (
     detect_shock_candidates,
     write_analysis,
 )
+from src.data.pemsbay_spatial import (
+    load_pemsbay_spatial,
+    validate_pemsbay_spatial,
+    write_pemsbay_spatial,
+)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -67,6 +72,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     metrla_spatial.set_defaults(func=cmd_metrla_spatial)
+
+    pemsbay_spatial = sub.add_parser(
+        "pemsbay-spatial",
+        help="Build the canonical PEMS-BAY spatial graph",
+    )
+
+    pemsbay_spatial.add_argument("locations")
+    pemsbay_spatial.add_argument("distances")
+    pemsbay_spatial.add_argument("output")
     # ------------------------------------------------------------------
     # METR-LA empirical analysis
     # ------------------------------------------------------------------
@@ -345,6 +359,48 @@ def _read_analysis_observations(path: Path):
                 "value": None if value == "" else float(value),
             }
 
+def cmd_pemsbay_spatial(args):
+    profile, locations, edges = load_pemsbay_spatial(
+        args.locations,
+        args.distances,
+    )
+
+    issues = validate_pemsbay_spatial(
+        profile,
+        locations,
+        edges,
+    )
+
+    if issues:
+        print("PEMS-BAY spatial validation failed:")
+        for issue in issues:
+            print(f"  - {issue}")
+        return 1
+
+    output = write_pemsbay_spatial(
+        profile,
+        locations,
+        edges,
+        args.output,
+    )
+
+    print(f"Generated PEMS-BAY spatial dataset: {output}")
+    print()
+    print(f"Traffic sensors:             {profile.sensor_count}")
+    print(f"Sensor locations:            {profile.location_count}")
+    print(f"Source distance graph nodes: {profile.distance_graph_node_count}")
+    print(f"Source distance rows:        {profile.distance_graph_row_count}")
+    print(f"Direct sensor pairs:         {profile.sensor_edge_count + profile.self_pair_count}")
+    print(f"Non-self sensor edges:       {profile.sensor_edge_count}")
+    print(f"Self-pairs:                  {profile.self_pair_count}")
+    print(f"Reciprocal pairs:            {profile.reciprocal_pair_count}")
+    print(f"Asymmetric pairs:            {profile.asymmetric_pair_count}")
+    print(f"Minimum distance:            {profile.min_distance}")
+    print(f"Maximum distance:            {profile.max_distance}")
+    print()
+    print("Validation: PASS")
+
+    return 0
 
 def main() -> int:
     parser = build_parser()
@@ -359,6 +415,8 @@ def main() -> int:
             "event-priors, empirical-episode, canonical, metrla-spatial, metrla-analysis"
         )
 
+    if args.mode == "pemsbay-spatial":
+        return cmd_pemsbay_spatial(args)
     # ------------------------------------------------------------------
     # METR-LA empirical analysis
     # ------------------------------------------------------------------
