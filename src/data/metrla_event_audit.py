@@ -7,13 +7,40 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 
-OBS = Path("data/canonical/METR-LA/observations.csv")
-EVENTS = Path("data/canonical/METR-LA/disturbances/disturbance_events.csv")
-LOCATIONS = Path("data/canonical/METR-LA/spatial/sensor_locations.csv")
-BASELINE = Path(
-    "data/canonical/METR-LA/baseline/sensor_context_baseline.csv"
-)
-OUT = Path("data/canonical/METR-LA/event_audit")
+import argparse
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Audit empirical traffic disturbance events."
+    )
+
+    parser.add_argument(
+        "--dataset",
+        default="METR-LA",
+        choices=("METR-LA", "PEMS-BAY"),
+        help="Dataset to audit.",
+    )
+
+    return parser.parse_args()
+
+
+args = parse_args()
+
+DATASET_ROOTS = {
+    "METR-LA": Path("data/canonical/METR-LA"),
+    "PEMS-BAY": Path("data/canonical/PEMS-BAY"),
+}
+
+DATASET = args.dataset
+ROOT = DATASET_ROOTS[DATASET]
+
+OBS = ROOT / "observations.csv"
+EVENTS = ROOT / "disturbances" / "disturbance_events.csv"
+LOCATIONS = ROOT / "spatial" / "sensor_locations.csv"
+BASELINE = ROOT / "baseline" / "sensor_context_baseline.csv"
+OUT = ROOT / "event_audit"
+
 OUT.mkdir(parents=True, exist_ok=True)
 
 
@@ -317,7 +344,7 @@ regime_counts = Counter(
 )
 
 summary = {
-    "dataset": "METR-LA",
+    "dataset": DATASET,
     "event_count": len(events),
     "recovered_events": sum(
         e["recovered"] for e in events
@@ -385,7 +412,7 @@ with (OUT / "summary.json").open(
 # ================================================================
 
 print("=" * 80)
-print("METR-LA COMBINED EVENT AUDIT")
+print(f"{DATASET} COMBINED EVENT AUDIT")
 print("=" * 80)
 
 print("\nEVENTS")
