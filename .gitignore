@@ -1,14 +1,52 @@
-*__pycache__/
+
+---
+
+## `.gitignore`
+
+I'd use this as the **complete content if your existing `.gitignore` doesn't already contain important project-specific rules**:
+
+```gitignore
+# Python
+__pycache__/
 *.py[cod]
+*$py.class
+
+# Virtual environments
 .venv/
 venv/
-.env
+env/
+ENV/
+
+# Test / coverage
 .pytest_cache/
-.mypy_cache/
-.ipynb_checkpoints/
+.coverage
+htmlcov/
+.coverage.*
+.cache/
 
-artifacts/*
-!artifacts/.gitkeep
-
-*.log
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+
+# Environment / secrets
+.env
+.env.*
+
+# Large traffic datasets and generated artifacts
+/data/raw/
+/data/canonical/
+
+# Keep dataset documentation tracked
+!/data/README.md
