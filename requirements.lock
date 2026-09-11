@@ -1,0 +1,22 @@
+# Tested on Windows, Python 3.12.7; SUMO installed separately.
+annotated-types==0.6.0
+colorama==0.4.6
+iniconfig==1.1.1
+numexpr==2.8.7
+numpy==1.26.4
+packaging==24.1
+pandas==2.2.2
+pluggy==1.0.0
+py-cpuinfo==9.0.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+pytest==7.4.4
+python-dateutil==2.9.0.post0
+pytz==2024.1
+six==1.16.0
+sumolib==1.27.1
+tables==3.10.1
+traci==1.27.1
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+tzdata==2023.3
