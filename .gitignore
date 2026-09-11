@@ -43,3 +43,4 @@ dist/
 # Keep dataset documentation tracked
 !/data/README.md
 /artifacts/step6_verified/
+/artifacts/step6_debug/

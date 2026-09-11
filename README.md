@@ -1,3 +1,5 @@
+Current executable steps 1–6: [setup, commands and acceptance evidence](docs/steps_1_to_6.md).
+
 SIH26137
 
 **Build a quantum-inspired traffic-routing platform with QPSO as its working optimization engine.** The platform must generate constrained vehicle routes on a changing road graph, support a shortest-path demonstration, expose an executable UI/API, and produce systematic benchmark, convergence and scalability evidence. The dispatcher demonstration makes those capabilities visible.
