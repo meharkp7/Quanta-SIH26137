@@ -152,39 +152,45 @@ class DirectedPathBuilder:
     """Construct shortest legal directed paths."""
 
     def __init__(
-        self,
-        edges: Iterable[RoadEdge],
-        *,
-        closed_edge_ids: Iterable[RoadEdgeId] = (),
-        travel_time_provider: (
-            TravelTimeProvider | None
-        ) = None,
-        cost_view: CostView | None = None,
-        path_cache: PathCache | None = None,
-    ) -> None:
+            self,
+            edges: Iterable[RoadEdge],
+            *,
+            closed_edge_ids: Iterable[RoadEdgeId] = (),
+            travel_time_provider: (
+                TravelTimeProvider | None
+            ) = None,
+            cost_view: CostView | None = None,
+            path_cache: PathCache | None = None,
+            graph_version: str = "default",
+        ) -> None:
         if (
             cost_view is not None
             and travel_time_provider is not None
         ):
-            raise ValueError(
-                "Provide either cost_view or "
-                "travel_time_provider, not both"
-            )
+          raise ValueError(
+            "Provide either cost_view or "
+            "travel_time_provider, not both"
+        )
 
         self._legacy_travel_time_provider = (
-            travel_time_provider is not None
+        travel_time_provider is not None
         )
 
         if cost_view is not None:
-            self.cost_view = cost_view
+           self.cost_view = cost_view
         elif travel_time_provider is not None:
-            self.cost_view = CostView(
-                travel_time_provider=(
-                    travel_time_provider
-                )
-            )
+         self.cost_view = CostView(
+            edges,
+            graph_version=graph_version,
+            closed_edge_ids=closed_edge_ids,
+            travel_time_provider=travel_time_provider,
+        )
         else:
-            self.cost_view = CostView()
+         self.cost_view = CostView(
+            edges,
+            graph_version=graph_version,
+            closed_edge_ids=closed_edge_ids,
+        )
 
         self.graph = DirectedRoadGraph(
             edges,
