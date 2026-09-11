@@ -25,11 +25,19 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 from math import isfinite
-from typing import Callable
+
+#from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from .path_builder import DirectedPathBuilder
 
 from src.contracts.core_types import TimeS
 from src.contracts.scenario import RoadEdge
-from src.routing.path_builder import DirectedPathBuilder, PathResult
+
+#from src.routing.path_builder import DirectedPathBuilder, PathResult
+if TYPE_CHECKING:
+    from src.routing.path_builder import DirectedPathBuilder, PathResult
 
 EdgeTravelTimeProvider = Callable[[RoadEdge, TimeS], TimeS]
 
@@ -141,9 +149,9 @@ class CostView:
 
     def __init__(
         self,
-        edges,
+        edges=(),
         *,
-        graph_version: str,
+        graph_version: str = "deafult",
         cost_version: str = "free-flow",
         forecast_version: str | None = None,
         closed_edge_ids=(),
@@ -159,17 +167,35 @@ class CostView:
         if max_entries < 1:
             raise ValueError("max_entries must be positive")
 
-        self.versions = (graph_version, cost_version, forecast_version)
+        self.graph_version = graph_version
+
+        self.cost_version = cost_version
+        self.forecast_version = forecast_version
+
+        self.versions = (
+            graph_version,
+            cost_version,
+            forecast_version,
+        )
+
         self.max_entries = max_entries
 
         self._travel_time_provider = (
             travel_time_provider or self._free_flow_travel_time
         )
 
+        # self.builder = DirectedPathBuilder(
+        #     edges,
+        #     closed_edge_ids=closed_edge_ids,
+        #     travel_time_provider=self._travel_time_provider,
+        # )
+
+        from src.routing.path_builder import DirectedPathBuilder
+
         self.builder = DirectedPathBuilder(
             edges,
             closed_edge_ids=closed_edge_ids,
-            travel_time_provider=self._travel_time_provider,
+            cost_view=self,
         )
 
         self._cache: "OrderedDict[tuple, PathResult]" = OrderedDict()
