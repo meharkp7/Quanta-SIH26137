@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from src.optim.common import FitnessResult, OptimizationError, Vector
+from src.optim.diversity import repair_displacement
 from src.optim.instrumentation import (
     CandidateObservation,
     OptimizationTraceRecorder,
@@ -129,6 +130,54 @@ class InstrumentedRouteFitnessOracle:
         return self._observations[-1]
 
 
+def _candidate_repair_distance(candidate: object) -> float:
+    """
+    Compute scalar route displacement caused by Step 7 repair.
+
+    Repair displacement is computed from the exact original and repaired
+    route plans contained in BoundedRepairResult.
+
+    A candidate with no repair result means repair was disabled, so its
+    displacement is exactly zero.
+    """
+    repair_result = getattr(candidate, "repair_result", None)
+
+    if repair_result is None:
+        return 0.0
+
+    original_plan = getattr(
+        repair_result,
+        "original_route_plan",
+        None,
+    )
+    repaired_plan = getattr(
+        repair_result,
+        "repaired_route_plan",
+        None,
+    )
+
+    if original_plan is None or repaired_plan is None:
+        raise RouteObservationError(
+            "candidate repair_result must contain "
+            "original_route_plan and repaired_route_plan"
+        )
+
+    distance = repair_displacement(
+        original_plan,
+        repaired_plan,
+    )
+
+    exact_distance = getattr(distance, "exact", None)
+
+    if exact_distance is None:
+        raise RouteObservationError(
+            "repair_displacement must return a RouteDistance "
+            "with an exact component"
+        )
+
+    return float(exact_distance)
+
+
 class RoutePopulationTraceAdapter:
     """
     Converts already-observed route evaluations into generic trace records.
@@ -150,6 +199,16 @@ class RoutePopulationTraceAdapter:
         evaluations: int,
         observations: Sequence[ObservedRouteEvaluation],
     ) -> PopulationObservation:
+        if iteration < 0:
+            raise RouteObservationError(
+                "iteration must be non-negative"
+            )
+
+        if evaluations < 1:
+            raise RouteObservationError(
+                "evaluations must be positive"
+            )
+
         if not observations:
             raise RouteObservationError(
                 "cannot record an empty population"
@@ -162,7 +221,9 @@ class RoutePopulationTraceAdapter:
                 repaired_plan=observation.candidate.repaired_plan,
                 fitness=observation.fitness_result.fitness,
                 feasible=observation.fitness_result.feasible,
-                repair_distance=observation.fitness_result.repair_distance,
+                repair_distance=_candidate_repair_distance(
+                    observation.candidate
+                ),
             )
             for observation in observations
         )
@@ -171,4 +232,23 @@ class RoutePopulationTraceAdapter:
             iteration=iteration,
             evaluations=evaluations,
             candidates=candidates,
+        )
+
+    def record_observation_batch(
+        self,
+        *,
+        iteration: int,
+        evaluations: int,
+        observations: Sequence[ObservedRouteEvaluation],
+    ) -> PopulationObservation:
+        """
+        Explicit alias for recording one optimizer population.
+
+        Kept separate from record_population so callers can make the
+        population-boundary semantics explicit in experiment code.
+        """
+        return self.record_population(
+            iteration=iteration,
+            evaluations=evaluations,
+            observations=observations,
         )
