@@ -1,8 +1,10 @@
-"""Physical route representations for Step 4.
+"""Physical route representations for Step 5.
 
 These types represent the road-network realization of a logical RoutePlan.
-They are deliberately separate from optimization decisions so that the same
-logical stop sequence can be evaluated against different network states.
+
+Logical optimization decisions remain separate from physical road paths.
+The physical representation preserves the complete cost decomposition of
+each selected path.
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ class RouteLeg:
     edge_ids: tuple[RoadEdgeId, ...]
     distance_m: DistanceM
     travel_time_s: TimeS
+    free_flow_time_s: TimeS = 0.0
+    congestion_delay_s: TimeS = 0.0
 
     @classmethod
     def from_sequence(
@@ -37,13 +41,33 @@ class RouteLeg:
         edge_ids: Sequence[RoadEdgeId] | Iterable[RoadEdgeId],
         distance_m: DistanceM,
         travel_time_s: TimeS,
+        *,
+        free_flow_time_s: TimeS | None = None,
+        congestion_delay_s: TimeS | None = None,
     ) -> "RouteLeg":
+        travel = float(travel_time_s)
+
+        if free_flow_time_s is None:
+            free_flow = travel
+        else:
+            free_flow = float(free_flow_time_s)
+
+        if congestion_delay_s is None:
+            congestion = max(
+                0.0,
+                travel - free_flow,
+            )
+        else:
+            congestion = float(congestion_delay_s)
+
         return cls(
             from_node=from_node,
             to_node=to_node,
             edge_ids=tuple(edge_ids),
-            distance_m=distance_m,
-            travel_time_s=travel_time_s,
+            distance_m=float(distance_m),
+            travel_time_s=travel,
+            free_flow_time_s=free_flow,
+            congestion_delay_s=congestion,
         )
 
     @property
@@ -81,19 +105,43 @@ class PhysicalRoute:
 
     @property
     def total_distance_m(self) -> DistanceM:
-        return sum(leg.distance_m for leg in self.legs)
+        return sum(
+            leg.distance_m
+            for leg in self.legs
+        )
 
     @property
     def total_travel_time_s(self) -> TimeS:
-        return sum(leg.travel_time_s for leg in self.legs)
+        return sum(
+            leg.travel_time_s
+            for leg in self.legs
+        )
+
+    @property
+    def total_free_flow_time_s(self) -> TimeS:
+        return sum(
+            leg.free_flow_time_s
+            for leg in self.legs
+        )
+
+    @property
+    def total_congestion_delay_s(self) -> TimeS:
+        return sum(
+            leg.congestion_delay_s
+            for leg in self.legs
+        )
 
     @property
     def total_edge_count(self) -> int:
-        return sum(leg.edge_count for leg in self.legs)
+        return sum(
+            leg.edge_count
+            for leg in self.legs
+        )
 
     @property
     def edge_ids(self) -> tuple[RoadEdgeId, ...]:
         """Flatten all physical directed edges in traversal order."""
+
         return tuple(
             edge_id
             for leg in self.legs
@@ -112,7 +160,9 @@ class PhysicalRoutePlan:
         cls,
         routes: Sequence[PhysicalRoute] | Iterable[PhysicalRoute],
     ) -> "PhysicalRoutePlan":
-        return cls(routes=tuple(routes))
+        return cls(
+            routes=tuple(routes)
+        )
 
     @property
     def route_count(self) -> int:
@@ -120,21 +170,48 @@ class PhysicalRoutePlan:
 
     @property
     def total_distance_m(self) -> DistanceM:
-        return sum(route.total_distance_m for route in self.routes)
+        return sum(
+            route.total_distance_m
+            for route in self.routes
+        )
 
     @property
     def total_travel_time_s(self) -> TimeS:
-        return sum(route.total_travel_time_s for route in self.routes)
+        return sum(
+            route.total_travel_time_s
+            for route in self.routes
+        )
+
+    @property
+    def total_free_flow_time_s(self) -> TimeS:
+        return sum(
+            route.total_free_flow_time_s
+            for route in self.routes
+        )
+
+    @property
+    def total_congestion_delay_s(self) -> TimeS:
+        return sum(
+            route.total_congestion_delay_s
+            for route in self.routes
+        )
 
     @property
     def total_edge_count(self) -> int:
-        return sum(route.total_edge_count for route in self.routes)
+        return sum(
+            route.total_edge_count
+            for route in self.routes
+        )
 
-    def route_for(self, vehicle_id: VehicleId) -> PhysicalRoute:
+    def route_for(
+        self,
+        vehicle_id: VehicleId,
+    ) -> PhysicalRoute:
         for route in self.routes:
             if route.vehicle_id == vehicle_id:
                 return route
 
         raise KeyError(
-            f"No physical route found for vehicle_id={vehicle_id!r}"
+            f"No physical route found for "
+            f"vehicle_id={vehicle_id!r}"
         )
