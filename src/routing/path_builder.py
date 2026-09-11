@@ -10,6 +10,10 @@ re-routing.
 All physical edge costs are obtained through CostView. This guarantees that
 distance, free-flow time, actual travel time, and congestion delay belong to
 the same network/cost state.
+
+Step 5B adds a versioned path cache. Cached entries retain physical path
+structure; time-dependent costs are reconstructed for the actual departure
+time when a cached path is reused.
 """
 
 from __future__ import annotations
@@ -24,6 +28,10 @@ from src.routing.cost_view import (
     CostView,
     InvalidEdgeCostError,
 )
+from src.routing.path_cache import (
+    CachedPath,
+    PathCache,
+)
 from src.routing.route_types import RouteLeg
 
 
@@ -32,11 +40,10 @@ RoadNodeId = str
 RoadEdgeId = str
 
 
-# ---------------------------------------------------------------------------
-# Backward-compatible public API
-# ---------------------------------------------------------------------------
-
-TravelTimeProvider = Callable[[RoadEdge, TimeS], TimeS]
+TravelTimeProvider = Callable[
+    [RoadEdge, TimeS],
+    TimeS,
+]
 
 
 class PathNotFoundError(RuntimeError):
@@ -45,11 +52,6 @@ class PathNotFoundError(RuntimeError):
 
 class InvalidTravelTimeError(ValueError):
     """Raised when a legacy travel-time provider returns an invalid value."""
-
-
-# ---------------------------------------------------------------------------
-# Path result
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -62,11 +64,6 @@ class PathResult:
     travel_time_s: TimeS
     free_flow_time_s: TimeS
     congestion_delay_s: TimeS
-
-
-# ---------------------------------------------------------------------------
-# Directed graph
-# ---------------------------------------------------------------------------
 
 
 class DirectedRoadGraph:
@@ -110,10 +107,11 @@ class DirectedRoadGraph:
                 [],
             ).append(edge)
 
-        # Deterministic traversal order.
         for outgoing in self._outgoing.values():
             outgoing.sort(
-                key=lambda edge: str(edge.edge_id)
+                key=lambda edge: str(
+                    edge.edge_id
+                )
             )
 
     @property
@@ -150,11 +148,6 @@ class DirectedRoadGraph:
         )
 
 
-# ---------------------------------------------------------------------------
-# Path builder
-# ---------------------------------------------------------------------------
-
-
 class DirectedPathBuilder:
     """Construct shortest legal directed paths."""
 
@@ -163,8 +156,11 @@ class DirectedPathBuilder:
         edges: Iterable[RoadEdge],
         *,
         closed_edge_ids: Iterable[RoadEdgeId] = (),
-        travel_time_provider: TravelTimeProvider | None = None,
+        travel_time_provider: (
+            TravelTimeProvider | None
+        ) = None,
         cost_view: CostView | None = None,
+        path_cache: PathCache | None = None,
     ) -> None:
         if (
             cost_view is not None
@@ -175,11 +171,6 @@ class DirectedPathBuilder:
                 "travel_time_provider, not both"
             )
 
-        # Remember whether the caller is using the legacy Step 4 API.
-        #
-        # This matters because Step 4 historically exposed
-        # InvalidTravelTimeError. Step 5's CostView exposes the more general
-        # InvalidEdgeCostError. We translate only for legacy callers.
         self._legacy_travel_time_provider = (
             travel_time_provider is not None
         )
@@ -188,7 +179,9 @@ class DirectedPathBuilder:
             self.cost_view = cost_view
         elif travel_time_provider is not None:
             self.cost_view = CostView(
-                travel_time_provider=travel_time_provider,
+                travel_time_provider=(
+                    travel_time_provider
+                )
             )
         else:
             self.cost_view = CostView()
@@ -198,6 +191,8 @@ class DirectedPathBuilder:
             closed_edge_ids=closed_edge_ids,
         )
 
+        self.path_cache = path_cache
+
     @property
     def travel_time_provider(
         self,
@@ -206,13 +201,33 @@ class DirectedPathBuilder:
 
         return self.cost_view.travel_time_provider
 
+    def invalidate_cache(
+        self,
+        *,
+        graph_version: str | None = None,
+        cost_version: str | None = None,
+        forecast_version: str | None = None,
+    ) -> int:
+        """Invalidate matching cached routing entries."""
+
+        if self.path_cache is None:
+            return 0
+
+        return self.path_cache.invalidate(
+            graph_version=graph_version,
+            cost_version=cost_version,
+            forecast_version=forecast_version,
+        )
+
     def shortest_path(
         self,
         from_node: RoadNodeId,
         to_node: RoadNodeId,
         *,
         departure_time_s: TimeS = 0.0,
-        travel_time_provider: TravelTimeProvider | None = None,
+        travel_time_provider: (
+            TravelTimeProvider | None
+        ) = None,
     ) -> PathResult:
         """Find the minimum-arrival-time directed path."""
 
@@ -231,15 +246,18 @@ class DirectedPathBuilder:
                 congestion_delay_s=0.0,
             )
 
-        # Preserve the legacy ability to supply a provider per call.
         if travel_time_provider is not None:
             if (
                 travel_time_provider
                 is not self.cost_view.travel_time_provider
             ):
                 cost_view = CostView(
-                    graph_version=self.cost_view.graph_version,
-                    cost_version=self.cost_view.cost_version,
+                    graph_version=(
+                        self.cost_view.graph_version
+                    ),
+                    cost_version=(
+                        self.cost_view.cost_version
+                    ),
                     forecast_version=(
                         self.cost_view.forecast_version
                     ),
@@ -258,6 +276,52 @@ class DirectedPathBuilder:
             legacy_provider_for_call = (
                 self._legacy_travel_time_provider
             )
+
+        # A per-call legacy provider is not safe to reuse through the shared
+        # cache because the provider itself is part of the cost state.
+        cache = (
+            self.path_cache
+            if (
+                self.path_cache is not None
+                and not (
+                    travel_time_provider is not None
+                    and travel_time_provider
+                    is not self.cost_view.travel_time_provider
+                )
+            )
+            else None
+        )
+
+        cache_key = None
+
+        if cache is not None:
+            cache_key = cache.make_key(
+                from_node=from_node,
+                to_node=to_node,
+                graph_version=(
+                    cost_view.graph_version
+                ),
+                cost_version=(
+                    cost_view.cost_version
+                ),
+                forecast_version=(
+                    cost_view.forecast_version
+                ),
+                departure_time_s=(
+                    departure_time_s
+                ),
+            )
+
+            cached = cache.get(cache_key)
+
+            if cached is not None:
+                return self._result_from_cached_path(
+                    cached,
+                    departure_time_s=(
+                        departure_time_s
+                    ),
+                    cost_view=cost_view,
+                )
 
         arrival_times: dict[
             RoadNodeId,
@@ -306,7 +370,7 @@ class DirectedPathBuilder:
                 continue
 
             if current_node == to_node:
-                return self._reconstruct_path(
+                result = self._reconstruct_path(
                     from_node=from_node,
                     to_node=to_node,
                     departure_time_s=float(
@@ -317,13 +381,26 @@ class DirectedPathBuilder:
                     cost_view=cost_view,
                 )
 
+                if (
+                    cache is not None
+                    and cache_key is not None
+                ):
+                    cache.put_result(
+                        cache_key,
+                        result,
+                    )
+
+                return result
+
             for edge in self.graph.outgoing_edges(
                 current_node
             ):
                 try:
                     edge_cost = cost_view.edge_cost(
                         edge,
-                        departure_time_s=current_arrival,
+                        departure_time_s=(
+                            current_arrival
+                        ),
                     )
                 except InvalidEdgeCostError as exc:
                     if legacy_provider_for_call:
@@ -374,7 +451,9 @@ class DirectedPathBuilder:
         to_node: RoadNodeId,
         *,
         departure_time_s: TimeS = 0.0,
-        travel_time_provider: TravelTimeProvider | None = None,
+        travel_time_provider: (
+            TravelTimeProvider | None
+        ) = None,
     ) -> RouteLeg:
         """Build one physical directed route leg."""
 
@@ -382,7 +461,9 @@ class DirectedPathBuilder:
             from_node=from_node,
             to_node=to_node,
             departure_time_s=departure_time_s,
-            travel_time_provider=travel_time_provider,
+            travel_time_provider=(
+                travel_time_provider
+            ),
         )
 
         return RouteLeg.from_sequence(
@@ -404,7 +485,9 @@ class DirectedPathBuilder:
         node_ids: Sequence[RoadNodeId],
         *,
         departure_time_s: TimeS = 0.0,
-        travel_time_provider: TravelTimeProvider | None = None,
+        travel_time_provider: (
+            TravelTimeProvider | None
+        ) = None,
     ) -> tuple[RouteLeg, ...]:
         """Build physical legs for a complete node sequence."""
 
@@ -442,6 +525,42 @@ class DirectedPathBuilder:
             )
 
         return tuple(legs)
+
+    def _result_from_cached_path(
+        self,
+        cached: CachedPath,
+        *,
+        departure_time_s: TimeS,
+        cost_view: CostView,
+    ) -> PathResult:
+        """Re-evaluate cached physical path at actual departure time."""
+
+        path_edges = tuple(
+            self.graph.edge_for(edge_id)
+            for edge_id in cached.edge_ids
+        )
+
+        path_cost = cost_view.path_cost(
+            path_edges,
+            departure_time_s=departure_time_s,
+        )
+
+        return PathResult(
+            node_ids=cached.node_ids,
+            edge_ids=cached.edge_ids,
+            distance_m=float(
+                path_cost.distance_m
+            ),
+            travel_time_s=float(
+                path_cost.travel_time_s
+            ),
+            free_flow_time_s=float(
+                path_cost.free_flow_time_s
+            ),
+            congestion_delay_s=float(
+                path_cost.congestion_delay_s
+            ),
+        )
 
     def _reconstruct_path(
         self,
