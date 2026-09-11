@@ -1,6 +1,7 @@
-"""Independent route evaluation for the Step 4 routing stack.
+"""
+Independent route evaluation for the Step 5 routing stack.
 
-The route evaluator is the feasibility-truth layer of the routing system.
+The evaluator is the feasibility-truth layer of the routing system.
 
 Responsibilities
 ----------------
@@ -14,48 +15,13 @@ Responsibilities
 - enforce vehicle capacity;
 - enforce directed connectivity;
 - enforce depot return;
-- detect unknown vehicles;
-- detect unknown, duplicate and unserved requests;
-- expose detailed per-stop and per-vehicle diagnostics;
-- expose objective components for constructive heuristics and optimizers;
-- support dynamic travel-time providers;
-- remain independent of QPSO, PSO, ALNS, DRL, GNN and Transformer code.
+- enforce current vehicle state;
+- enforce frozen/committed route prefixes;
+- expose structured violations and objective components;
+- support immutable CostView snapshots;
+- remain independent of optimization and learning algorithms.
 
 The evaluator does not optimize routes.
-
-All optimization and learning components must treat this module as the
-authoritative feasibility and objective-evaluation layer.
-
-Contract semantics
-------------------
-The implementation follows the V1.2 scenario contract.
-
-Request:
-    request_id
-    original_customer_id
-    original_x
-    original_y
-    access_node_id
-    access_distance_m
-    demand
-    known_at_s
-    release_s
-    earliest_service_start_s
-    latest_service_start_s
-    service_duration_s
-    status
-
-Vehicle:
-    vehicle_id
-    capacity
-    start_node_id
-    depot_node_id
-    current_edge_id
-    current_node_id
-    distance_remaining_m
-    onboard_request_ids
-    remaining_load
-    executed_prefix_edge_ids
 """
 
 from __future__ import annotations
@@ -75,6 +41,12 @@ from src.contracts.core_types import (
     VehicleId,
 )
 from src.contracts.scenario import RoadEdge
+from src.routing.cost_view import CostView
+from src.routing.evaluator_state import (
+    CommitmentSnapshot,
+    EvaluationConstraints,
+    VehicleCommitment,
+)
 from src.routing.path_builder import (
     DirectedPathBuilder,
     PathNotFoundError,
@@ -102,12 +74,11 @@ class RouteEvaluationConfig:
     duplicate_customer_penalty: float = 10_000.0
     unserved_customer_penalty: float = 10_000.0
     unknown_vehicle_penalty: float = 10_000.0
+    commitment_penalty: float = 10_000.0
+    depot_penalty: float = 10_000.0
 
     allow_waiting: bool = True
 
-    # V1.2 does not require a vehicle start-time field. This value therefore
-    # provides the planning/simulation epoch unless the vehicle model later
-    # exposes an explicit start_time_s field.
     default_start_time_s: TimeS = 0.0
 
     def __post_init__(self) -> None:
@@ -122,6 +93,8 @@ class RouteEvaluationConfig:
             "duplicate_customer_penalty",
             "unserved_customer_penalty",
             "unknown_vehicle_penalty",
+            "commitment_penalty",
+            "depot_penalty",
             "default_start_time_s",
         )
 
@@ -133,15 +106,50 @@ class RouteEvaluationConfig:
                     f"{field_name} must be finite"
                 )
 
-            if field_name.endswith("_penalty") and value < 0.0:
+            if (
+                field_name.endswith("_penalty")
+                or field_name.endswith("_weight")
+            ) and value < 0.0:
                 raise ValueError(
                     f"{field_name} must be non-negative"
                 )
 
-            if field_name.endswith("_weight") and value < 0.0:
-                raise ValueError(
-                    f"{field_name} must be non-negative"
-                )
+        if self.default_start_time_s < 0.0:
+            raise ValueError(
+                "default_start_time_s must be non-negative"
+            )
+
+
+@dataclass(frozen=True)
+class EvaluationViolation:
+    """
+    Structured evaluator diagnostic.
+
+    name is a stable machine-readable category.
+    magnitude is the measured violation amount.
+    vehicle_id/customer_id are optional contextual identifiers.
+    message is human-readable diagnostic text.
+    """
+
+    name: str
+    magnitude: float = 0.0
+    count: int = 1
+    vehicle_id: VehicleId | None = None
+    customer_id: CustomerId | None = None
+    message: str = ""
+
+    def __post_init__(self) -> None:
+        magnitude = float(self.magnitude)
+
+        if not isfinite(magnitude) or magnitude < 0.0:
+            raise ValueError(
+                "violation magnitude must be finite and non-negative"
+            )
+
+        if self.count < 1:
+            raise ValueError(
+                "violation count must be >= 1"
+            )
 
 
 class VehicleEvaluationCollection(tuple):
@@ -153,6 +161,7 @@ class VehicleEvaluationCollection(tuple):
                 if str(item.vehicle_id) == key:
                     return item
             raise KeyError(key)
+
         return super().__getitem__(key)
 
 
@@ -163,6 +172,7 @@ class StopEvaluation:
     customer_id: CustomerId
     node_id: RoadNodeId
     edge_ids: tuple[RoadEdgeId, ...]
+
     distance_m: DistanceM
     travel_time_s: TimeS
 
@@ -184,23 +194,15 @@ class StopEvaluation:
 
     @property
     def departure_time_s(self) -> TimeS:
-        """Time at which service completion allows route continuation."""
-
         return self.service_end_time_s
 
     @property
     def lateness_s(self) -> TimeS:
-        """Positive service-start lateness beyond the latest allowed time."""
-
         return max(
             0.0,
             float(self.service_start_time_s)
             - float(self.latest_time_s),
         )
-
-    # Compatibility-style semantic aliases retained as properties so that
-    # downstream routing/analysis code can use descriptive names without
-    # duplicating stored state.
 
     @property
     def release_time(self) -> TimeS:
@@ -236,8 +238,11 @@ class VehicleRouteEvaluation:
     connectivity_feasible: bool
     capacity_feasible: bool
     time_window_feasible: bool
+    commitment_feasible: bool
+    depot_feasible: bool
 
     capacity_units: DemandUnits
+    initial_load_units: DemandUnits
     final_load_units: DemandUnits
     maximum_load_units: DemandUnits
 
@@ -248,12 +253,11 @@ class VehicleRouteEvaluation:
     elapsed_time_s: TimeS
     lateness_s: TimeS
 
+    violations: tuple[EvaluationViolation, ...]
     errors: tuple[str, ...]
 
     @property
     def customer_ids(self) -> tuple[CustomerId, ...]:
-        """Customers represented by the evaluated physical stops."""
-
         return tuple(
             stop.customer_id
             for stop in self.stops
@@ -261,35 +265,49 @@ class VehicleRouteEvaluation:
 
     @property
     def total_elapsed_time_s(self) -> TimeS:
-        """Explicit alias for elapsed route duration."""
-
         return self.elapsed_time_s
 
     @property
     def total_lateness_s(self) -> TimeS:
-        """Explicit alias for aggregate lateness."""
-
         return self.lateness_s
 
     @property
     def service_starts_s(self) -> Mapping[CustomerId, float]:
-        return {stop.customer_id: float(stop.service_start_time_s) for stop in self.stops}
+        return {
+            stop.customer_id: float(
+                stop.service_start_time_s
+            )
+            for stop in self.stops
+        }
 
     @property
     def service_ends_s(self) -> Mapping[CustomerId, float]:
-        return {stop.customer_id: float(stop.service_end_time_s) for stop in self.stops}
+        return {
+            stop.customer_id: float(
+                stop.service_end_time_s
+            )
+            for stop in self.stops
+        }
 
     @property
     def objective_components(self) -> Mapping[str, float]:
-        """Raw objective components before configured weighting."""
-
         return {
             "distance_m": float(self.total_distance_m),
-            "travel_time_s": float(self.total_travel_time_s),
-            "waiting_time_s": float(self.total_waiting_time_s),
-            "service_time_s": float(self.total_service_time_s),
-            "elapsed_time_s": float(self.elapsed_time_s),
-            "lateness_s": float(self.lateness_s),
+            "travel_time_s": float(
+                self.total_travel_time_s
+            ),
+            "waiting_time_s": float(
+                self.total_waiting_time_s
+            ),
+            "service_time_s": float(
+                self.total_service_time_s
+            ),
+            "elapsed_time_s": float(
+                self.elapsed_time_s
+            ),
+            "lateness_s": float(
+                self.lateness_s
+            ),
         }
 
 
@@ -298,7 +316,10 @@ class RoutePlanEvaluation:
     """Evaluation of a complete multi-vehicle logical route plan."""
 
     route_plan: RoutePlan
-    vehicle_evaluations: tuple[VehicleRouteEvaluation, ...]
+    vehicle_evaluations: tuple[
+        VehicleRouteEvaluation,
+        ...,
+    ]
 
     feasible: bool
 
@@ -320,12 +341,11 @@ class RoutePlanEvaluation:
 
     objective_value: float
 
+    violations: tuple[EvaluationViolation, ...]
     errors: tuple[str, ...]
 
     @property
     def assignment_feasible(self) -> bool:
-        """Whether customer assignment itself is valid and complete."""
-
         return (
             self.all_requests_served
             and self.customer_uniqueness_feasible
@@ -335,8 +355,6 @@ class RoutePlanEvaluation:
 
     @property
     def capacity_feasible(self) -> bool:
-        """Whether every vehicle route respects capacity."""
-
         return all(
             evaluation.capacity_feasible
             for evaluation in self.vehicle_evaluations
@@ -344,8 +362,6 @@ class RoutePlanEvaluation:
 
     @property
     def connectivity_feasible(self) -> bool:
-        """Whether every vehicle route is physically connected."""
-
         return all(
             evaluation.connectivity_feasible
             for evaluation in self.vehicle_evaluations
@@ -353,10 +369,22 @@ class RoutePlanEvaluation:
 
     @property
     def time_window_feasible(self) -> bool:
-        """Whether every evaluated service stop satisfies its window."""
-
         return all(
             evaluation.time_window_feasible
+            for evaluation in self.vehicle_evaluations
+        )
+
+    @property
+    def commitment_feasible(self) -> bool:
+        return all(
+            evaluation.commitment_feasible
+            for evaluation in self.vehicle_evaluations
+        )
+
+    @property
+    def depot_feasible(self) -> bool:
+        return all(
+            evaluation.depot_feasible
             for evaluation in self.vehicle_evaluations
         )
 
@@ -374,49 +402,46 @@ class RoutePlanEvaluation:
 
     @property
     def total_travel_time(self) -> TimeS:
-        """Semantic alias for total travel time."""
-
         return self.total_travel_time_s
 
     @property
     def total_waiting_time(self) -> TimeS:
-        """Semantic alias for total waiting time."""
-
         return self.total_waiting_time_s
 
     @property
     def total_lateness(self) -> TimeS:
-        """Semantic alias for total lateness."""
-
         return self.total_lateness_s
 
     @property
     def objective_components(self) -> Mapping[str, float]:
-        """Raw objective components before penalty aggregation."""
-
         return {
             "distance_m": float(self.total_distance_m),
-            "travel_time_s": float(self.total_travel_time_s),
-            "waiting_time_s": float(self.total_waiting_time_s),
-            "service_time_s": float(self.total_service_time_s),
-            "elapsed_time_s": float(self.total_elapsed_time_s),
-            "lateness_s": float(self.total_lateness_s),
+            "travel_time_s": float(
+                self.total_travel_time_s
+            ),
+            "waiting_time_s": float(
+                self.total_waiting_time_s
+            ),
+            "service_time_s": float(
+                self.total_service_time_s
+            ),
+            "elapsed_time_s": float(
+                self.total_elapsed_time_s
+            ),
+            "lateness_s": float(
+                self.total_lateness_s
+            ),
         }
 
 
 class RouteEvaluator:
-    """Evaluate logical RoutePlans against a V1.2 Scenario.
+    """
+    Independent feasibility/objective evaluator.
 
-    RouteEvaluator is deliberately independent of optimization algorithms.
+    Optimizers must not be embedded here.
 
-    A route plan enters as customer assignments. The evaluator converts each
-    logical customer transition into a directed physical path and propagates
-    time and load through that path.
-
-    When a dynamic TravelTimeProvider is supplied, path selection and route
-    traversal both use the same time-dependent edge-cost semantics. This is
-    important: a dynamic provider must not merely be applied after a static
-    shortest path has already been selected.
+    The evaluator can evaluate against an explicit CostView and immutable
+    constraint/commitment snapshots without mutating the evaluator itself.
     """
 
     def __init__(
@@ -426,10 +451,16 @@ class RouteEvaluator:
         config: RouteEvaluationConfig | None = None,
         travel_time_provider: TravelTimeProvider | None = None,
         closed_edge_ids: Iterable[RoadEdgeId] = (),
+        cost_view: CostView | None = None,
     ) -> None:
         self.scenario = scenario
-        self.config = config or RouteEvaluationConfig()
-        self.travel_time_provider = travel_time_provider
+        self.config = (
+            config or RouteEvaluationConfig()
+        )
+
+        self.travel_time_provider = (
+            travel_time_provider
+        )
 
         self._closed_edge_ids = frozenset(
             closed_edge_ids
@@ -447,36 +478,39 @@ class RouteEvaluator:
             self._scenario_vehicles()
         )
 
-        self._request_by_id: dict[
-            CustomerId,
-            Any,
-        ] = {
+        self._request_by_id = {
             self._request_id(request): request
             for request in self._requests
         }
 
-        self._vehicle_by_id: dict[
-            VehicleId,
-            Any,
-        ] = {
+        self._vehicle_by_id = {
             self._vehicle_id(vehicle): vehicle
             for vehicle in self._vehicles
         }
 
-        if len(self._request_by_id) != len(self._requests):
+        if len(self._request_by_id) != len(
+            self._requests
+        ):
             raise ValueError(
                 "Scenario contains duplicate request IDs"
             )
 
-        if len(self._vehicle_by_id) != len(self._vehicles):
+        if len(self._vehicle_by_id) != len(
+            self._vehicles
+        ):
             raise ValueError(
                 "Scenario contains duplicate vehicle IDs"
             )
 
+        self.cost_view = cost_view
+
         self.path_builder = DirectedPathBuilder(
             self._edges,
             closed_edge_ids=self._closed_edge_ids,
-            travel_time_provider=self.travel_time_provider,
+            travel_time_provider=(
+                self.travel_time_provider
+            ),
+            cost_view=self.cost_view,
         )
 
     # ==================================================================
@@ -486,16 +520,27 @@ class RouteEvaluator:
     def evaluate(
         self,
         route_plan: RoutePlan,
+        cost_view: CostView | None = None,
+        constraints: EvaluationConstraints | None = None,
+        commitments: CommitmentSnapshot | None = None,
         *,
         planning_time_s: TimeS | None = None,
     ) -> RoutePlanEvaluation:
-        """Evaluate an entire multi-vehicle route plan.
-
-        ``planning_time_s`` is the planning/simulation epoch. It does not
-        mutate the Scenario or vehicle state. It is useful when evaluating
-        dynamic snapshots at different points in a simulation.
         """
+        Evaluate a complete route plan.
 
+        Step 5C interface:
+
+            evaluate(
+                routes,
+                cost_view,
+                constraints,
+                commitments,
+            )
+
+        planning_time_s remains as a compatibility argument for existing
+        callers.
+        """     
         if not isinstance(route_plan, RoutePlan):
             raise TypeError(
                 "route_plan must be a RoutePlan"
@@ -507,17 +552,58 @@ class RouteEvaluator:
             else float(planning_time_s)
         )
 
-        if not isfinite(float(evaluation_time)):
+        if not isfinite(
+            float(evaluation_time)
+        ):
             raise ValueError(
                 "planning_time_s must be finite"
             )
+
+        if evaluation_time < 0.0:
+            raise ValueError(
+                "planning_time_s must be non-negative"
+            )
+
+        active_constraints = (
+            constraints
+            if constraints is not None
+            else EvaluationConstraints.from_config(
+                self.config
+            )
+        )
+
+        active_cost_view = (
+            cost_view
+            if cost_view is not None
+            else self.cost_view
+        )
+
+        active_commitments = (
+            commitments
+            if commitments is not None
+            else CommitmentSnapshot.from_scenario(
+                self._vehicles,
+                default_time_s=evaluation_time,
+            )
+        )
+
+        path_builder = self._make_path_builder(
+            active_cost_view
+        )
 
         vehicle_evaluations = VehicleEvaluationCollection(
             self._evaluate_vehicle_route(
                 vehicle_route,
                 planning_time_s=evaluation_time,
+                cost_view=active_cost_view,
+                constraints=active_constraints,
+                commitment=active_commitments.for_vehicle(
+                    vehicle_route.vehicle_id
+                ),
+                path_builder=path_builder,
             )
-            for vehicle_route in route_plan.vehicle_routes
+            for vehicle_route
+            in route_plan.vehicle_routes
         )
 
         served_customer_ids = (
@@ -531,8 +617,10 @@ class RouteEvaluator:
         unknown_request_ids = tuple(
             dict.fromkeys(
                 customer_id
-                for customer_id in route_plan.all_customer_ids()
-                if customer_id not in self._request_by_id
+                for customer_id
+                in route_plan.all_customer_ids()
+                if customer_id
+                not in self._request_by_id
             )
         )
 
@@ -546,7 +634,8 @@ class RouteEvaluator:
 
         unserved_customer_ids = tuple(
             customer_id
-            for customer_id in required_customer_ids
+            for customer_id
+            in required_customer_ids
             if customer_id not in served_set
         )
 
@@ -572,42 +661,116 @@ class RouteEvaluator:
         )
 
         errors: list[str] = []
+        violations: list[EvaluationViolation] = []
 
-        for vehicle_evaluation in vehicle_evaluations:
+        for evaluation in vehicle_evaluations:
             errors.extend(
-                vehicle_evaluation.errors
+                evaluation.errors
+            )
+            violations.extend(
+                evaluation.violations
             )
 
         if unknown_vehicle_ids:
-            errors.append(
+            message = (
                 "Unknown vehicle assignments: "
                 + ", ".join(
                     str(vehicle_id)
-                    for vehicle_id in unknown_vehicle_ids
+                    for vehicle_id
+                    in unknown_vehicle_ids
+                )
+            )
+
+            errors.append(message)
+
+            violations.append(
+                EvaluationViolation(
+                    name="unknown_vehicle",
+                    magnitude=float(
+                        len(unknown_vehicle_ids)
+                    ),
+                    count=len(
+                        unknown_vehicle_ids
+                    ),
+                    message=message,
                 )
             )
 
         if unknown_request_ids:
-            errors.append(
+            message = (
                 "Unknown request assignments: "
-                + ", ".join(str(customer_id) for customer_id in unknown_request_ids)
-            )
-
-        if duplicate_customer_ids:
-            errors.append(
-                "Duplicate customer assignments: "
                 + ", ".join(
                     str(customer_id)
-                    for customer_id in duplicate_customer_ids
+                    for customer_id
+                    in unknown_request_ids
                 )
             )
 
-        if unserved_customer_ids:
-            errors.append(
+            errors.append(message)
+
+            violations.append(
+                EvaluationViolation(
+                    name="unknown_request",
+                    magnitude=float(
+                        len(unknown_request_ids)
+                    ),
+                    count=len(
+                        unknown_request_ids
+                    ),
+                    message=message,
+                )
+            )
+
+        if duplicate_customer_ids:
+            message = (
+                "Duplicate customer assignments: "
+                + ", ".join(
+                    str(customer_id)
+                    for customer_id
+                    in duplicate_customer_ids
+                )
+            )
+
+            errors.append(message)
+
+            violations.append(
+                EvaluationViolation(
+                    name="duplicate_customer",
+                    magnitude=float(
+                        len(duplicate_customer_ids)
+                    ),
+                    count=len(
+                        duplicate_customer_ids
+                    ),
+                    message=message,
+                )
+            )
+
+        if (
+            active_constraints.require_all_requests_served
+            and unserved_customer_ids
+        ):
+            message = (
                 "Unserved customers: "
                 + ", ".join(
                     str(customer_id)
-                    for customer_id in unserved_customer_ids
+                    for customer_id
+                    in unserved_customer_ids
+                )
+            )
+
+            errors.append(message)
+
+            violations.append(
+                EvaluationViolation(
+                    name="unserved_customer",
+                    magnitude=float(
+                        len(unserved_customer_ids)
+                    ),
+                    count=len(
+                        unserved_customer_ids
+                    ),
+                    message=message,
                 )
             )
 
@@ -648,29 +811,46 @@ class RouteEvaluator:
             service_time_s=total_service,
             lateness_s=total_lateness,
             vehicle_evaluations=vehicle_evaluations,
-            duplicate_customer_count=(
-                len(duplicate_customer_ids)
+            duplicate_customer_count=len(
+                duplicate_customer_ids
             ),
-            unserved_customer_count=(
-                len(unserved_customer_ids)
+            unserved_customer_count=len(
+                unserved_customer_ids
             ),
-            unknown_vehicle_count=(
-                len(unknown_vehicle_ids)
+            unknown_vehicle_count=len(
+                unknown_vehicle_ids
+            ),
+            commitment_violation_count=sum(
+                not evaluation.commitment_feasible
+                for evaluation
+                in vehicle_evaluations
+            ),
+            depot_violation_count=sum(
+                not evaluation.depot_feasible
+                for evaluation
+                in vehicle_evaluations
             ),
         )
 
-        # ``feasible`` answers whether the supplied candidate itself is
-        # internally legal. Completeness is exposed separately through
-        # ``all_requests_served``/``assignment_feasible`` so partial plans
-        # can be evaluated during construction, repair, and optimization.
+        assignment_failure = (
+            not customer_uniqueness_feasible
+            or bool(unknown_request_ids)
+            or bool(unknown_vehicle_ids)
+        )
+
+        if active_constraints.require_all_requests_served:
+            assignment_failure = (
+                assignment_failure
+                or not all_requests_served
+            )
+
         feasible = (
             all(
                 evaluation.feasible
-                for evaluation in vehicle_evaluations
+                for evaluation
+                in vehicle_evaluations
             )
-            and customer_uniqueness_feasible
-            and not unknown_request_ids
-            and not unknown_vehicle_ids
+            and not assignment_failure
         )
 
         return RoutePlanEvaluation(
@@ -690,7 +870,9 @@ class RouteEvaluator:
             ),
             unknown_request_ids=unknown_request_ids,
             unknown_vehicle_ids=unknown_vehicle_ids,
-            total_distance_m=float(total_distance),
+            total_distance_m=float(
+                total_distance
+            ),
             total_travel_time_s=float(
                 total_travel_time
             ),
@@ -706,7 +888,12 @@ class RouteEvaluator:
             total_lateness_s=float(
                 total_lateness
             ),
-            objective_value=float(objective),
+            objective_value=float(
+                objective
+            ),
+            violations=tuple(
+                violations
+            ),
             errors=tuple(errors),
         )
 
@@ -715,6 +902,9 @@ class RouteEvaluator:
         vehicle_route: VehicleRoute,
         *,
         planning_time_s: TimeS | None = None,
+        cost_view: CostView | None = None,
+        constraints: EvaluationConstraints | None = None,
+        commitment: VehicleCommitment | None = None,
     ) -> VehicleRouteEvaluation:
         """Evaluate one vehicle route independently."""
 
@@ -724,9 +914,31 @@ class RouteEvaluator:
             else float(planning_time_s)
         )
 
+        active_constraints = (
+            constraints
+            if constraints is not None
+            else EvaluationConstraints.from_config(
+                self.config
+            )
+        )
+
+        active_cost_view = (
+            cost_view
+            if cost_view is not None
+            else self.cost_view
+        )
+
+        path_builder = self._make_path_builder(
+            active_cost_view
+        )
+
         return self._evaluate_vehicle_route(
             vehicle_route,
             planning_time_s=evaluation_time,
+            cost_view=active_cost_view,
+            constraints=active_constraints,
+            commitment=commitment,
+            path_builder=path_builder,
         )
 
     def with_network_state(
@@ -734,11 +946,10 @@ class RouteEvaluator:
         *,
         closed_edge_ids: Iterable[RoadEdgeId] = (),
         travel_time_provider: TravelTimeProvider | None = None,
-    ) -> RouteEvaluator:
-        """Create a new evaluator for a network-state snapshot.
-
-        The Scenario remains immutable. This method is therefore appropriate
-        for simulation epochs where incidents or traffic conditions change.
+        cost_view: CostView | None = None,
+    ) -> "RouteEvaluator":
+        """
+        Create an immutable evaluator for a network-state snapshot.
         """
 
         provider = (
@@ -752,6 +963,11 @@ class RouteEvaluator:
             config=self.config,
             travel_time_provider=provider,
             closed_edge_ids=closed_edge_ids,
+            cost_view=(
+                self.cost_view
+                if cost_view is None
+                else cost_view
+            ),
         )
 
     # ==================================================================
@@ -763,6 +979,10 @@ class RouteEvaluator:
         vehicle_route: VehicleRoute,
         *,
         planning_time_s: TimeS,
+        cost_view: CostView | None,
+        constraints: EvaluationConstraints,
+        commitment: VehicleCommitment | None,
+        path_builder: DirectedPathBuilder,
     ) -> VehicleRouteEvaluation:
         vehicle = self._vehicle_by_id.get(
             vehicle_route.vehicle_id
@@ -785,15 +1005,121 @@ class RouteEvaluator:
             self._vehicle_capacity(vehicle)
         )
 
-        vehicle_start_time = float(
-            planning_time_s
+        violations: list[EvaluationViolation] = []
+        errors: list[str] = []
+
+        commitment_feasible = True
+
+        # --------------------------------------------------------------
+        # Resolve immutable state snapshot.
+        # --------------------------------------------------------------
+
+        if commitment is not None:
+            if (
+                commitment.vehicle_id
+                != vehicle_route.vehicle_id
+            ):
+                commitment_feasible = False
+
+                message = (
+                    "Commitment vehicle_id does not match "
+                    "route vehicle_id"
+                )
+
+                errors.append(message)
+
+                violations.append(
+                    EvaluationViolation(
+                        name="commitment_vehicle_mismatch",
+                        vehicle_id=vehicle_route.vehicle_id,
+                        message=message,
+                    )
+                )
+
+            current_node = commitment.current_node_id
+
+            vehicle_start_time = float(
+                commitment.current_time_s
+            )
+            current_time = vehicle_start_time
+
+            current_load = float(
+                commitment.current_load_units
+            )
+
+            onboard_request_ids = set(
+                commitment.onboard_request_ids
+            )
+
+            committed_customer_ids = tuple(
+                commitment.committed_customer_ids
+            )
+
+            frozen_prefix_edge_ids = tuple(
+                commitment.frozen_prefix_edge_ids
+            )
+
+        else:
+            current_node = start_node
+
+            vehicle_start_time = float(
+                planning_time_s
+            )
+            current_time = vehicle_start_time
+
+            current_load = 0.0
+            onboard_request_ids = set()
+            committed_customer_ids = ()
+            frozen_prefix_edge_ids = ()
+
+        if current_load < -constraints.load_tolerance:
+            commitment_feasible = False
+
+            message = (
+                f"Vehicle {vehicle_route.vehicle_id!r} "
+                f"has negative current load "
+                f"{current_load}"
+            )
+
+            errors.append(message)
+
+            violations.append(
+                EvaluationViolation(
+                    name="negative_current_load",
+                    magnitude=abs(current_load),
+                    vehicle_id=vehicle_route.vehicle_id,
+                    message=message,
+                )
+            )
+
+        if current_load > capacity + constraints.load_tolerance:
+            commitment_feasible = False
+
+            excess = current_load - capacity
+
+            message = (
+                f"Vehicle {vehicle_route.vehicle_id!r} "
+                f"starts above capacity: "
+                f"{current_load} > {capacity}"
+            )
+
+            errors.append(message)
+
+            violations.append(
+                EvaluationViolation(
+                    name="initial_capacity_exceeded",
+                    magnitude=excess,
+                    vehicle_id=vehicle_route.vehicle_id,
+                    message=message,
+                )
+            )
+
+        initial_load = max(
+            0.0,
+            current_load,
         )
 
-        current_node = start_node
-        current_time = vehicle_start_time
-
-        current_load = 0.0
-        maximum_load = 0.0
+        maximum_load = initial_load
 
         total_distance = 0.0
         total_travel_time = 0.0
@@ -807,54 +1133,162 @@ class RouteEvaluator:
         connectivity_feasible = True
         capacity_feasible = True
         time_window_feasible = True
-
-        errors: list[str] = []
+        depot_feasible = True
 
         # --------------------------------------------------------------
-        # Customer visits
+        # Validate commitments before traversing mutable continuation.
         # --------------------------------------------------------------
 
-        for customer_id in vehicle_route.customer_ids:
+        route_customer_ids = tuple(
+            vehicle_route.customer_ids
+        )
+
+        if constraints.require_commitments:
+            if committed_customer_ids:
+                expected_prefix = (
+                    committed_customer_ids
+                )
+
+                actual_prefix = route_customer_ids[
+                    : len(expected_prefix)
+                ]
+
+                if actual_prefix != expected_prefix:
+                    commitment_feasible = False
+
+                    message = (
+                        f"Vehicle {vehicle_route.vehicle_id!r} "
+                        f"does not preserve committed customer prefix. "
+                        f"expected={expected_prefix!r}, "
+                        f"actual={actual_prefix!r}"
+                    )
+
+                    errors.append(message)
+
+                    violations.append(
+                        EvaluationViolation(
+                            name="committed_customer_prefix",
+                            magnitude=float(
+                                len(expected_prefix)
+                                - sum(
+                                    a == b
+                                    for a, b in zip(
+                                        actual_prefix,
+                                        expected_prefix,
+                                    )
+                                )
+                            ),
+                            vehicle_id=vehicle_route.vehicle_id,
+                            message=message,
+                        )
+                    )
+
+            if frozen_prefix_edge_ids:
+                candidate_edges = tuple(
+                    edge_id
+                    for leg in vehicle_route.legs
+                    for edge_id in leg.physical_edge_ids
+                )
+
+                prefix = candidate_edges[
+                    : len(frozen_prefix_edge_ids)
+                ]
+
+                if prefix != frozen_prefix_edge_ids:
+                    # A route generated from a rolling state normally starts
+                    # AFTER the frozen physical prefix, so an absent prefix is
+                    # legal when current_node_id already represents the
+                    # post-prefix state. If the candidate explicitly carries
+                    # physical edges, however, they must agree.
+                    if candidate_edges:
+                        commitment_feasible = False
+
+                        message = (
+                            f"Vehicle {vehicle_route.vehicle_id!r} "
+                            "violates frozen physical prefix"
+                        )
+
+                        errors.append(message)
+
+                        violations.append(
+                            EvaluationViolation(
+                                name="frozen_physical_prefix",
+                                magnitude=float(
+                                    len(
+                                        frozen_prefix_edge_ids
+                                    )
+                                ),
+                                vehicle_id=(
+                                    vehicle_route.vehicle_id
+                                ),
+                                message=message,
+                            )
+                        )
+
+        # --------------------------------------------------------------
+        # Customer visits.
+        # --------------------------------------------------------------
+
+        for customer_id in route_customer_ids:
             request = self._request_by_id.get(
                 customer_id
             )
 
             if request is None:
-                errors.append(
-                    f"Unknown customer_id={customer_id!r}"
+                message = (
+                    f"Unknown customer_id="
+                    f"{customer_id!r}"
                 )
+
+                errors.append(message)
 
                 connectivity_feasible = False
                 time_window_feasible = False
+
+                violations.append(
+                    EvaluationViolation(
+                        name="unknown_request",
+                        vehicle_id=vehicle_route.vehicle_id,
+                        customer_id=customer_id,
+                        message=message,
+                    )
+                )
+
                 continue
 
             customer_node = self._request_node(
                 request
             )
 
-            # CRITICAL:
-            # The departure time is passed into the path builder so a
-            # time-dependent provider can influence PATH SELECTION itself.
-            #
-            # We must not select a free-flow path first and then merely
-            # re-time that path afterwards.
             try:
-                path = self.path_builder.shortest_path(
+                path = path_builder.shortest_path(
                     current_node,
                     customer_node,
                     departure_time_s=current_time,
-                    travel_time_provider=(
-                        self.travel_time_provider
-                    ),
                 )
 
             except PathNotFoundError as exc:
                 connectivity_feasible = False
 
-                errors.append(
+                message = (
                     f"Vehicle {vehicle_route.vehicle_id!r}: "
-                    f"cannot reach customer {customer_id!r} "
-                    f"from node {current_node!r}: {exc}"
+                    f"cannot reach customer "
+                    f"{customer_id!r} from node "
+                    f"{current_node!r}: {exc}"
+                )
+
+                errors.append(message)
+
+                violations.append(
+                    EvaluationViolation(
+                        name="connectivity",
+                        magnitude=1.0,
+                        vehicle_id=(
+                            vehicle_route.vehicle_id
+                        ),
+                        customer_id=customer_id,
+                        message=message,
+                    )
                 )
 
                 continue
@@ -862,11 +1296,24 @@ class RouteEvaluator:
             except ValueError as exc:
                 connectivity_feasible = False
 
-                errors.append(
+                message = (
                     f"Vehicle {vehicle_route.vehicle_id!r}: "
                     f"invalid dynamic travel-time evaluation "
-                    f"while reaching customer "
-                    f"{customer_id!r}: {exc}"
+                    f"for customer {customer_id!r}: {exc}"
+                )
+
+                errors.append(message)
+
+                violations.append(
+                    EvaluationViolation(
+                        name="invalid_edge_cost",
+                        magnitude=1.0,
+                        vehicle_id=(
+                            vehicle_route.vehicle_id
+                        ),
+                        customer_id=customer_id,
+                        message=message,
+                    )
                 )
 
                 continue
@@ -879,22 +1326,35 @@ class RouteEvaluator:
                 path.distance_m
             )
 
-            # PathResult.travel_time_s is already the time-dependent
-            # traversal cost selected by DirectedPathBuilder.
             travel_time = float(
                 path.travel_time_s
             )
 
-            if travel_time < 0.0 or not isfinite(
-                travel_time
+            if (
+                travel_time < 0.0
+                or not isfinite(travel_time)
             ):
                 connectivity_feasible = False
 
-                errors.append(
+                message = (
                     f"Invalid travel time for transition "
                     f"{current_node!r} -> "
                     f"{customer_node!r}: "
                     f"{travel_time}"
+                )
+
+                errors.append(message)
+
+                violations.append(
+                    EvaluationViolation(
+                        name="invalid_travel_time",
+                        magnitude=1.0,
+                        vehicle_id=(
+                            vehicle_route.vehicle_id
+                        ),
+                        customer_id=customer_id,
+                        message=message,
+                    )
                 )
 
                 continue
@@ -924,10 +1384,6 @@ class RouteEvaluator:
                 self._request_demand(request)
             )
 
-            # ----------------------------------------------------------
-            # Release time + service-start window
-            # ----------------------------------------------------------
-
             minimum_service_start = max(
                 release_time,
                 earliest,
@@ -936,22 +1392,42 @@ class RouteEvaluator:
             service_start = arrival_time
             waiting_time = 0.0
 
-            if service_start < minimum_service_start:
-                if self.config.allow_waiting:
-                    waiting_time = (
-                        minimum_service_start
-                        - service_start
-                    )
+            if (
+                service_start
+                < minimum_service_start
+                - constraints.time_tolerance
+            ):
+                required_wait = (
+                    minimum_service_start
+                    - service_start
+                )
 
+                if constraints.allow_waiting:
+                    waiting_time = required_wait
                     service_start = (
                         minimum_service_start
                     )
-
                 else:
-                    errors.append(
-                        f"Customer {customer_id!r} requires "
-                        f"{minimum_service_start - service_start} "
-                        f"seconds of waiting, but waiting is disabled"
+                    time_window_feasible = False
+
+                    message = (
+                        f"Customer {customer_id!r} "
+                        f"requires {required_wait} seconds "
+                        "of waiting, but waiting is disabled"
+                    )
+
+                    errors.append(message)
+
+                    violations.append(
+                        EvaluationViolation(
+                            name="waiting_disabled",
+                            magnitude=required_wait,
+                            vehicle_id=(
+                                vehicle_route.vehicle_id
+                            ),
+                            customer_id=customer_id,
+                            message=message,
+                        )
                     )
 
             service_end = (
@@ -959,11 +1435,8 @@ class RouteEvaluator:
                 + service_time
             )
 
-            # ----------------------------------------------------------
-            # Capacity
-            # ----------------------------------------------------------
-
             load_before = current_load
+
             current_load += demand
 
             maximum_load = max(
@@ -972,65 +1445,135 @@ class RouteEvaluator:
             )
 
             stop_capacity_feasible = (
-                current_load <= capacity
+                current_load
+                <= capacity
+                + constraints.load_tolerance
             )
 
-            if not stop_capacity_feasible:
-                capacity_feasible = False
+            if constraints.enforce_capacity:
+                if not stop_capacity_feasible:
+                    capacity_feasible = False
 
-                errors.append(
-                    f"Vehicle {vehicle_route.vehicle_id!r} "
-                    f"exceeds capacity at customer "
-                    f"{customer_id!r}: "
-                    f"{current_load} > {capacity}"
-                )
+                    excess = (
+                        current_load
+                        - capacity
+                    )
 
-            # ----------------------------------------------------------
-            # Release/window validation
-            # ----------------------------------------------------------
+                    message = (
+                        f"Vehicle {vehicle_route.vehicle_id!r} "
+                        f"exceeds capacity at customer "
+                        f"{customer_id!r}: "
+                        f"{current_load} > {capacity}"
+                    )
+
+                    errors.append(message)
+
+                    violations.append(
+                        EvaluationViolation(
+                            name="capacity",
+                            magnitude=max(
+                                0.0,
+                                excess,
+                            ),
+                            vehicle_id=(
+                                vehicle_route.vehicle_id
+                            ),
+                            customer_id=customer_id,
+                            message=message,
+                        )
+                    )
 
             release_feasible = (
-                service_start >= release_time
+                service_start
+                >= release_time
+                - constraints.time_tolerance
             )
 
             window_feasible = (
                 earliest
+                - constraints.time_tolerance
                 <= service_start
                 <= latest
+                + constraints.time_tolerance
             )
 
-            if not release_feasible:
-                time_window_feasible = False
+            if constraints.enforce_releases:
+                if not release_feasible:
+                    time_window_feasible = False
 
-                errors.append(
-                    f"Customer {customer_id!r} service starts "
-                    f"before release time {release_time}: "
-                    f"{service_start}"
-                )
+                    magnitude = (
+                        release_time
+                        - service_start
+                    )
 
-            lateness = max(
-                0.0,
-                service_start - latest,
-            )
+                    message = (
+                        f"Customer {customer_id!r} "
+                        f"service starts before release "
+                        f"time {release_time}: "
+                        f"{service_start}"
+                    )
 
-            if not window_feasible:
-                time_window_feasible = False
-                total_lateness += lateness
+                    errors.append(message)
 
-                errors.append(
-                    f"Customer {customer_id!r} service starts "
-                    f"outside time window "
-                    f"[{earliest}, {latest}]: "
-                    f"{service_start}"
-                )
+                    violations.append(
+                        EvaluationViolation(
+                            name="release",
+                            magnitude=max(
+                                0.0,
+                                magnitude,
+                            ),
+                            vehicle_id=(
+                                vehicle_route.vehicle_id
+                            ),
+                            customer_id=customer_id,
+                            message=message,
+                        )
+                    )
+
+            if constraints.enforce_time_windows:
+                if not window_feasible:
+                    time_window_feasible = False
+
+                    lateness = max(
+                        0.0,
+                        service_start
+                        - latest,
+                    )
+
+                    total_lateness += (
+                        lateness
+                    )
+
+                    message = (
+                        f"Customer {customer_id!r} "
+                        f"service starts outside time "
+                        f"window [{earliest}, {latest}]: "
+                        f"{service_start}"
+                    )
+
+                    errors.append(message)
+
+                    violations.append(
+                        EvaluationViolation(
+                            name="time_window",
+                            magnitude=lateness,
+                            vehicle_id=(
+                                vehicle_route.vehicle_id
+                            ),
+                            customer_id=customer_id,
+                            message=message,
+                        )
+                    )
 
             stop_results.append(
                 StopEvaluation(
                     customer_id=customer_id,
                     node_id=customer_node,
-                    edge_ids=tuple(path.edge_ids),
-                    distance_m=float(distance),
-                    travel_time_s=float(travel_time),
+                    edge_ids=tuple(
+                        path.edge_ids
+                    ),
+                    distance_m=distance,
+                    travel_time_s=travel_time,
                     arrival_time_s=float(
                         arrival_time
                     ),
@@ -1052,15 +1595,9 @@ class RouteEvaluator:
                     load_after_units=float(
                         current_load
                     ),
-                    release_time_s=float(
-                        release_time
-                    ),
-                    earliest_time_s=float(
-                        earliest
-                    ),
-                    latest_time_s=float(
-                        latest
-                    ),
+                    release_time_s=release_time,
+                    earliest_time_s=earliest,
+                    latest_time_s=latest,
                     release_feasible=(
                         release_feasible
                     ),
@@ -1079,72 +1616,117 @@ class RouteEvaluator:
             current_node = customer_node
 
         # --------------------------------------------------------------
-        # Depot return
+        # Depot return.
         # --------------------------------------------------------------
 
-        try:
-            return_path = self.path_builder.shortest_path(
-                current_node,
-                end_node,
-                departure_time_s=current_time,
-                travel_time_provider=(
-                    self.travel_time_provider
-                ),
-            )
-
-            physical_legs.append(
-                self._path_to_leg(
-                    return_path
-                )
-            )
-
-            return_distance = float(
-                return_path.distance_m
-            )
-
-            return_travel_time = float(
-                return_path.travel_time_s
-            )
-
-            if (
-                return_travel_time < 0.0
-                or not isfinite(return_travel_time)
-            ):
-                raise ValueError(
-                    "Invalid depot-return travel time: "
-                    f"{return_travel_time}"
+        if constraints.require_depot_return:
+            try:
+                return_path = (
+                    path_builder.shortest_path(
+                        current_node,
+                        end_node,
+                        departure_time_s=current_time,
+                    )
                 )
 
-            total_distance += return_distance
-            total_travel_time += return_travel_time
+                physical_legs.append(
+                    self._path_to_leg(
+                        return_path
+                    )
+                )
 
-            current_time += return_travel_time
+                return_distance = float(
+                    return_path.distance_m
+                )
 
-        except PathNotFoundError as exc:
-            connectivity_feasible = False
+                return_travel_time = float(
+                    return_path.travel_time_s
+                )
 
-            errors.append(
-                f"Vehicle {vehicle_route.vehicle_id!r} "
-                f"cannot return from node "
-                f"{current_node!r} to depot/end node "
-                f"{end_node!r}: {exc}"
-            )
+                if (
+                    return_travel_time < 0.0
+                    or not isfinite(
+                        return_travel_time
+                    )
+                ):
+                    raise ValueError(
+                        "Invalid depot-return "
+                        f"travel time: "
+                        f"{return_travel_time}"
+                    )
 
-        except ValueError as exc:
-            connectivity_feasible = False
+                total_distance += (
+                    return_distance
+                )
 
-            errors.append(
-                f"Vehicle {vehicle_route.vehicle_id!r} "
-                f"has invalid depot-return travel time: {exc}"
-            )
+                total_travel_time += (
+                    return_travel_time
+                )
+
+                current_time += (
+                    return_travel_time
+                )
+
+            except PathNotFoundError as exc:
+                depot_feasible = False
+                connectivity_feasible = False
+
+                message = (
+                    f"Vehicle "
+                    f"{vehicle_route.vehicle_id!r} "
+                    f"cannot return from node "
+                    f"{current_node!r} to depot "
+                    f"{end_node!r}: {exc}"
+                )
+
+                errors.append(message)
+
+                violations.append(
+                    EvaluationViolation(
+                        name="depot_return",
+                        magnitude=1.0,
+                        vehicle_id=(
+                            vehicle_route.vehicle_id
+                        ),
+                        message=message,
+                    )
+                )
+
+            except ValueError as exc:
+                depot_feasible = False
+                connectivity_feasible = False
+
+                message = (
+                    f"Vehicle "
+                    f"{vehicle_route.vehicle_id!r} "
+                    f"has invalid depot-return "
+                    f"travel time: {exc}"
+                )
+
+                errors.append(message)
+
+                violations.append(
+                    EvaluationViolation(
+                        name="depot_return",
+                        magnitude=1.0,
+                        vehicle_id=(
+                            vehicle_route.vehicle_id
+                        ),
+                        message=message,
+                    )
+                )
 
         # --------------------------------------------------------------
-        # Physical route
+        # Physical route.
         # --------------------------------------------------------------
 
         physical_route = PhysicalRoute.from_legs(
             vehicle_id=vehicle_route.vehicle_id,
-            start_node=start_node,
+            start_node=(
+                commitment.current_node_id
+                if commitment is not None
+                else start_node
+            ),
             end_node=end_node,
             legs=physical_legs,
         )
@@ -1156,11 +1738,28 @@ class RouteEvaluator:
 
         feasible = (
             connectivity_feasible
-            and capacity_feasible
-            and time_window_feasible
-            and not any(
-                "Unknown customer" in error
-                for error in errors
+            and (
+                capacity_feasible
+                if constraints.enforce_capacity
+                else True
+            )
+            and (
+                time_window_feasible
+                if (
+                    constraints.enforce_time_windows
+                    or constraints.enforce_releases
+                )
+                else True
+            )
+            and (
+                commitment_feasible
+                if constraints.require_commitments
+                else True
+            )
+            and (
+                depot_feasible
+                if constraints.require_depot_return
+                else True
             )
         )
 
@@ -1178,8 +1777,17 @@ class RouteEvaluator:
             time_window_feasible=(
                 time_window_feasible
             ),
+            commitment_feasible=(
+                commitment_feasible
+            ),
+            depot_feasible=(
+                depot_feasible
+            ),
             capacity_units=float(
                 capacity
+            ),
+            initial_load_units=float(
+                initial_load
             ),
             final_load_units=float(
                 current_load
@@ -1205,6 +1813,9 @@ class RouteEvaluator:
             lateness_s=float(
                 total_lateness
             ),
+            violations=tuple(
+                violations
+            ),
             errors=tuple(errors),
         )
 
@@ -1212,7 +1823,17 @@ class RouteEvaluator:
         self,
         vehicle_route: VehicleRoute,
     ) -> VehicleRouteEvaluation:
-        """Create a deterministic failure result for an unknown vehicle."""
+        message = (
+            f"Unknown vehicle_id="
+            f"{vehicle_route.vehicle_id!r}"
+        )
+
+        violation = EvaluationViolation(
+            name="unknown_vehicle",
+            magnitude=1.0,
+            vehicle_id=vehicle_route.vehicle_id,
+            message=message,
+        )
 
         return VehicleRouteEvaluation(
             vehicle_id=vehicle_route.vehicle_id,
@@ -1222,7 +1843,10 @@ class RouteEvaluator:
             connectivity_feasible=False,
             capacity_feasible=False,
             time_window_feasible=False,
+            commitment_feasible=False,
+            depot_feasible=False,
             capacity_units=0.0,
+            initial_load_units=0.0,
             final_load_units=0.0,
             maximum_load_units=0.0,
             total_distance_m=0.0,
@@ -1231,29 +1855,58 @@ class RouteEvaluator:
             total_service_time_s=0.0,
             elapsed_time_s=0.0,
             lateness_s=0.0,
-            errors=(
-                f"Unknown vehicle_id="
-                f"{vehicle_route.vehicle_id!r}",
-            ),
+            violations=(violation,),
+            errors=(message,),
         )
 
     # ==================================================================
-    # Dynamic travel-time handling
+    # Path / CostView
     # ==================================================================
+
+    def _make_path_builder(
+        self,
+        cost_view: CostView | None,
+    ) -> DirectedPathBuilder:
+        """
+        Build a per-evaluation path builder.
+
+        This is intentional: a caller-supplied CostView must never mutate
+        shared evaluator state.
+        """
+
+        return DirectedPathBuilder(
+            self._edges,
+            closed_edge_ids=self._closed_edge_ids,
+            travel_time_provider=(
+                self.travel_time_provider
+                if cost_view is None
+                else None
+            ),
+            cost_view=cost_view,
+        )
 
     def _path_travel_time(
         self,
         path: PathResult,
         departure_time_s: TimeS,
+        *,
+        cost_view: CostView | None = None,
     ) -> TimeS:
-        """Return the dynamic travel time of an already-selected path.
+        """Re-evaluate an already selected physical path."""
 
-        This method is retained as a utility for callers that need to
-        re-evaluate a known physical path.
+        active_cost_view = (
+            cost_view
+            if cost_view is not None
+            else self.cost_view
+        )
 
-        Normal route evaluation should use PathBuilder's dynamic shortest
-        path directly because dynamic costs must influence route selection.
-        """
+        if active_cost_view is not None:
+            return float(
+                active_cost_view.path_cost(
+                    path.edge_ids,
+                    departure_time_s,
+                ).actual_travel_time_s
+            )
 
         if self.travel_time_provider is None:
             return float(
@@ -1283,9 +1936,9 @@ class RouteEvaluator:
                 or not isfinite(travel_time)
             ):
                 raise ValueError(
-                    "travel_time_provider returned an invalid "
-                    f"travel time for edge {edge_id!r}: "
-                    f"{travel_time}"
+                    "travel_time_provider returned "
+                    "an invalid travel time for edge "
+                    f"{edge_id!r}: {travel_time}"
                 )
 
             total += travel_time
@@ -1297,8 +1950,6 @@ class RouteEvaluator:
     def _path_to_leg(
         path: PathResult,
     ) -> RouteLeg:
-        """Convert a physical path result into a route leg."""
-
         if not path.node_ids:
             raise ValueError(
                 "PathResult contains no nodes"
@@ -1330,9 +1981,9 @@ class RouteEvaluator:
         duplicate_customer_count: int,
         unserved_customer_count: int,
         unknown_vehicle_count: int,
+        commitment_violation_count: int,
+        depot_violation_count: int,
     ) -> float:
-        """Calculate the configured scalar route objective."""
-
         value = (
             self.config.distance_weight
             * distance_m
@@ -1348,13 +1999,15 @@ class RouteEvaluator:
 
         capacity_violations = sum(
             1
-            for evaluation in vehicle_evaluations
+            for evaluation
+            in vehicle_evaluations
             if not evaluation.capacity_feasible
         )
 
         connectivity_violations = sum(
             1
-            for evaluation in vehicle_evaluations
+            for evaluation
+            in vehicle_evaluations
             if not evaluation.connectivity_feasible
         )
 
@@ -1381,6 +2034,16 @@ class RouteEvaluator:
         value += (
             self.config.unknown_vehicle_penalty
             * unknown_vehicle_count
+        )
+
+        value += (
+            self.config.commitment_penalty
+            * commitment_violation_count
+        )
+
+        value += (
+            self.config.depot_penalty
+            * depot_violation_count
         )
 
         return float(value)
@@ -1439,7 +2102,7 @@ class RouteEvaluator:
         return value
 
     # ==================================================================
-    # V1.2 request accessors
+    # Request accessors
     # ==================================================================
 
     @staticmethod
@@ -1485,7 +2148,7 @@ class RouteEvaluator:
         return request.latest_service_start_s
 
     # ==================================================================
-    # V1.2 vehicle accessors
+    # Vehicle accessors
     # ==================================================================
 
     @staticmethod
