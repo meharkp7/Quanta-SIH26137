@@ -17,6 +17,17 @@ from src.optim.common import (
     route_diversity,
 )
 from src.optim.diversity import route_distance
+from src.optim.qpso_mechanisms import (
+    AlphaMode,
+    AttractorMode,
+    MbestMode,
+    RecoveryMode,
+    QPSOMechanismConfig,
+    compute_alpha,
+    compute_attractor,
+    compute_mbest,
+    should_recover,
+)
 
 @dataclass(frozen=True)
 class AdaptiveQPSOConfig(OptimizationConfig):
@@ -41,6 +52,15 @@ class AdaptiveQPSOConfig(OptimizationConfig):
 
     recovery_probability: float = 0.10
     recovery_scale: float = 0.35
+
+    # Explicit mechanism selection for controlled ablations.
+    # The default preserves the existing adaptive implementation.
+    mechanisms: QPSOMechanismConfig = QPSOMechanismConfig(
+        alpha_mode=AlphaMode.ADAPTIVE,
+        attractor_mode=AttractorMode.BLENDED,
+        mbest_mode=MbestMode.WEIGHTED,
+        recovery_mode=RecoveryMode.ADAPTIVE_BURST,
+    )
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -92,6 +112,11 @@ class AdaptiveQPSOConfig(OptimizationConfig):
         if not 0.0 <= self.recovery_scale <= 1.0:
             raise OptimizationError(
                 "recovery_scale must be in [0, 1]"
+            )
+
+        if not isinstance(self.mechanisms, QPSOMechanismConfig):
+            raise OptimizationError(
+                "mechanisms must be a QPSOMechanismConfig"
             )
 
 
@@ -174,51 +199,11 @@ class AdaptiveQPSO:
         self,
         particles: Sequence[_Particle],
     ) -> Vector:
-        """
-        Fitness-weighted mean of personal-best positions.
-
-        Lower fitness receives larger weight. The exponential scale is
-        normalized by the observed fitness span to avoid numerical collapse.
-        """
-
-        best = min(
-            particle.pbest_result.fitness for particle in particles
-        )
-        worst = max(
-            particle.pbest_result.fitness for particle in particles
-        )
-
-        span = max(worst - best, 1e-12)
-
-        weights = [
-            exp(
-                -(
-                    particle.pbest_result.fitness - best
-                )
-                / span
-            )
-            for particle in particles
-        ]
-
-        total_weight = sum(weights)
-
-        if total_weight <= 0.0 or not isfinite(total_weight):
-            return tuple(
-                sum(
-                    particle.pbest_position[d]
-                    for particle in particles
-                )
-                / len(particles)
-                for d in range(self.config.dimensions)
-            )
-
-        return tuple(
-            sum(
-                weight * particle.pbest_position[d]
-                for weight, particle in zip(weights, particles)
-            )
-            / total_weight
-            for d in range(self.config.dimensions)
+        """Compute the configured personal-best mean attractor."""
+        return compute_mbest(
+            particles,
+            dimensions=self.config.dimensions,
+            mode=self.config.mechanisms.mbest_mode,
         )
 
     def _adaptive_alpha(
@@ -229,49 +214,14 @@ class AdaptiveQPSO:
         progress: float,
         stagnation: int,
     ) -> float:
-        """
-        Adaptive contraction-expansion coefficient.
-
-        More diversity -> stronger contraction.
-        More progress -> stronger contraction.
-        More stagnation -> expansion.
-
-        The resulting coefficient remains bounded by the configured interval.
-        """
-
-        diversity_signal = 0.5 * (
-            coordinate_div + route_div
-        )
-
-        stagnation_signal = min(
-            1.0,
-            stagnation / self.config.stagnation_patience,
-        )
-
-        raw = (
-            self.config.progress_weight * progress
-            + self.config.diversity_weight * diversity_signal
-            + self.config.stagnation_weight * (1.0 - stagnation_signal)
-        )
-
-        alpha = (
-            self.config.alpha_max
-            - raw * (
-                self.config.alpha_max
-                - self.config.alpha_min
-            )
-        )
-
-        # Stagnation must be able to push the coefficient upward.
-        if stagnation_signal > 0.5:
-            alpha += (
-                self.config.alpha_max
-                - self.config.alpha_min
-            ) * 0.25 * stagnation_signal
-
-        return min(
-            self.config.alpha_max,
-            max(self.config.alpha_min, alpha),
+        """Compute the configured contraction-expansion coefficient."""
+        return compute_alpha(
+            config=self.config,
+            coordinate_div=coordinate_div,
+            route_div=route_div,
+            progress=progress,
+            stagnation=stagnation,
+            mode=self.config.mechanisms.alpha_mode,
         )
 
     def _attractor(
@@ -280,17 +230,16 @@ class AdaptiveQPSO:
         global_best: _Particle,
         mbest: Sequence[float],
     ) -> Vector:
-        weights = (
-            self.config.pbest_weight,
-            self.config.gbest_weight,
-            self.config.mbest_weight,
-        )
-
-        return tuple(
-            weights[0] * particle.pbest_position[d]
-            + weights[1] * global_best.position[d]
-            + weights[2] * mbest[d]
-            for d in range(self.config.dimensions)
+        """Compute the configured local/global/mean-best attractor."""
+        return compute_attractor(
+            particle=particle,
+            global_best=global_best,
+            mbest=mbest,
+            dimensions=self.config.dimensions,
+            mode=self.config.mechanisms.attractor_mode,
+            pbest_weight=self.config.pbest_weight,
+            gbest_weight=self.config.gbest_weight,
+            mbest_weight=self.config.mbest_weight,
         )
 
     def _recover(
@@ -301,10 +250,10 @@ class AdaptiveQPSO:
         """
         Bounded quantum exploration burst.
 
-        This is intentionally local rather than a complete random restart:
-        it retains information from mbest while injecting a bounded
-        perturbation.
+        Recovery mechanics are selected by the configured recovery mode.
         """
+        if self.config.mechanisms.recovery_mode is RecoveryMode.NONE:
+            return list(position)
 
         scale = (
             self.config.recovery_scale
@@ -475,10 +424,10 @@ class AdaptiveQPSO:
 
                     candidate.append(value)
 
-                if (
-                    stagnation >= self.config.stagnation_patience
-                    and self._rng.random()
-                    < self.config.recovery_probability
+                if should_recover(
+                    config=self.config,
+                    stagnation=stagnation,
+                    rng=self._rng,
                 ):
                     candidate = self._recover(
                         candidate,
@@ -598,14 +547,11 @@ class RouteFitnessOracle(FitnessOracle):
         super().__init__(self._evaluate_route)
 
     @staticmethod
-    def _route_signature(candidate) -> tuple:
+    def _route_signature(candidate):
         return tuple(
             (
-                int(vehicle_route.vehicle_id),
-                tuple(
-                    int(customer_id)
-                    for customer_id in vehicle_route.customer_ids
-                ),
+                vehicle_route.vehicle_id,
+                tuple(vehicle_route.customer_ids),
             )
             for vehicle_route in candidate.repaired_plan.vehicle_routes
         )
