@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -30,11 +31,38 @@ logger = logging.getLogger(__name__)
 # SUMO stop-state bit flag (bit 1 = currently stopped at a programmed stop)
 _SUMO_STOP_FLAG: int = 1
 
-# Environment variable pointing to SUMO installation
-_SUMO_HOME = Path(
-    os.environ.get("SUMO_HOME", r"C:\Program Files (x86)\Eclipse\Sumo")
-)
-_SUMO_BIN = _SUMO_HOME / "bin" / "sumo.exe"
+def _find_sumo_binary(gui: bool = False) -> Path:
+    """Resolve the requested SUMO executable cross-platform.
+
+    Resolution order:
+      1. SUMO_HOME/bin/<sumo-name> (or .exe on Windows)
+      2. executable discovered on PATH
+    """
+    name = "sumo-gui" if gui else "sumo"
+    env_home = os.environ.get("SUMO_HOME")
+
+    if env_home:
+        home = Path(env_home)
+        for candidate in (
+            home / "bin" / name,
+            home / "bin" / f"{name}.exe",
+        ):
+            if candidate.is_file():
+                return candidate.resolve()
+
+    executable = shutil.which(name)
+    if executable:
+        return Path(executable).resolve()
+
+    if not name.endswith(".exe"):
+        executable = shutil.which(f"{name}.exe")
+        if executable:
+            return Path(executable).resolve()
+
+    raise RuntimeError(
+        f"{name!r} executable not found. Install SUMO, add its bin "
+        "directory to PATH, or set SUMO_HOME to the SUMO root directory."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -156,12 +184,9 @@ class TraciAdapter:
     # ------------------------------------------------------------------
 
     def __enter__(self) -> "TraciAdapter":
-        os.environ.setdefault("SUMO_HOME", str(_SUMO_HOME))
         import traci
 
-        binary = str(_SUMO_BIN) if not self.gui else str(
-            _SUMO_BIN.parent / "sumo-gui.exe"
-        )
+        binary = str(_find_sumo_binary(self.gui))
 
         traci.start(
             [

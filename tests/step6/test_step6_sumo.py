@@ -506,11 +506,21 @@ class TestIncidentManager:
 # ===========================================================================
 
 def _sumo_available() -> bool:
-    """Check if SUMO binary is accessible."""
-    from pathlib import Path
-    import os
-    sumo_home = Path(os.environ.get("SUMO_HOME", r"C:\Program Files (x86)\Eclipse\Sumo"))
-    return (sumo_home / "bin" / "sumo.exe").exists()
+    """Return True when a SUMO executable is available cross-platform."""
+    import shutil
+
+    if shutil.which("sumo") or shutil.which("sumo.exe"):
+        return True
+
+    sumo_home = os.environ.get("SUMO_HOME")
+    if not sumo_home:
+        return False
+
+    home = Path(sumo_home)
+    return any(
+        (home / "bin" / name).is_file()
+        for name in ("sumo", "sumo.exe")
+    )
 
 
 @pytest.mark.sumo
@@ -526,9 +536,6 @@ class TestFullEpisodeIntegration:
     """
 
     def test_episode_runs_without_teleportation(self, tmp_path):
-        import os
-        os.environ.setdefault("SUMO_HOME", r"C:\Program Files (x86)\Eclipse\Sumo")
-
         from sim.sumo_runner import run_episode
         scenario = load_base_scenario()
         route_plan = make_minimal_route_plan(scenario)
@@ -547,9 +554,6 @@ class TestFullEpisodeIntegration:
         )
 
     def test_episode_delivers_requests(self, tmp_path):
-        import os
-        os.environ.setdefault("SUMO_HOME", r"C:\Program Files (x86)\Eclipse\Sumo")
-
         from sim.sumo_runner import run_episode
         scenario = load_base_scenario()
         route_plan = make_minimal_route_plan(scenario)
@@ -569,9 +573,6 @@ class TestFullEpisodeIntegration:
         assert total == 5
 
     def test_closure_event_fires(self, tmp_path):
-        import os
-        os.environ.setdefault("SUMO_HOME", r"C:\Program Files (x86)\Eclipse\Sumo")
-
         from sim.sumo_runner import run_episode
         scenario = load_base_scenario()
         route_plan = make_minimal_route_plan(scenario)

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import shutil
 import textwrap
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -20,14 +21,38 @@ from src.contracts.scenario import Scenario
 # Constants
 # ---------------------------------------------------------------------------
 
-SUMO_BIN_DIR = Path(
-    os.environ.get(
-        "SUMO_HOME",
-        r"C:\Program Files (x86)\Eclipse\Sumo",
-    )
-) / "bin"
+def _find_sumo_binary(name: str) -> Path | None:
+    """Resolve a SUMO executable on Windows, macOS, or Linux.
 
-NETCONVERT_EXE = SUMO_BIN_DIR / "netconvert.exe"
+    Resolution order:
+      1. SUMO_HOME/bin/<name> (or <name>.exe)
+      2. executable discovered on PATH
+
+    Returning ``None`` lets callers raise a precise configuration error.
+    """
+    env_home = os.environ.get("SUMO_HOME")
+    if env_home:
+        home = Path(env_home)
+        for candidate in (
+            home / "bin" / name,
+            home / "bin" / f"{name}.exe",
+        ):
+            if candidate.is_file():
+                return candidate.resolve()
+
+    executable = shutil.which(name)
+    if executable:
+        return Path(executable).resolve()
+
+    if not name.endswith(".exe"):
+        executable = shutil.which(f"{name}.exe")
+        if executable:
+            return Path(executable).resolve()
+
+    return None
+
+
+NETCONVERT_EXE = _find_sumo_binary("netconvert")
 
 
 # ---------------------------------------------------------------------------
@@ -186,10 +211,10 @@ class SumoExporter:
 
         Raises RuntimeError on non-zero exit or missing executable.
         """
-        if not NETCONVERT_EXE.exists():
+        if NETCONVERT_EXE is None:
             raise RuntimeError(
-                f"netconvert not found at {NETCONVERT_EXE}. "
-                "Set the SUMO_HOME environment variable to the SUMO root directory."
+                "netconvert executable not found. Install SUMO, add its bin "
+                "directory to PATH, or set SUMO_HOME to the SUMO root directory."
             )
 
         cmd = [
@@ -225,7 +250,15 @@ class SumoExporter:
             "edge_mapping": self.edge_mapping,
             "node_mapping": self.node_mapping,
             "lane_mapping": {e.edge_id: [f"{e.edge_id}_{i}" for i in range(e.lane_count)] for e in self.scenario.edges},
-            "sumo_home": str(SUMO_BIN_DIR.parent),
+            "sumo_home": (
+                str(Path(os.environ["SUMO_HOME"]).resolve())
+                if os.environ.get("SUMO_HOME")
+                else (
+                    str(NETCONVERT_EXE.parent.parent)
+                    if NETCONVERT_EXE is not None
+                    else None
+                )
+            ),
             "net_file": "net.xml",
         }
         path = self.output_dir / "sumo_mapping.json"
