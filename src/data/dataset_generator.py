@@ -11,6 +11,8 @@ import random
 from statistics import mean, median
 
 from src.contracts.scenario import Scenario
+from src.routing.route_evaluator import RouteEvaluator
+from src.routing.route_plan import RoutePlan, VehicleRoute
 from src.contracts.core_types import NodeKind, RoadClass
 
 from .road_generator import (
@@ -22,7 +24,6 @@ from .road_generator import (
     scale_customer_points,
 )
 from .vrp_parser import CustomerRecord, VrpInstance, parse_vrp
-
 
 @dataclass(frozen=True)
 class GeneratorConfig:
@@ -43,15 +44,22 @@ class GeneratorConfig:
     reference_variant: int = 0
     seed: int = 26137
     dataset_split: str = "train"
-    generator_version: str = "step4-road-generator-v1.0"
+    generator_version: str = "step4-road-generator-v1.1"
+    stress_case: str = "none"
 
     def __post_init__(self) -> None:
         if self.dataset_split not in {"train", "validation", "test"}:
             raise ValueError("dataset_split must be train, validation, or test")
         if self.window_profile not in {"loose", "medium", "tight"}:
             raise ValueError("window_profile must be loose, medium, or tight")
-        if self.window_slack_s < 0:
-            raise ValueError("window_slack_s must be non-negative")
+        if self.stress_case not in {
+            "none",
+            "missed_window",
+            "disconnected",
+        }:
+            raise ValueError(
+                "stress_case must be none, missed_window, or disconnected"
+            )
 
     @property
     def seeds(self) -> dict[str, int]:
@@ -224,6 +232,13 @@ def generate_dynamic_scenario(config: DynamicDatasetConfig = DynamicDatasetConfi
             "requests": "synthetic district-derived demand with deterministic road access points",
             "fleet": "synthetic homogeneous fleet sized from total demand and capacity",
             "service_windows": "reference-feasible deterministic schedule plus configured slack",
+            "reference_routes": json.dumps(
+                {
+                    str(i + 1): list(route)
+                    for i, route in enumerate(routes)
+                },
+                sort_keys=True,
+            ),
             "debug_graph": f"Pass-1 Delaunay fixture contains {len(debug_nodes)} nodes and {len(debug_edges)} directed edges",
             "traffic": "not generated in Step 4; produced from SUMO episodes in later steps",
         },
@@ -380,7 +395,20 @@ def generate_scenario(instance: VrpInstance, config: GeneratorConfig = Generator
         instance, nodes, edges, access, depot_node_id, fleet_count, config
     )
 
-    scenario_id = f"{instance.name}:road:{config.topology_family}:{config.seed}"
+    if config.stress_case == "missed_window":
+        _apply_missed_window_stress(
+            requests,
+            nodes,
+            edges,
+            depot_node_id,
+        )
+    elif config.stress_case == "disconnected":
+        _apply_disconnected_stress(
+            edges,
+            access,
+        )
+
+    scenario_id = f"{instance.name}:{config.dataset_split}:{config.seed}"
     return Scenario(
         schema_version="1.2",
         scenario_id=scenario_id,
@@ -413,8 +441,22 @@ def generate_scenario(instance: VrpInstance, config: GeneratorConfig = Generator
             "fleet": "derived fixed homogeneous fleet from source capacity/fleet count",
             "service_windows": "reference-feasible schedule plus configured slack profile",
             "debug_graph": f"Pass-1 Delaunay fixture contains {len(debug_nodes)} nodes and {len(debug_edges)} directed edges",
-            "reference_schedule": f"deterministic reference variant {config.reference_variant}",
-            "traffic": "not generated in Step 4; produced from SUMO episodes in later steps",
+            "reference_schedule": (
+                f"deterministic reference variant "
+                f"{config.reference_variant}"
+            ),
+            "reference_routes": json.dumps(
+                {
+                    str(i + 1): list(route)
+                    for i, route in enumerate(reference_routes)
+                },
+                sort_keys=True,
+            ),
+            "stress_case": config.stress_case,
+            "traffic": (
+                "not generated in Step 4; produced from SUMO "
+                "episodes in later steps"
+            ),
         },
         parent_instance_id=instance.name,
     )
@@ -434,15 +476,43 @@ def generate_from_vrp(
     scenario = generate_scenario(instance, config)
     report = build_quality_report(scenario, instance)
 
+    expected_feasible = (
+        config.stress_case == "none"
+    )
+
+    report["expected_feasible"] = expected_feasible
+    report["stress_case"] = config.stress_case
+
     failures = []
-    if report["disconnected_nodes"]:
-        failures.append("disconnected_nodes")
-    if report["unreachable_requests"]:
-        failures.append("unreachable_requests")
-    if not report["reference_schedule_feasible"]:
-        failures.append("reference_schedule")
+
+    if expected_feasible:
+        if report["disconnected_nodes"]:
+            failures.append(
+                "disconnected_nodes"
+            )
+
+        if report["unreachable_requests"]:
+            failures.append(
+                "unreachable_requests"
+            )
+
+        if not report[
+            "reference_schedule_feasible"
+        ]:
+            failures.append(
+                "reference_schedule"
+            )
+
+    elif report["reference_schedule_feasible"]:
+        failures.append(
+            "stress_case_did_not_create_infeasibility"
+        )
+
     if failures:
-        raise ValueError("Step 4 quality checks failed: " + ", ".join(failures))
+        raise ValueError(
+            "Step 4 quality checks failed: "
+            + ", ".join(failures)
+        )
 
     _write_json(output / "scenario.json", scenario.model_dump(mode="json"))
     _write_json(output / "provenance_quality.json", report)
@@ -457,9 +527,18 @@ def generate_from_vrp(
 def build_quality_report(scenario: Scenario, instance: VrpInstance) -> dict:
     """Produce the static Step 4 dataset-card measurements available before SUMO."""
 
-    adjacency = {node.node_id: set() for node in scenario.nodes}
+    adjacency = {
+        node.node_id: set()
+        for node in scenario.nodes
+    }
+
     for edge in scenario.edges:
-        adjacency[edge.from_node].add(edge.to_node)
+        if not edge.open_by_default:
+            continue
+
+        adjacency[edge.from_node].add(
+            edge.to_node
+        )
     depot = scenario.fleet[0].depot_node_id
     reachable = _reachable(depot, adjacency)
     disconnected = sorted(set(adjacency) - reachable)
@@ -496,7 +575,12 @@ def build_quality_report(scenario: Scenario, instance: VrpInstance) -> dict:
         "fleet_capacity_units": sum(vehicle.capacity for vehicle in scenario.fleet),
         "disconnected_nodes": disconnected,
         "unreachable_requests": unreachable,
-        "reference_schedule_feasible": _reference_schedule_feasible(scenario),
+        "reference_schedule_feasible": (
+            _reference_schedule_feasible(scenario)
+        ),
+        "reference_schedule_evaluation": (
+            _reference_schedule_evaluation(scenario)
+        ),
         "one_way_physical_road_fraction": one_way / max(len(physical_pairs), 1),
         "average_physical_degree": mean(degrees) if degrees else 0.0,
         "degree_histogram": _histogram(degrees),
@@ -658,13 +742,161 @@ def _shortest_time(nodes, edges, source: str, target: str) -> float:
     raise ValueError(f"No directed path from {source!r} to {target!r}")
 
 
-def _reference_schedule_feasible(scenario: Scenario) -> bool:
-    if sum(request.demand for request in scenario.requests) > sum(vehicle.capacity for vehicle in scenario.fleet) + 1e-9:
-        return False
-    # Windows are deliberately centred around the same deterministic reference
-    # arrival construction used during generation.
-    return all(request.latest_service_start_s >= request.earliest_service_start_s for request in scenario.requests)
+def _reference_schedule_evaluation(scenario: Scenario) -> dict:
+    """Run the generated reference schedule through the independent evaluator."""
 
+    raw_routes = scenario.field_provenance.get(
+        "reference_routes"
+    )
+
+    if raw_routes is None:
+        raise ValueError(
+            "Scenario is missing reference_routes provenance"
+        )
+
+    reference_routes = json.loads(raw_routes)
+
+    plan = RoutePlan.from_routes(
+        VehicleRoute.from_sequence(
+            vehicle_id=f"V{vehicle_number}",
+            customer_ids=tuple(
+                f"J{customer_id}"
+                for customer_id in customer_ids
+            ),
+        )
+        for vehicle_number, customer_ids
+        in sorted(
+            reference_routes.items(),
+            key=lambda item: int(item[0]),
+        )
+    )
+
+    evaluation = RouteEvaluator(scenario).evaluate(
+        plan,
+        planning_time_s=0.0,
+    )
+
+    return {
+        "feasible": evaluation.feasible,
+        "objective_value": float(
+            evaluation.objective_value
+        ),
+        "total_distance_m": float(
+            evaluation.total_distance_m
+        ),
+        "total_travel_time_s": float(
+            evaluation.total_travel_time_s
+        ),
+        "total_waiting_time_s": float(
+            evaluation.total_waiting_time_s
+        ),
+        "total_service_time_s": float(
+            evaluation.total_service_time_s
+        ),
+        "total_lateness_s": float(
+            evaluation.total_lateness_s
+        ),
+        "errors": list(evaluation.errors),
+    }
+
+
+def _reference_schedule_feasible(
+    scenario: Scenario,
+) -> bool:
+    return bool(
+        _reference_schedule_evaluation(
+            scenario
+        )["feasible"]
+    )
+
+
+def _apply_missed_window_stress(
+    requests: list[dict],
+    nodes,
+    edges,
+    depot_node_id: str,
+) -> None:
+    """Create a contract-valid case whose reference route misses one window."""
+
+    if not requests:
+        raise ValueError(
+            "Cannot create a missed-window stress case "
+            "without requests"
+        )
+
+    candidates = []
+
+    for request in requests:
+        try:
+            travel = _shortest_time(
+                nodes,
+                edges,
+                depot_node_id,
+                request["access_node_id"],
+            )
+        except ValueError:
+            continue
+
+        candidates.append(
+            (
+                travel,
+                request,
+            )
+        )
+
+    if not candidates:
+        raise ValueError(
+            "Cannot create a missed-window stress case: "
+            "no reachable request"
+        )
+
+    _, target = max(
+        candidates,
+        key=lambda item: (
+            item[0],
+            str(item[1]["request_id"]),
+        ),
+    )
+
+    # [0, 0] is contract-valid but impossible for the selected
+    # non-zero travel-time customer, creating a controlled
+    # missed-window case.
+    target["earliest_service_start_s"] = 0.0
+    target["latest_service_start_s"] = 0.0
+
+
+def _apply_disconnected_stress(
+    edges: list[dict],
+    access: dict[str, tuple[str, float]],
+) -> None:
+    """Create an explicit disconnected-customer stress case."""
+
+    if not access:
+        raise ValueError(
+            "Cannot create a disconnected stress case "
+            "without customer access nodes"
+        )
+
+    customer_id = sorted(access)[0]
+    access_node = access[customer_id][0]
+
+    incident_edges = [
+        edge
+        for edge in edges
+        if (
+            edge["from_node"] == access_node
+            or edge["to_node"] == access_node
+        )
+    ]
+
+    if not incident_edges:
+        raise ValueError(
+            f"Unable to disconnect customer access node "
+            f"{access_node!r}"
+        )
+
+    for edge in incident_edges:
+        edge["open_by_default"] = False
 
 def _connected(nodes, edges) -> bool:
     if not nodes:
