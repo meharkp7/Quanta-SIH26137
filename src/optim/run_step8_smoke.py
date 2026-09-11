@@ -85,9 +85,10 @@ def main() -> None:
         print(
             f"{summary.algorithm:>5} | "
             f"{summary.condition:<45} | "
-            f"best={summary.best_fitness:.6f} | "
-            f"feasible={summary.success_rate:.2f} | "
-            f"evals={summary.mean_evaluations:.0f}"
+            f"best={summary.best_fitness_mean:.6f} ± "
+            f"{summary.best_fitness_std:.6f} | "
+            f"feasible={summary.feasible_rate:.2f} | "
+            f"evals={summary.evaluations_mean:.0f}"
         )
 
     print("=" * 70)
