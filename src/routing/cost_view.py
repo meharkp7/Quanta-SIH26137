@@ -1,28 +1,35 @@
-"""Coherent road-cost views for Step 5.
+"""Coherent, versioned, cached road-cost views.
 
-A CostView is the single source of truth for physical edge costs used by
-shortest-path construction and route evaluation.
+This module implements Step 5 (road costs and the independent route
+evaluator) together with the caching requirement from the same step:
 
-For every edge traversal, the view exposes distance and travel-time
-components together. This prevents distance from one network/cost state
-being combined with travel time from another.
+    "For each selected physical path retain its distance, time and
+    congestion components together. Never combine distance from one
+    path with time from another."
 
-The default view is free-flow:
+    "Cache paths by graph/cost/forecast version and departure bucket;
+    invalidate affected entries after a change."
 
-    free_flow_time = length_m / speed_limit_mps
-    congestion_delay = 0
-    travel_time = free_flow_time
+``edge_cost``/``path_cost`` give the coherent distance/time/congestion
+decomposition. ``shortest_path``/``invalidate`` give the versioned,
+bounded cache used by callers that only need the winning path (route
+construction, ALNS/QPSO evaluation, SUMO integration in Step 6).
+
+Both surfaces share one ``DirectedPathBuilder`` and one travel-time
+provider, so a cached ``PathResult`` and a freshly computed
+``PathCost`` for the same edges are always consistent with each other.
 """
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from math import isfinite
 from typing import Callable
 
 from src.contracts.core_types import TimeS
 from src.contracts.scenario import RoadEdge
-
+from src.routing.path_builder import DirectedPathBuilder, PathResult
 
 EdgeTravelTimeProvider = Callable[[RoadEdge, TimeS], TimeS]
 
@@ -62,14 +69,10 @@ class EdgeCost:
                 )
 
         expected_delay = (
-            float(self.travel_time_s)
-            - float(self.free_flow_time_s)
+            float(self.travel_time_s) - float(self.free_flow_time_s)
         )
 
-        if abs(
-            float(self.congestion_delay_s)
-            - expected_delay
-        ) > 1e-9:
+        if abs(float(self.congestion_delay_s) - expected_delay) > 1e-9:
             raise InvalidEdgeCostError(
                 "congestion_delay_s must equal "
                 "travel_time_s - free_flow_time_s"
@@ -107,14 +110,10 @@ class PathCost:
                 )
 
         expected_delay = (
-            float(self.travel_time_s)
-            - float(self.free_flow_time_s)
+            float(self.travel_time_s) - float(self.free_flow_time_s)
         )
 
-        if abs(
-            float(self.congestion_delay_s)
-            - expected_delay
-        ) > 1e-9:
+        if abs(float(self.congestion_delay_s) - expected_delay) > 1e-9:
             raise InvalidEdgeCostError(
                 "congestion_delay_s must equal "
                 "travel_time_s - free_flow_time_s"
@@ -122,19 +121,34 @@ class PathCost:
 
 
 class CostView:
-    """Immutable configuration of the road-cost model.
+    """Immutable-per-version, cached, coherent road-cost model.
 
-    The view owns the travel-time interpretation used for path selection.
-    Every edge query returns the complete distance/time decomposition.
+    ``edge_cost``/``path_cost`` return the full distance/free-flow/
+    travel-time/congestion decomposition for a single edge or a
+    physical path, validating internal consistency on every call.
+
+    ``shortest_path`` returns the winning ``PathResult`` between two
+    nodes, cached by (graph_version, cost_version, forecast_version,
+    source, target, departure bucket). ``invalidate`` clears the cache
+    when cost or forecast versions change; an edge decrease can improve
+    paths that were not previously using it, so entries are cleared in
+    full rather than selectively.
+
+    Both surfaces share the same travel-time provider, so a cached
+    ``PathResult`` and a freshly computed ``PathCost`` for its edges are
+    always consistent with each other.
     """
 
     def __init__(
         self,
+        edges,
         *,
-        graph_version: str = "graph-v1",
-        cost_version: str = "cost-free-flow-v1",
-        forecast_version: str = "forecast-none",
+        graph_version: str,
+        cost_version: str = "free-flow",
+        forecast_version: str | None = None,
+        closed_edge_ids=(),
         travel_time_provider: EdgeTravelTimeProvider | None = None,
+        max_entries: int = 4096,
     ) -> None:
         if not graph_version:
             raise ValueError("graph_version must be non-empty")
@@ -142,25 +156,33 @@ class CostView:
         if not cost_version:
             raise ValueError("cost_version must be non-empty")
 
-        if not forecast_version:
-            raise ValueError("forecast_version must be non-empty")
+        if max_entries < 1:
+            raise ValueError("max_entries must be positive")
 
-        self.graph_version = str(graph_version)
-        self.cost_version = str(cost_version)
-        self.forecast_version = str(forecast_version)
+        self.versions = (graph_version, cost_version, forecast_version)
+        self.max_entries = max_entries
 
         self._travel_time_provider = (
-            travel_time_provider
-            or self._free_flow_travel_time
+            travel_time_provider or self._free_flow_travel_time
         )
 
+        self.builder = DirectedPathBuilder(
+            edges,
+            closed_edge_ids=closed_edge_ids,
+            travel_time_provider=self._travel_time_provider,
+        )
+
+        self._cache: "OrderedDict[tuple, PathResult]" = OrderedDict()
+
     @property
-    def travel_time_provider(
-        self,
-    ) -> EdgeTravelTimeProvider:
+    def travel_time_provider(self) -> EdgeTravelTimeProvider:
         """Return the provider used by this cost view."""
 
         return self._travel_time_provider
+
+    # ------------------------------------------------------------------
+    # Coherent per-edge / per-path cost decomposition (Step 5)
+    # ------------------------------------------------------------------
 
     def edge_cost(
         self,
@@ -174,47 +196,32 @@ class CostView:
 
         if not isfinite(departure_time):
             raise InvalidEdgeCostError(
-                f"departure_time_s must be finite, "
-                f"got {departure_time_s!r}"
+                f"departure_time_s must be finite, got {departure_time_s!r}"
             )
 
         distance = float(edge.length_m)
 
         if not isfinite(distance) or distance < 0.0:
             raise InvalidEdgeCostError(
-                f"Edge {edge.edge_id!r} has invalid "
-                f"length_m={edge.length_m!r}"
+                f"Edge {edge.edge_id!r} has invalid length_m={edge.length_m!r}"
             )
 
-        free_flow = self._free_flow_travel_time(
-            edge,
-            departure_time,
-        )
+        free_flow = self._free_flow_travel_time(edge, departure_time)
 
         travel_time = self._validate_travel_time(
-            self._travel_time_provider(
-                edge,
-                departure_time,
-            ),
+            self._travel_time_provider(edge, departure_time),
             edge=edge,
             departure_time_s=departure_time,
         )
 
-        congestion_delay = (
-            travel_time - free_flow
-        )
-
-        if congestion_delay < -1e-9:
+        if travel_time < free_flow - 1e-9:
             raise InvalidEdgeCostError(
                 f"Travel time for edge {edge.edge_id!r} "
                 f"cannot be below free-flow time: "
                 f"{travel_time} < {free_flow}"
             )
 
-        congestion_delay = max(
-            0.0,
-            congestion_delay,
-        )
+        congestion_delay = max(0.0, travel_time - free_flow)
 
         return EdgeCost(
             distance_m=distance,
@@ -229,18 +236,18 @@ class CostView:
         *,
         departure_time_s: TimeS = 0.0,
     ) -> PathCost:
-        """Aggregate coherent costs across a physical path.
+        """Aggregate coherent costs across a physical directed path.
 
-        Edge departure times are propagated sequentially, so dynamic traffic
-        conditions are evaluated at the time the vehicle reaches each edge.
+        Edge departure times are propagated sequentially, so dynamic
+        traffic conditions are evaluated at the time the vehicle
+        reaches each edge.
         """
 
         current_time = float(departure_time_s)
 
         if not isfinite(current_time):
             raise InvalidEdgeCostError(
-                f"departure_time_s must be finite, "
-                f"got {departure_time_s!r}"
+                f"departure_time_s must be finite, got {departure_time_s!r}"
             )
 
         distance = 0.0
@@ -249,10 +256,7 @@ class CostView:
         congestion_delay = 0.0
 
         for edge in edges:
-            cost = self.edge_cost(
-                edge,
-                departure_time_s=current_time,
-            )
+            cost = self.edge_cost(edge, departure_time_s=current_time)
 
             distance += cost.distance_m
             free_flow_time += cost.free_flow_time_s
@@ -268,6 +272,54 @@ class CostView:
             congestion_delay_s=congestion_delay,
         )
 
+    # ------------------------------------------------------------------
+    # Versioned, bounded shortest-path cache (Step 6)
+    # ------------------------------------------------------------------
+
+    def shortest_path(
+        self,
+        source,
+        target,
+        *,
+        departure_time_s: TimeS = 0.0,
+    ) -> PathResult:
+        # Exact departure is retained within its one-second bucket: no
+        # time approximation.
+        key = (
+            *self.versions,
+            source,
+            target,
+            int(departure_time_s),
+            departure_time_s,
+        )
+
+        if key not in self._cache:
+            self._cache[key] = self.builder.shortest_path(
+                source, target, departure_time_s=departure_time_s
+            )
+
+            if len(self._cache) > self.max_entries:
+                self._cache.popitem(last=False)
+        else:
+            self._cache.move_to_end(key)
+
+        return self._cache[key]
+
+    def invalidate(
+        self,
+        *,
+        cost_version: str,
+        forecast_version: str | None = None,
+    ) -> None:
+        # Clear all entries: an edge decrease can improve paths not
+        # previously using it.
+        self.versions = (self.versions[0], cost_version, forecast_version)
+        self._cache.clear()
+
+    # ------------------------------------------------------------------
+    # Travel-time model
+    # ------------------------------------------------------------------
+
     @staticmethod
     def _free_flow_travel_time(
         edge: RoadEdge,
@@ -280,14 +332,12 @@ class CostView:
 
         if not isfinite(length) or length < 0.0:
             raise InvalidEdgeCostError(
-                f"Edge {edge.edge_id!r} has invalid "
-                f"length_m={length!r}"
+                f"Edge {edge.edge_id!r} has invalid length_m={length!r}"
             )
 
         if not isfinite(speed) or speed <= 0.0:
             raise InvalidEdgeCostError(
-                f"Edge {edge.edge_id!r} has invalid "
-                f"speed_limit_mps={speed!r}"
+                f"Edge {edge.edge_id!r} has invalid speed_limit_mps={speed!r}"
             )
 
         return length / speed

@@ -1,4 +1,7 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "src"]
 addopts = "-q"
+markers = [
+    "sumo: marks tests that require a running SUMO installation (deselect with '-m not sumo')",
+]
