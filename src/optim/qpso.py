@@ -16,7 +16,7 @@ from src.optim.common import (
     coordinate_diversity,
     route_diversity,
 )
-
+from src.optim.diversity import route_distance
 
 @dataclass(frozen=True)
 class AdaptiveQPSOConfig(OptimizationConfig):
@@ -583,6 +583,7 @@ class RouteFitnessOracle(FitnessOracle):
         self.planning_time_s = planning_time_s
         self.repair = repair
         self.repair_penalty = float(repair_penalty)
+        self._last_candidate = None
 
         if not isfinite(self.repair_penalty):
             raise OptimizationError(
@@ -601,9 +602,12 @@ class RouteFitnessOracle(FitnessOracle):
         return tuple(
             (
                 int(vehicle_route.vehicle_id),
-                tuple(int(customer_id) for customer_id in vehicle_route.customer_ids),
+                tuple(
+                    int(customer_id)
+                    for customer_id in vehicle_route.customer_ids
+                ),
             )
-            for vehicle_route in candidate.route_plan.vehicle_routes
+            for vehicle_route in candidate.repaired_plan.vehicle_routes
         )
 
     def _evaluate_route(
@@ -616,17 +620,29 @@ class RouteFitnessOracle(FitnessOracle):
             planning_time_s=self.planning_time_s,
             repair=self.repair,
         )
+        self._last_candidate = candidate
 
         evaluation = candidate.repaired_evaluation
 
-        penalty = (
-            self.repair_penalty
-            * float(candidate.repair_distance)
-        )
+        repair_distance = 0.0
+
+        if candidate.repair_result is not None:
+            repair_distance = route_distance(
+                candidate.repair_result.original_route_plan,
+                candidate.repair_result.repaired_route_plan,
+            ).structure
+
+        penalty = self.repair_penalty * repair_distance
 
         return FitnessResult(
             fitness=float(evaluation.objective_value) + penalty,
             feasible=bool(evaluation.feasible),
             route_signature=self._route_signature(candidate),
-            repair_distance=float(candidate.repair_distance),
+            repair_distance=float(repair_distance),
         )
+
+    @property
+    def last_candidate(self):
+        """Most recently evaluated RouteCandidate, for observational tooling."""
+
+        return self._last_candidate
