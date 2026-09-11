@@ -219,6 +219,19 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("train", "validation", "test"),
         default="train",
     )
+    vrp.add_argument(
+        "--stress-case",
+        choices=(
+            "none",
+            "missed_window",
+            "disconnected",
+        ),
+        default="none",
+        help=(
+            "Explicitly generate a labelled "
+            "infeasible Step 4 stress case."
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Real empirical traffic profile
@@ -541,6 +554,7 @@ def main() -> int:
             reference_variant=args.reference_variant,
             seed=args.seed,
             dataset_split=args.split,
+            stress_case=args.stress_case,
         )
 
         scenario = generate_from_vrp(
