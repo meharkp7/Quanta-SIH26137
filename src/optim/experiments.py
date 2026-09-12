@@ -114,6 +114,11 @@ class ExperimentSummary:
 
 OracleFactory = Callable[[int], FitnessOracle]
 
+InitialPopulationFactory = Callable[
+    [int],
+    Sequence[Sequence[float]],
+]
+
 
 DEFAULT_QPSO_CONDITIONS = tuple(VARIANTS.keys())
 
@@ -196,11 +201,15 @@ def _initial_population(
     seed: int,
 ) -> tuple[Vector, ...]:
     """
-    Generate one deterministic initial population.
+    Generate one deterministic random initial population.
 
     The exact same population can then be supplied to QPSO and PSO for a
     matched comparison, preventing initialization from becoming a hidden
     experimental variable.
+
+    This remains the default initialization path for backward compatibility.
+    Research experiments that require validated feasible initialization should
+    use `initial_population_factory` in `run_ablation_suite()`.
     """
 
     rng = random.Random(int(seed))
@@ -219,6 +228,156 @@ def _initial_population(
             optimizer_config.population_size
         )
     )
+
+
+def _normalize_initial_population(
+    population: Sequence[Sequence[float]],
+) -> tuple[Vector, ...]:
+    """
+    Normalize a supplied initial population into immutable vectors.
+
+    The population is copied so the same validated population can safely be
+    reused by QPSO and PSO without either optimizer accidentally mutating the
+    caller's object.
+    """
+
+    normalized = tuple(
+        tuple(
+            float(value)
+            for value in particle
+        )
+        for particle in population
+    )
+
+    if not normalized:
+        raise ValueError(
+            "Initial population cannot be empty."
+        )
+
+    if any(
+        len(particle) == 0
+        for particle in normalized
+    ):
+        raise ValueError(
+            "Initial population contains an empty particle."
+        )
+
+    dimensions = {
+        len(particle)
+        for particle in normalized
+    }
+
+    if len(dimensions) != 1:
+        raise ValueError(
+            "All initial-population particles must have "
+            "the same dimensionality."
+        )
+
+    return normalized
+
+
+def _resolve_initial_population(
+    *,
+    optimizer_config: OptimizationConfig,
+    seed: int,
+    initial_population: Sequence[Sequence[float]] | None,
+    initial_population_factory: InitialPopulationFactory | None,
+) -> tuple[Vector, ...]:
+    """
+    Resolve the population used by one matched experiment seed.
+
+    Priority:
+
+        1. explicitly supplied `initial_population`
+        2. `initial_population_factory(seed)`
+        3. deterministic random population
+
+    The explicit population and factory are mutually exclusive so that the
+    experimental initialization source is never ambiguous.
+    """
+
+    if (
+        initial_population is not None
+        and initial_population_factory is not None
+    ):
+        raise ValueError(
+            "Provide either initial_population or "
+            "initial_population_factory, not both."
+        )
+
+    if initial_population is not None:
+        population = initial_population
+
+    elif initial_population_factory is not None:
+        population = initial_population_factory(
+            int(seed)
+        )
+
+    else:
+        population = _initial_population(
+            optimizer_config,
+            seed,
+        )
+
+    normalized = _normalize_initial_population(
+        population
+    )
+
+    expected_population_size = (
+        int(optimizer_config.population_size)
+    )
+
+    if len(normalized) != expected_population_size:
+        raise ValueError(
+            "Initial population size mismatch: "
+            f"expected {expected_population_size}, "
+            f"received {len(normalized)}."
+        )
+
+    expected_dimensions = int(
+        optimizer_config.dimensions
+    )
+
+    actual_dimensions = len(
+        normalized[0]
+    )
+
+    if actual_dimensions != expected_dimensions:
+        raise ValueError(
+            "Initial population dimensionality mismatch: "
+            f"expected {expected_dimensions}, "
+            f"received {actual_dimensions}."
+        )
+
+    lower_bound = float(
+        optimizer_config.lower_bound
+    )
+
+    upper_bound = float(
+        optimizer_config.upper_bound
+    )
+
+    for particle_index, particle in enumerate(
+        normalized
+    ):
+        for dimension_index, value in enumerate(
+            particle
+        ):
+            if not (
+                lower_bound
+                <= value
+                <= upper_bound
+            ):
+                raise ValueError(
+                    "Initial population contains an "
+                    "out-of-bounds coordinate: "
+                    f"particle={particle_index}, "
+                    f"dimension={dimension_index}, "
+                    f"value={value}, "
+                    f"bounds=[{lower_bound}, {upper_bound}]."
+                )
+
+    return normalized
 
 
 # ============================================================================
@@ -718,6 +877,8 @@ def run_ablation_suite(
     seeds: Sequence[int],
     conditions: Sequence[str] = DEFAULT_QPSO_CONDITIONS,
     include_pso: bool = True,
+    initial_population: Sequence[Sequence[float]] | None = None,
+    initial_population_factory: InitialPopulationFactory | None = None,
 ) -> tuple[
     tuple[ExperimentRun, ...],
     tuple[ExperimentSummary, ...],
@@ -727,9 +888,20 @@ def run_ablation_suite(
 
     For every seed:
 
-        1. generate exactly one initial population;
+        1. resolve exactly one initial population;
         2. reuse that population for every QPSO condition;
         3. reuse the same population for matched PSO.
+
+    Initialization can be supplied in three ways:
+
+        - `initial_population_factory(seed)` for research-controlled
+          seed-specific populations;
+        - `initial_population` for one fixed population reused across all
+          optimizer seeds;
+        - deterministic random initialization when neither is supplied.
+
+    The factory is the preferred interface for experiments where a validated
+    feasible population is constructed independently for each scenario/seed.
 
     Every condition receives:
 
@@ -741,6 +913,9 @@ def run_ablation_suite(
 
     Only the QPSO mechanism configuration or the optimizer update rule is
     allowed to differ.
+
+    `initial_population` and `initial_population_factory` are mutually
+    exclusive.
     """
 
     normalized_seeds = _validate_seeds(
@@ -751,12 +926,25 @@ def run_ablation_suite(
         conditions
     )
 
+    if (
+        initial_population is not None
+        and initial_population_factory is not None
+    ):
+        raise ValueError(
+            "Provide either initial_population or "
+            "initial_population_factory, not both."
+        )
+
     runs: list[ExperimentRun] = []
 
     for seed in normalized_seeds:
-        initial_population = _initial_population(
-            base_qpso_config,
-            seed,
+        resolved_population = _resolve_initial_population(
+            optimizer_config=base_qpso_config,
+            seed=seed,
+            initial_population=initial_population,
+            initial_population_factory=(
+                initial_population_factory
+            ),
         )
 
         for condition in normalized_conditions:
@@ -767,7 +955,7 @@ def run_ablation_suite(
                     seed=seed,
                     base_qpso_config=base_qpso_config,
                     oracle_factory=oracle_factory,
-                    initial_population=initial_population,
+                    initial_population=resolved_population,
                 )
             )
 
@@ -779,7 +967,7 @@ def run_ablation_suite(
                     seed=seed,
                     base_qpso_config=base_qpso_config,
                     oracle_factory=oracle_factory,
-                    initial_population=initial_population,
+                    initial_population=resolved_population,
                 )
             )
 

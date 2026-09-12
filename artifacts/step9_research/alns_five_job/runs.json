@@ -1,0 +1,532 @@
+[
+  {
+    "absolute_gap": 0.0,
+    "best_feasible_objective": 1575.0,
+    "elapsed_s": 0.27525941699786927,
+    "evaluations": 2000,
+    "exact_reference_objective": 1575.0,
+    "feasible": true,
+    "iterations": 152,
+    "message": "ALNS completed within the declared budget",
+    "method": "alns",
+    "operator_weights": {
+      "random_removal": 1.0291271111111113,
+      "related_removal": 1.0,
+      "repair:greedy_insertion": 1.0,
+      "repair:regret_insertion": 1.027594105263158,
+      "worst_removal": 1.0327680000000001
+    },
+    "relative_gap": 0.0,
+    "removal_statistics": {
+      "random_removal": 53,
+      "related_removal": 48,
+      "worst_removal": 50
+    },
+    "repair_statistics": {
+      "greedy_insertion": 59,
+      "regret_insertion": 92
+    },
+    "seed": 1,
+    "verified": {
+      "complete": true,
+      "feasible": true,
+      "objective": 1575.0,
+      "objective_components": {
+        "distance_m": 1400.0,
+        "elapsed_time_s": 230.0,
+        "lateness_s": 0.0,
+        "service_time_s": 55.0,
+        "travel_time_s": 140.0,
+        "waiting_time_s": 35.0
+      },
+      "route": {
+        "V1": [
+          "J1",
+          "J2"
+        ],
+        "V2": [
+          "J3",
+          "J4",
+          "J5"
+        ]
+      }
+    }
+  },
+  {
+    "absolute_gap": 0.0,
+    "best_feasible_objective": 1575.0,
+    "elapsed_s": 0.24540329099909286,
+    "evaluations": 2000,
+    "exact_reference_objective": 1575.0,
+    "feasible": true,
+    "iterations": 158,
+    "message": "ALNS completed within the declared budget",
+    "method": "alns",
+    "operator_weights": {
+      "random_removal": 0.9449234285714287,
+      "related_removal": 1.0417047272727273,
+      "repair:greedy_insertion": 0.9978734545454546,
+      "repair:regret_insertion": 1.0140434285714288,
+      "worst_removal": 1.0
+    },
+    "relative_gap": 0.0,
+    "removal_statistics": {
+      "random_removal": 50,
+      "related_removal": 58,
+      "worst_removal": 49
+    },
+    "repair_statistics": {
+      "greedy_insertion": 79,
+      "regret_insertion": 78
+    },
+    "seed": 2,
+    "verified": {
+      "complete": true,
+      "feasible": true,
+      "objective": 1575.0,
+      "objective_components": {
+        "distance_m": 1400.0,
+        "elapsed_time_s": 230.0,
+        "lateness_s": 0.0,
+        "service_time_s": 55.0,
+        "travel_time_s": 140.0,
+        "waiting_time_s": 35.0
+      },
+      "route": {
+        "V1": [
+          "J1",
+          "J2"
+        ],
+        "V2": [
+          "J3",
+          "J4",
+          "J5"
+        ]
+      }
+    }
+  },
+  {
+    "absolute_gap": 0.0,
+    "best_feasible_objective": 1575.0,
+    "elapsed_s": 0.23997512500136509,
+    "evaluations": 2000,
+    "exact_reference_objective": 1575.0,
+    "feasible": true,
+    "iterations": 157,
+    "message": "ALNS completed within the declared budget",
+    "method": "alns",
+    "operator_weights": {
+      "random_removal": 1.037449142857143,
+      "related_removal": 1.0291271111111113,
+      "repair:greedy_insertion": 1.0187245714285715,
+      "repair:regret_insertion": 1.023831272727273,
+      "worst_removal": 1.0
+    },
+    "relative_gap": 0.0,
+    "removal_statistics": {
+      "random_removal": 53,
+      "related_removal": 48,
+      "worst_removal": 55
+    },
+    "repair_statistics": {
+      "greedy_insertion": 86,
+      "regret_insertion": 70
+    },
+    "seed": 3,
+    "verified": {
+      "complete": true,
+      "feasible": true,
+      "objective": 1575.0,
+      "objective_components": {
+        "distance_m": 1400.0,
+        "elapsed_time_s": 230.0,
+        "lateness_s": 0.0,
+        "service_time_s": 55.0,
+        "travel_time_s": 140.0,
+        "waiting_time_s": 35.0
+      },
+      "route": {
+        "V1": [
+          "J1",
+          "J2"
+        ],
+        "V2": [
+          "J3",
+          "J4",
+          "J5"
+        ]
+      }
+    }
+  },
+  {
+    "absolute_gap": 0.0,
+    "best_feasible_objective": 1575.0,
+    "elapsed_s": 0.24521679199824575,
+    "evaluations": 2000,
+    "exact_reference_objective": 1575.0,
+    "feasible": true,
+    "iterations": 160,
+    "message": "ALNS completed within the declared budget",
+    "method": "alns",
+    "operator_weights": {
+      "random_removal": 0.9716815238095238,
+      "related_removal": 1.043690666666667,
+      "repair:greedy_insertion": 1.0229809230769233,
+      "repair:regret_insertion": 1.0,
+      "worst_removal": 1.037449142857143
+    },
+    "relative_gap": 0.0,
+    "removal_statistics": {
+      "random_removal": 48,
+      "related_removal": 55,
+      "worst_removal": 56
+    },
+    "repair_statistics": {
+      "greedy_insertion": 79,
+      "regret_insertion": 80
+    },
+    "seed": 4,
+    "verified": {
+      "complete": true,
+      "feasible": true,
+      "objective": 1575.0,
+      "objective_components": {
+        "distance_m": 1400.0,
+        "elapsed_time_s": 230.0,
+        "lateness_s": 0.0,
+        "service_time_s": 55.0,
+        "travel_time_s": 140.0,
+        "waiting_time_s": 35.0
+      },
+      "route": {
+        "V1": [
+          "J1",
+          "J2"
+        ],
+        "V2": [
+          "J3",
+          "J4",
+          "J5"
+        ]
+      }
+    }
+  },
+  {
+    "absolute_gap": 0.0,
+    "best_feasible_objective": 1575.0,
+    "elapsed_s": 0.24013591699986137,
+    "evaluations": 2000,
+    "exact_reference_objective": 1575.0,
+    "feasible": true,
+    "iterations": 151,
+    "message": "ALNS completed within the declared budget",
+    "method": "alns",
+    "operator_weights": {
+      "random_removal": 0.9883636363636366,
+      "related_removal": 1.023831272727273,
+      "repair:greedy_insertion": 1.0138453333333335,
+      "repair:regret_insertion": 1.0201649230769232,
+      "worst_removal": 1.043690666666667
+    },
+    "relative_gap": 0.0,
+    "removal_statistics": {
+      "random_removal": 53,
+      "related_removal": 41,
+      "worst_removal": 56
+    },
+    "repair_statistics": {
+      "greedy_insertion": 79,
+      "regret_insertion": 71
+    },
+    "seed": 5,
+    "verified": {
+      "complete": true,
+      "feasible": true,
+      "objective": 1575.0,
+      "objective_components": {
+        "distance_m": 1400.0,
+        "elapsed_time_s": 230.0,
+        "lateness_s": 0.0,
+        "service_time_s": 55.0,
+        "travel_time_s": 140.0,
+        "waiting_time_s": 35.0
+      },
+      "route": {
+        "V1": [
+          "J1",
+          "J2"
+        ],
+        "V2": [
+          "J3",
+          "J4",
+          "J5"
+        ]
+      }
+    }
+  },
+  {
+    "absolute_gap": 0.0,
+    "best_feasible_objective": 1575.0,
+    "elapsed_s": 0.24399391699989792,
+    "evaluations": 2000,
+    "exact_reference_objective": 1575.0,
+    "feasible": true,
+    "iterations": 153,
+    "message": "ALNS completed within the declared budget",
+    "method": "alns",
+    "operator_weights": {
+      "random_removal": 0.9750000000000001,
+      "related_removal": 1.037449142857143,
+      "repair:greedy_insertion": 0.9800000000000001,
+      "repair:regret_insertion": 1.0476625454545454,
+      "worst_removal": 1.0262144000000002
+    },
+    "relative_gap": 0.0,
+    "removal_statistics": {
+      "random_removal": 49,
+      "related_removal": 50,
+      "worst_removal": 53
+    },
+    "repair_statistics": {
+      "greedy_insertion": 64,
+      "regret_insertion": 88
+    },
+    "seed": 6,
+    "verified": {
+      "complete": true,
+      "feasible": true,
+      "objective": 1575.0,
+      "objective_components": {
+        "distance_m": 1400.0,
+        "elapsed_time_s": 230.0,
+        "lateness_s": 0.0,
+        "service_time_s": 55.0,
+        "travel_time_s": 140.0,
+        "waiting_time_s": 35.0
+      },
+      "route": {
+        "V1": [
+          "J1",
+          "J2"
+        ],
+        "V2": [
+          "J3",
+          "J4",
+          "J5"
+        ]
+      }
+    }
+  },
+  {
+    "absolute_gap": 0.0,
+    "best_feasible_objective": 1575.0,
+    "elapsed_s": 0.24518725000234554,
+    "evaluations": 2000,
+    "exact_reference_objective": 1575.0,
+    "feasible": true,
+    "iterations": 161,
+    "message": "ALNS completed within the declared budget",
+    "method": "alns",
+    "operator_weights": {
+      "random_removal": 0.9908977777777779,
+      "related_removal": 1.0524288000000002,
+      "repair:greedy_insertion": 1.0242819282051283,
+      "repair:regret_insertion": 1.0,
+      "worst_removal": 1.0178734545454546
+    },
+    "relative_gap": 0.0,
+    "removal_statistics": {
+      "random_removal": 62,
+      "related_removal": 51,
+      "worst_removal": 47
+    },
+    "repair_statistics": {
+      "greedy_insertion": 92,
+      "regret_insertion": 68
+    },
+    "seed": 7,
+    "verified": {
+      "complete": true,
+      "feasible": true,
+      "objective": 1575.0,
+      "objective_components": {
+        "distance_m": 1400.0,
+        "elapsed_time_s": 230.0,
+        "lateness_s": 0.0,
+        "service_time_s": 55.0,
+        "travel_time_s": 140.0,
+        "waiting_time_s": 35.0
+      },
+      "route": {
+        "V1": [
+          "J1",
+          "J2"
+        ],
+        "V2": [
+          "J3",
+          "J4",
+          "J5"
+        ]
+      }
+    }
+  },
+  {
+    "absolute_gap": 0.0,
+    "best_feasible_objective": 1575.0,
+    "elapsed_s": 0.24180141699980595,
+    "evaluations": 2000,
+    "exact_reference_objective": 1575.0,
+    "feasible": true,
+    "iterations": 160,
+    "message": "ALNS completed within the declared budget",
+    "method": "alns",
+    "operator_weights": {
+      "random_removal": 0.9886222222222223,
+      "related_removal": 1.0582542222222224,
+      "repair:greedy_insertion": 1.01184992513369,
+      "repair:regret_insertion": 1.0187245714285715,
+      "worst_removal": 0.9918080000000002
+    },
+    "relative_gap": 0.0,
+    "removal_statistics": {
+      "random_removal": 46,
+      "related_removal": 60,
+      "worst_removal": 53
+    },
+    "repair_statistics": {
+      "greedy_insertion": 72,
+      "regret_insertion": 87
+    },
+    "seed": 8,
+    "verified": {
+      "complete": true,
+      "feasible": true,
+      "objective": 1575.0,
+      "objective_components": {
+        "distance_m": 1400.0,
+        "elapsed_time_s": 230.0,
+        "lateness_s": 0.0,
+        "service_time_s": 55.0,
+        "travel_time_s": 140.0,
+        "waiting_time_s": 35.0
+      },
+      "route": {
+        "V1": [
+          "J1",
+          "J2"
+        ],
+        "V2": [
+          "J3",
+          "J4",
+          "J5"
+        ]
+      }
+    }
+  },
+  {
+    "absolute_gap": 0.0,
+    "best_feasible_objective": 1575.0,
+    "elapsed_s": 0.2455630000004021,
+    "evaluations": 2000,
+    "exact_reference_objective": 1575.0,
+    "feasible": true,
+    "iterations": 167,
+    "message": "ALNS completed within the declared budget",
+    "method": "alns",
+    "operator_weights": {
+      "random_removal": 1.065536,
+      "related_removal": 1.0,
+      "repair:greedy_insertion": 1.0187245714285715,
+      "repair:regret_insertion": 1.023831272727273,
+      "worst_removal": 1.0
+    },
+    "relative_gap": 0.0,
+    "removal_statistics": {
+      "random_removal": 69,
+      "related_removal": 53,
+      "worst_removal": 45
+    },
+    "repair_statistics": {
+      "greedy_insertion": 95,
+      "regret_insertion": 72
+    },
+    "seed": 9,
+    "verified": {
+      "complete": true,
+      "feasible": true,
+      "objective": 1575.0,
+      "objective_components": {
+        "distance_m": 1400.0,
+        "elapsed_time_s": 230.0,
+        "lateness_s": 0.0,
+        "service_time_s": 55.0,
+        "travel_time_s": 140.0,
+        "waiting_time_s": 35.0
+      },
+      "route": {
+        "V1": [
+          "J1",
+          "J2"
+        ],
+        "V2": [
+          "J3",
+          "J4",
+          "J5"
+        ]
+      }
+    }
+  },
+  {
+    "absolute_gap": 0.0,
+    "best_feasible_objective": 1575.0,
+    "elapsed_s": 0.24022004200014635,
+    "evaluations": 2000,
+    "exact_reference_objective": 1575.0,
+    "feasible": true,
+    "iterations": 156,
+    "message": "ALNS completed within the declared budget",
+    "method": "alns",
+    "operator_weights": {
+      "random_removal": 1.043690666666667,
+      "related_removal": 1.0,
+      "repair:greedy_insertion": 1.0131072,
+      "repair:regret_insertion": 1.0262144000000002,
+      "worst_removal": 0.9927182222222224
+    },
+    "relative_gap": 0.0,
+    "removal_statistics": {
+      "random_removal": 58,
+      "related_removal": 42,
+      "worst_removal": 55
+    },
+    "repair_statistics": {
+      "greedy_insertion": 73,
+      "regret_insertion": 82
+    },
+    "seed": 10,
+    "verified": {
+      "complete": true,
+      "feasible": true,
+      "objective": 1575.0,
+      "objective_components": {
+        "distance_m": 1400.0,
+        "elapsed_time_s": 230.0,
+        "lateness_s": 0.0,
+        "service_time_s": 55.0,
+        "travel_time_s": 140.0,
+        "waiting_time_s": 35.0
+      },
+      "route": {
+        "V1": [
+          "J1",
+          "J2"
+        ],
+        "V2": [
+          "J3",
+          "J4",
+          "J5"
+        ]
+      }
+    }
+  }
+]

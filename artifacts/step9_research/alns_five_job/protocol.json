@@ -1,0 +1,57 @@
+{
+  "protocol": {
+    "customer_count": 5,
+    "destroy_operators": [
+      "random_removal",
+      "worst_removal",
+      "related_removal"
+    ],
+    "evaluation_budget": 2000,
+    "evaluator": "RouteEvaluator with distance + travel_time + waiting",
+    "exact_reference_objective": 1575.0,
+    "fixture": "fixtures/step3/base/scenario.json",
+    "initialization": "ALNSReference deterministic fixed-fleet round-robin construction",
+    "repair_operators": [
+      "greedy_insertion",
+      "regret_insertion"
+    ],
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "time_limit_s": 5.0,
+    "vehicle_count": 2
+  },
+  "summary": {
+    "best_feasible_objective_mean": 1575.0,
+    "best_feasible_objective_std": 0.0,
+    "elapsed_s_mean": 0.24627561679990323,
+    "evaluations_mean": 2000,
+    "exact_hit_rate": 1.0,
+    "exact_reference_objective": 1575.0,
+    "feasible_rate": 1.0,
+    "method": "alns",
+    "operator_usage": {
+      "removal": {
+        "random_removal": 541,
+        "related_removal": 506,
+        "worst_removal": 519
+      },
+      "repair": {
+        "greedy_insertion": 778,
+        "regret_insertion": 788
+      }
+    },
+    "relative_gap_mean": 0.0,
+    "relative_gap_std": 0.0,
+    "runs": 10
+  }
+}

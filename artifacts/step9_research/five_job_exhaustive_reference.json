@@ -1,0 +1,26 @@
+{
+  "customer_count": 5,
+  "elapsed_s": 0.5198745419984334,
+  "evaluator_semantics": "RouteEvaluator",
+  "exact": true,
+  "feasible_candidates": 175,
+  "objective": 1575.0,
+  "scenario_id": "S3_BASE",
+  "total_candidates": 3840,
+  "total_distance_m": 1400.0,
+  "total_service_time_s": 55.0,
+  "total_travel_time_s": 140.0,
+  "total_waiting_time_s": 35.0,
+  "vehicle_count": 2,
+  "vehicle_routes": {
+    "V1": [
+      "J3",
+      "J4",
+      "J5"
+    ],
+    "V2": [
+      "J1",
+      "J2"
+    ]
+  }
+}

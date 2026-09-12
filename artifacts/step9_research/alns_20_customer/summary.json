@@ -1,0 +1,50 @@
+{
+  "experiment": "step9_alns_20_customer",
+  "protocol": {
+    "destroy_operators": [
+      "random_removal",
+      "worst_removal",
+      "related_removal"
+    ],
+    "evaluations": 2000,
+    "objective_reference": "No certified 20-customer optimum is available. Best-feasible objectives are reported; no optimality gap is claimed.",
+    "repair_operators": [
+      "greedy_insertion",
+      "regret_insertion"
+    ],
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "time_limit_s": 5.0
+  },
+  "results": {
+    "best_objective_max": 37996.43084957833,
+    "best_objective_mean": 36254.80743008445,
+    "best_objective_min": 34121.831454033876,
+    "best_objective_std": 1199.6130913780466,
+    "complete_rate": 1.0,
+    "evaluations_mean": 1255.6,
+    "feasible_rate": 1.0,
+    "iterations_mean": 5.3,
+    "runs": 10,
+    "runtime_mean_s": 6.028639895900414,
+    "runtime_std_s": 0.6501667104886732
+  },
+  "scenario": {
+    "customers": 20,
+    "edges": 695,
+    "nodes": 213,
+    "scenario_id": "dynamic-cvrp:20:26157",
+    "seed": 26157,
+    "vehicles": 4
+  }
+}

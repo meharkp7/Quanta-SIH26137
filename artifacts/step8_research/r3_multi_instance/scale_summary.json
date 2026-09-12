@@ -1,0 +1,14 @@
+[
+  {
+    "customers": 10,
+    "paired_n": 1,
+    "mean_qpso_minus_pso": 0.0,
+    "median_qpso_minus_pso": 0.0,
+    "std_qpso_minus_pso": 0.0,
+    "qpso_wins": 0,
+    "pso_wins": 0,
+    "ties": 1,
+    "qpso_feasible_rate": 1,
+    "pso_feasible_rate": 1
+  }
+]
