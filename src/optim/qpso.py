@@ -1085,64 +1085,33 @@ class RouteFitnessOracle(FitnessOracle):
     def _route_signature(
         candidate,
     ) -> tuple:
-        plan = getattr(
-            candidate,
-            "repaired_plan",
-            None,
-        )
-
+        plan = getattr(candidate, "repaired_plan", None)
         if plan is None:
-            plan = getattr(
-                candidate,
-                "route_plan",
-                None,
-            )
-
+            plan = getattr(candidate, "route_plan", None)
         if plan is None:
             raise OptimizationError(
-                "RouteCandidate does not expose repaired_plan "
-                "or route_plan"
+                "RouteCandidate does not expose repaired_plan or route_plan"
             )
 
         signatures = []
-
-        for vehicle_route in (
-            plan.vehicle_routes
-        ):
-            customer_ids = getattr(
-                vehicle_route,
-                "customer_ids",
-                None,
-            )
-
+        for vehicle_route in plan.vehicle_routes:
+            customer_ids = getattr(vehicle_route, "customer_ids", None)
             if customer_ids is None:
-                customer_ids = getattr(
-                    vehicle_route,
-                    "customer_order",
-                    None,
-                )
-
+                customer_ids = getattr(vehicle_route, "customer_order", None)
             if customer_ids is None:
                 raise OptimizationError(
-                    "vehicle route does not expose customer_ids "
-                    "or customer_order"
+                    "vehicle route does not expose customer_ids or customer_order"
                 )
 
+            # Contract IDs are opaque strings; they are not required to be numeric.
             signatures.append(
                 (
-                    int(
-                        vehicle_route.vehicle_id
-                    ),
-                    tuple(
-                        int(customer_id)
-                        for customer_id in customer_ids
-                    ),
+                    str(vehicle_route.vehicle_id),
+                    tuple(str(customer_id) for customer_id in customer_ids),
                 )
             )
 
-        return tuple(
-            signatures
-        )
+        return tuple(signatures)
 
     @staticmethod
     def _repair_distance(

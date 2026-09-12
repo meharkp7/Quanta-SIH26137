@@ -4,13 +4,35 @@ import csv
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable, Sequence
+import random
+from statistics import mean
+from typing import Callable, Iterable, Sequence
 
-from src.optim.common import FitnessOracle, FitnessResult, OptimizationConfig, OptimizationResult, Vector
-from src.optim.pso import MatchedPSOConfig, ParticleSwarmOptimizer
-from src.optim.qpso import AdaptiveQPSO, AdaptiveQPSOConfig, RouteFitnessOracle
-from src.optim.qpso_variants import VARIANTS, config_for_variant
-from src.optim.diversity import repair_displacement
+from src.optim.common import (
+    FitnessOracle,
+    FitnessResult,
+    OptimizationConfig,
+    OptimizationResult,
+    Vector,
+)
+from src.optim.pso import (
+    MatchedPSO,
+    PSOConfig,
+)
+from src.optim.qpso import (
+    AdaptiveQPSO,
+    AdaptiveQPSOConfig,
+)
+from src.optim.qpso_variants import (
+    VARIANTS,
+    config_for_variant,
+)
+
+
+# ============================================================================
+# Experiment contracts
+# ============================================================================
+
 
 @dataclass(frozen=True)
 class ExperimentSpec:
@@ -28,10 +50,8 @@ class ExperimentRun:
     """
     Complete persisted result for one condition/seed pair.
 
-    The four history fields intentionally preserve the complete optimizer
-    trajectory instead of only storing final-state metrics. This allows
-    convergence, diversity, stagnation, and ablation analysis to be performed
-    without rerunning the optimization.
+    The full histories are retained so convergence, diversity and
+    optimization dynamics can be analyzed without rerunning the optimizer.
     """
 
     condition: str
@@ -40,6 +60,7 @@ class ExperimentRun:
 
     best_fitness: float
     feasible: bool
+
     evaluations: int
     iterations: int
 
@@ -63,7 +84,7 @@ class ExperimentRun:
 @dataclass(frozen=True)
 class ExperimentSummary:
     """
-    Aggregate statistics over multiple seeds for one condition.
+    Aggregate statistics over multiple independent seeds.
     """
 
     condition: str
@@ -91,56 +112,127 @@ class ExperimentSummary:
     repair_distance_std: float
 
 
-DEFAULT_QPSO_CONDITIONS = tuple(VARIANTS.keys())
-
-
 OracleFactory = Callable[[int], FitnessOracle]
 
 
-def _mean(values: Sequence[float]) -> float:
-    if not values:
-        raise ValueError("Cannot compute mean of an empty sequence.")
-    return sum(values) / len(values)
+DEFAULT_QPSO_CONDITIONS = tuple(VARIANTS.keys())
 
 
-def _std(values: Sequence[float]) -> float:
-    """
-    Population standard deviation.
-
-    Experiments summarize the complete set of requested seeds, so the
-    population definition is used consistently here.
-    """
-    if not values:
-        raise ValueError("Cannot compute standard deviation of an empty sequence.")
-
-    mean = _mean(values)
-    return (sum((value - mean) ** 2 for value in values) / len(values)) ** 0.5
+# ============================================================================
+# Validation helpers
+# ============================================================================
 
 
-def _history_tuple(values: Sequence[float]) -> tuple[float, ...]:
-    return tuple(float(value) for value in values)
+def _validate_algorithm(algorithm: str) -> None:
+    if algorithm not in {"qpso", "pso"}:
+        raise ValueError(
+            f"Unknown algorithm {algorithm!r}; "
+            "expected 'qpso' or 'pso'."
+        )
 
 
-def _run_to_dict(run: ExperimentRun) -> dict[str, object]:
-    """
-    Convert an ExperimentRun into a JSON/CSV-friendly dictionary.
+def _validate_seeds(
+    seeds: Sequence[int],
+) -> tuple[int, ...]:
+    normalized = tuple(int(seed) for seed in seeds)
 
-    Histories are retained as JSON arrays rather than flattened so one run
-    remains one atomic experimental record.
-    """
-    data = asdict(run)
+    if not normalized:
+        raise ValueError(
+            "At least one optimizer seed is required."
+        )
 
-    data["best_position"] = list(run.best_position)
-    data["route_signature"] = run.route_signature
+    if len(set(normalized)) != len(normalized):
+        raise ValueError(
+            "Optimizer seeds must be unique."
+        )
 
-    data["history_best"] = list(run.history_best)
-    data["history_mean"] = list(run.history_mean)
-    data["history_coordinate_diversity"] = list(
-        run.history_coordinate_diversity
+    return normalized
+
+
+def _validate_conditions(
+    conditions: Sequence[str],
+) -> tuple[str, ...]:
+    normalized = tuple(
+        str(condition).strip()
+        for condition in conditions
     )
-    data["history_route_diversity"] = list(run.history_route_diversity)
 
-    return data
+    if not normalized:
+        raise ValueError(
+            "At least one QPSO condition is required."
+        )
+
+    unknown = [
+        condition
+        for condition in normalized
+        if condition not in VARIANTS
+    ]
+
+    if unknown:
+        available = ", ".join(
+            sorted(VARIANTS)
+        )
+
+        raise ValueError(
+            "unknown QPSO conditions: "
+            f"{unknown}; available: {available}"
+        )
+
+    if len(set(normalized)) != len(normalized):
+        raise ValueError(
+            "QPSO conditions must be unique."
+        )
+
+    return normalized
+
+
+# ============================================================================
+# Deterministic matched initialization
+# ============================================================================
+
+
+def _initial_population(
+    optimizer_config: OptimizationConfig,
+    seed: int,
+) -> tuple[Vector, ...]:
+    """
+    Generate one deterministic initial population.
+
+    The exact same population can then be supplied to QPSO and PSO for a
+    matched comparison, preventing initialization from becoming a hidden
+    experimental variable.
+    """
+
+    rng = random.Random(int(seed))
+
+    return tuple(
+        tuple(
+            rng.uniform(
+                optimizer_config.lower_bound,
+                optimizer_config.upper_bound,
+            )
+            for _ in range(
+                optimizer_config.dimensions
+            )
+        )
+        for _ in range(
+            optimizer_config.population_size
+        )
+    )
+
+
+# ============================================================================
+# Result normalization
+# ============================================================================
+
+
+def _history_tuple(
+    values: Sequence[float],
+) -> tuple[float, ...]:
+    return tuple(
+        float(value)
+        for value in values
+    )
 
 
 def _make_run(
@@ -151,22 +243,51 @@ def _make_run(
     result: OptimizationResult,
     oracle: FitnessOracle,
 ) -> ExperimentRun:
+    """
+    Convert an optimizer result into a complete immutable experiment record.
+
+    The optimizer's `best_result` is authoritative. We deliberately do not
+    inspect the oracle's last evaluated candidate because the last candidate
+    is not necessarily the best candidate.
+    """
+
+    _validate_algorithm(algorithm)
+
     if result.evaluations <= 0:
         raise RuntimeError(
-            f"{algorithm}/{condition}/seed={seed} produced no evaluations."
+            f"{algorithm}/{condition}/seed={seed} "
+            "produced no evaluations."
         )
 
-    if result.evaluations != oracle.calls:
+    oracle_calls = getattr(
+        oracle,
+        "calls",
+        None,
+    )
+
+    if (
+        oracle_calls is not None
+        and int(oracle_calls) != int(result.evaluations)
+    ):
         raise RuntimeError(
-            f"Evaluation accounting mismatch for {algorithm}/{condition}/seed={seed}: "
-            f"optimizer={result.evaluations}, oracle={oracle.calls}."
+            "Evaluation accounting mismatch for "
+            f"{algorithm}/{condition}/seed={seed}: "
+            f"optimizer={result.evaluations}, "
+            f"oracle={oracle_calls}."
         )
 
-    history_best = _history_tuple(result.history_best)
-    history_mean = _history_tuple(result.history_mean)
+    history_best = _history_tuple(
+        result.history_best
+    )
+
+    history_mean = _history_tuple(
+        result.history_mean
+    )
+
     history_coordinate_diversity = _history_tuple(
         result.history_coordinate_diversity
     )
+
     history_route_diversity = _history_tuple(
         result.history_route_diversity
     )
@@ -180,133 +301,80 @@ def _make_run(
 
     if len(history_lengths) != 1:
         raise RuntimeError(
-            f"Inconsistent history lengths for {algorithm}/{condition}/seed={seed}: "
+            "Inconsistent optimizer history lengths for "
+            f"{algorithm}/{condition}/seed={seed}: "
             f"{sorted(history_lengths)}."
         )
 
     if not history_best:
         raise RuntimeError(
-            f"{algorithm}/{condition}/seed={seed} returned an empty history."
+            f"{algorithm}/{condition}/seed={seed} "
+            "returned an empty optimization history."
         )
 
-    # RouteFitnessOracle exposes the final candidate evaluated by the oracle.
-    route_signature: object = None
-    repair_distance = 0.0
-    feasible = False
+    best_result: FitnessResult = result.best_result
 
-    if isinstance(oracle, RouteFitnessOracle):
-        candidate = oracle.last_candidate
+    if not isinstance(
+        best_result,
+        FitnessResult,
+    ):
+        raise RuntimeError(
+            f"{algorithm}/{condition}/seed={seed} "
+            "returned an invalid best_result."
+        )
 
-        if candidate is not None:
-            route_signature = tuple(
-                (
-                    vehicle_route.vehicle_id,
-                    tuple(vehicle_route.customer_ids),
-                )
-                for vehicle_route in candidate.repaired_plan.vehicle_routes
-            )
+    if len(result.best_position) == 0:
+        raise RuntimeError(
+            f"{algorithm}/{condition}/seed={seed} "
+            "returned an empty best_position."
+        )
 
-            repair_distance = float(
-                repair_displacement(
-                    candidate.repair_result.original_route_plan,
-                    candidate.repair_result.repaired_route_plan,
-                ).exact
-            )
-
-            feasible = bool(candidate.repaired_evaluation.feasible)
-
-    # For non-route oracles, retain the optimizer's final fitness result if
-    # available but do not invent route-specific metadata.
-    if route_signature is None and result.best_result is not None:
-        best_result: FitnessResult = result.best_result
-        route_signature = best_result.route_signature
-        feasible = bool(best_result.feasible)
+    route_signature = best_result.route_signature
 
     return ExperimentRun(
         condition=condition,
         algorithm=algorithm,
-        seed=seed,
-        best_fitness=float(result.best_fitness),
-        feasible=feasible,
-        evaluations=int(result.evaluations),
-        iterations=int(result.iterations),
-        coordinate_diversity_final=float(history_coordinate_diversity[-1]),
-        route_diversity_final=float(history_route_diversity[-1]),
-        best_position=tuple(float(value) for value in result.best_position),
+        seed=int(seed),
+        best_fitness=float(
+            result.best_fitness
+        ),
+        feasible=bool(
+            best_result.feasible
+        ),
+        evaluations=int(
+            result.evaluations
+        ),
+        iterations=int(
+            result.iterations
+        ),
+        coordinate_diversity_final=float(
+            history_coordinate_diversity[-1]
+        ),
+        route_diversity_final=float(
+            history_route_diversity[-1]
+        ),
+        best_position=tuple(
+            float(value)
+            for value in result.best_position
+        ),
         route_signature=route_signature,
-        repair_distance=repair_distance,
+        repair_distance=float(
+            best_result.repair_distance
+        ),
         history_best=history_best,
         history_mean=history_mean,
-        history_coordinate_diversity=history_coordinate_diversity,
-        history_route_diversity=history_route_diversity,
+        history_coordinate_diversity=(
+            history_coordinate_diversity
+        ),
+        history_route_diversity=(
+            history_route_diversity
+        ),
     )
 
 
-def _summary(
-    condition: str,
-    algorithm: str,
-    runs: Sequence[ExperimentRun],
-) -> ExperimentSummary:
-    if not runs:
-        raise ValueError(
-            f"Cannot summarize condition {algorithm}/{condition}: no runs."
-        )
-
-    best_fitness = [run.best_fitness for run in runs]
-    evaluations = [float(run.evaluations) for run in runs]
-    iterations = [float(run.iterations) for run in runs]
-    coordinate_diversity = [
-        run.coordinate_diversity_final for run in runs
-    ]
-    route_diversity = [
-        run.route_diversity_final for run in runs
-    ]
-    repair_distance = [run.repair_distance for run in runs]
-
-    return ExperimentSummary(
-        condition=condition,
-        algorithm=algorithm,
-        runs=len(runs),
-        best_fitness_mean=_mean(best_fitness),
-        best_fitness_std=_std(best_fitness),
-        feasible_rate=sum(run.feasible for run in runs) / len(runs),
-        evaluations_mean=_mean(evaluations),
-        evaluations_std=_std(evaluations),
-        iterations_mean=_mean(iterations),
-        iterations_std=_std(iterations),
-        coordinate_diversity_final_mean=_mean(coordinate_diversity),
-        coordinate_diversity_final_std=_std(coordinate_diversity),
-        route_diversity_final_mean=_mean(route_diversity),
-        route_diversity_final_std=_std(route_diversity),
-        repair_distance_mean=_mean(repair_distance),
-        repair_distance_std=_std(repair_distance),
-    )
-
-
-def _initial_population(
-    optimizer_config: OptimizationConfig,
-    seed: int,
-) -> tuple[Vector, ...]:
-    """
-    Generate one deterministic initial population.
-
-    This function mirrors the optimizer's population initialization so
-    matched QPSO/PSO comparisons can use exactly the same starting swarm.
-    """
-    import random
-
-    rng = random.Random(seed)
-
-    return tuple(
-        tuple(
-            rng.uniform(
-                optimizer_config.lower_bound,
-                optimizer_config.upper_bound,
-            )
-            for _ in range(optimizer_config.dimensions)
-        )
-        for _ in range(optimizer_config.population_size)
-    )
+# ============================================================================
+# Individual optimizer execution
+# ============================================================================
 
 
 def _run_qpso(
@@ -315,9 +383,12 @@ def _run_qpso(
     seed: int,
     base_config: AdaptiveQPSOConfig,
     oracle: FitnessOracle,
-    initial_population: tuple[Vector, ...] | None = None,
+    initial_population: Sequence[Sequence[float]] | None,
 ) -> ExperimentRun:
-    config = config_for_variant(base_config, condition)
+    config = config_for_variant(
+        base_config,
+        condition,
+    )
 
     optimizer = AdaptiveQPSO(
         config,
@@ -341,9 +412,17 @@ def _run_pso(
     seed: int,
     base_config: AdaptiveQPSOConfig,
     oracle: FitnessOracle,
-    initial_population: tuple[Vector, ...] | None = None,
+    initial_population: Sequence[Sequence[float]] | None,
 ) -> ExperimentRun:
-    config = MatchedPSOConfig(
+    """
+    Run the matched classical PSO baseline.
+
+    Every parameter shared with QPSO is copied directly from the base QPSO
+    configuration. PSO-specific update parameters remain at their declared
+    baseline defaults.
+    """
+
+    config = PSOConfig(
         dimensions=base_config.dimensions,
         lower_bound=base_config.lower_bound,
         upper_bound=base_config.upper_bound,
@@ -351,10 +430,12 @@ def _run_pso(
         max_evaluations=base_config.max_evaluations,
         seed=seed,
         tolerance=base_config.tolerance,
-        stagnation_patience=base_config.stagnation_patience,
+        stagnation_patience=(
+            base_config.stagnation_patience
+        ),
     )
 
-    optimizer = ParticleSwarmOptimizer(
+    optimizer = MatchedPSO(
         config,
         oracle,
         initial_population=initial_population,
@@ -371,6 +452,11 @@ def _run_pso(
     )
 
 
+# ============================================================================
+# Public condition runner
+# ============================================================================
+
+
 def run_condition(
     *,
     condition: str,
@@ -378,24 +464,31 @@ def run_condition(
     seed: int,
     base_qpso_config: AdaptiveQPSOConfig,
     oracle_factory: OracleFactory,
-    initial_population: tuple[Vector, ...] | None = None,
+    initial_population: Sequence[Sequence[float]] | None = None,
 ) -> ExperimentRun:
     """
-    Run one condition/seed pair.
+    Run one algorithm/condition/seed combination.
 
-    `initial_population` is optional. When supplied, it is reused exactly,
-    which is required for matched ablations.
+    If `initial_population` is supplied, it is reused exactly. This is the
+    mechanism used by the matched ablation suite.
     """
-    if algorithm not in {"qpso", "pso"}:
-        raise ValueError(
-            f"Unknown algorithm {algorithm!r}; expected 'qpso' or 'pso'."
-        )
+
+    _validate_algorithm(
+        algorithm
+    )
+
+    seed = int(seed)
 
     if algorithm == "qpso":
         if condition not in VARIANTS:
+            available = ", ".join(
+                sorted(VARIANTS)
+            )
+
             raise ValueError(
-                f"Unknown QPSO condition {condition!r}. "
-                f"Available: {', '.join(VARIANTS)}"
+                f"Unknown QPSO condition "
+                f"{condition!r}; "
+                f"available: {available}"
             )
 
         oracle = oracle_factory(seed)
@@ -418,6 +511,206 @@ def run_condition(
     )
 
 
+# ============================================================================
+# Aggregation
+# ============================================================================
+
+
+def _mean(
+    values: Sequence[float],
+) -> float:
+    if not values:
+        raise ValueError(
+            "Cannot compute mean of an empty sequence."
+        )
+
+    return mean(values)
+
+
+def _std(
+    values: Sequence[float],
+) -> float:
+    """
+    Population standard deviation.
+
+    The complete requested seed set is treated as the experimental population,
+    so ddof=0 semantics are used.
+    """
+
+    if not values:
+        raise ValueError(
+            "Cannot compute standard deviation "
+            "of an empty sequence."
+        )
+
+    average = _mean(values)
+
+    return (
+        sum(
+            (value - average) ** 2
+            for value in values
+        )
+        / len(values)
+    ) ** 0.5
+
+
+def _summary(
+    *,
+    condition: str,
+    algorithm: str,
+    runs: Sequence[ExperimentRun],
+) -> ExperimentSummary:
+    if not runs:
+        raise ValueError(
+            "Cannot summarize "
+            f"{algorithm}/{condition}: "
+            "no runs were supplied."
+        )
+
+    values = [
+        float(run.best_fitness)
+        for run in runs
+    ]
+
+    evaluations = [
+        float(run.evaluations)
+        for run in runs
+    ]
+
+    iterations = [
+        float(run.iterations)
+        for run in runs
+    ]
+
+    coordinate_diversity = [
+        float(
+            run.coordinate_diversity_final
+        )
+        for run in runs
+    ]
+
+    route_diversity = [
+        float(
+            run.route_diversity_final
+        )
+        for run in runs
+    ]
+
+    repair_distance = [
+        float(
+            run.repair_distance
+        )
+        for run in runs
+    ]
+
+    return ExperimentSummary(
+        condition=condition,
+        algorithm=algorithm,
+        runs=len(runs),
+
+        best_fitness_mean=_mean(values),
+        best_fitness_std=_std(values),
+
+        feasible_rate=(
+            sum(
+                1
+                for run in runs
+                if run.feasible
+            )
+            / len(runs)
+        ),
+
+        evaluations_mean=_mean(
+            evaluations
+        ),
+        evaluations_std=_std(
+            evaluations
+        ),
+
+        iterations_mean=_mean(
+            iterations
+        ),
+        iterations_std=_std(
+            iterations
+        ),
+
+        coordinate_diversity_final_mean=_mean(
+            coordinate_diversity
+        ),
+        coordinate_diversity_final_std=_std(
+            coordinate_diversity
+        ),
+
+        route_diversity_final_mean=_mean(
+            route_diversity
+        ),
+        route_diversity_final_std=_std(
+            route_diversity
+        ),
+
+        repair_distance_mean=_mean(
+            repair_distance
+        ),
+        repair_distance_std=_std(
+            repair_distance
+        ),
+    )
+
+
+def summarize_runs(
+    runs: Iterable[ExperimentRun],
+) -> tuple[ExperimentSummary, ...]:
+    """
+    Aggregate runs by `(condition, algorithm)`.
+
+    No seed is silently dropped and no condition is merged with another.
+    """
+
+    grouped: dict[
+        tuple[str, str],
+        list[ExperimentRun],
+    ] = {}
+
+    for run in runs:
+        if not isinstance(
+            run,
+            ExperimentRun,
+        ):
+            raise TypeError(
+                "summarize_runs expects "
+                "ExperimentRun objects"
+            )
+
+        grouped.setdefault(
+            (
+                run.condition,
+                run.algorithm,
+            ),
+            [],
+        ).append(run)
+
+    summaries = [
+        _summary(
+            condition=condition,
+            algorithm=algorithm,
+            runs=group,
+        )
+        for (
+            condition,
+            algorithm,
+        ), group in sorted(
+            grouped.items()
+        )
+    ]
+
+    return tuple(summaries)
+
+
+# ============================================================================
+# Matched ablation suite
+# ============================================================================
+
+
 def run_ablation_suite(
     *,
     base_qpso_config: AdaptiveQPSOConfig,
@@ -425,113 +718,218 @@ def run_ablation_suite(
     seeds: Sequence[int],
     conditions: Sequence[str] = DEFAULT_QPSO_CONDITIONS,
     include_pso: bool = True,
-) -> tuple[tuple[ExperimentRun, ...], tuple[ExperimentSummary, ...]]:
+) -> tuple[
+    tuple[ExperimentRun, ...],
+    tuple[ExperimentSummary, ...],
+]:
     """
-    Run the matched QPSO ablation suite.
+    Run the complete matched QPSO ablation suite.
 
     For every seed:
-      1. one initial population is generated;
-      2. every QPSO condition receives that exact population;
-      3. matched PSO, if enabled, receives the same population.
 
-    This prevents initialization differences from contaminating the
-    mechanism comparison.
+        1. generate exactly one initial population;
+        2. reuse that population for every QPSO condition;
+        3. reuse the same population for matched PSO.
+
+    Every condition receives:
+
+        - identical scenario/oracle factory semantics
+        - identical population size
+        - identical initial population
+        - identical evaluation budget
+        - identical optimizer seed
+
+    Only the QPSO mechanism configuration or the optimizer update rule is
+    allowed to differ.
     """
-    seeds = tuple(int(seed) for seed in seeds)
-    conditions = tuple(conditions)
 
-    if not seeds:
-        raise ValueError("At least one seed is required.")
+    normalized_seeds = _validate_seeds(
+        seeds
+    )
 
-    unknown_conditions = [
-        condition for condition in conditions if condition not in VARIANTS
-    ]
-    if unknown_conditions:
-        raise ValueError(
-            "unknown QPSO conditions: "
-            + ", ".join(unknown_conditions)
-        )
+    normalized_conditions = _validate_conditions(
+        conditions
+    )
 
     runs: list[ExperimentRun] = []
 
-    for seed in seeds:
-        initial_population = _initial_population(base_qpso_config, seed)
+    for seed in normalized_seeds:
+        initial_population = _initial_population(
+            base_qpso_config,
+            seed,
+        )
 
-        for condition in conditions:
-            run = run_condition(
-                condition=condition,
-                algorithm="qpso",
-                seed=seed,
-                base_qpso_config=base_qpso_config,
-                oracle_factory=oracle_factory,
-                initial_population=initial_population,
+        for condition in normalized_conditions:
+            runs.append(
+                run_condition(
+                    condition=condition,
+                    algorithm="qpso",
+                    seed=seed,
+                    base_qpso_config=base_qpso_config,
+                    oracle_factory=oracle_factory,
+                    initial_population=initial_population,
+                )
             )
-            runs.append(run)
 
         if include_pso:
-            run = run_condition(
-                condition="matched_pso",
-                algorithm="pso",
-                seed=seed,
-                base_qpso_config=base_qpso_config,
-                oracle_factory=oracle_factory,
-                initial_population=initial_population,
+            runs.append(
+                run_condition(
+                    condition="matched_pso",
+                    algorithm="pso",
+                    seed=seed,
+                    base_qpso_config=base_qpso_config,
+                    oracle_factory=oracle_factory,
+                    initial_population=initial_population,
+                )
             )
-            runs.append(run)
 
-    grouped: dict[tuple[str, str], list[ExperimentRun]] = {}
-
-    for run in runs:
-        grouped.setdefault(
-            (run.condition, run.algorithm),
-            [],
-        ).append(run)
-
-    summaries = tuple(
-        _summary(
-            condition=condition,
-            algorithm=algorithm,
-            runs=grouped[(condition, algorithm)],
-        )
-        for condition, algorithm in sorted(
-            grouped,
-            key=lambda item: (item[0], item[1]),
-        )
+    return (
+        tuple(runs),
+        summarize_runs(runs),
     )
 
-    return tuple(runs), summaries
+
+# ============================================================================
+# Persistent experiment artifacts
+# ============================================================================
+
+
+def _run_to_dict(
+    run: ExperimentRun,
+) -> dict[str, object]:
+    """
+    Convert a run into a JSON/CSV-safe dictionary.
+
+    Lists are used instead of tuples because JSON has no tuple type.
+    """
+
+    data = asdict(run)
+
+    data["best_position"] = list(
+        run.best_position
+    )
+
+    data["history_best"] = list(
+        run.history_best
+    )
+
+    data["history_mean"] = list(
+        run.history_mean
+    )
+
+    data["history_coordinate_diversity"] = list(
+        run.history_coordinate_diversity
+    )
+
+    data["history_route_diversity"] = list(
+        run.history_route_diversity
+    )
+
+    return data
 
 
 def write_results(
     output_dir: str | Path,
     runs: Sequence[ExperimentRun],
     summaries: Sequence[ExperimentSummary],
-) -> None:
+) -> tuple[Path, Path, Path]:
     """
-    Persist both run-level trajectories and aggregate summaries.
+    Persist run-level and aggregate experiment artifacts.
 
     Files:
-      runs.csv
-      runs.json
-      summary.json
+
+        runs.csv
+        runs.json
+        summary.json
+
+    `runs.json` is the canonical lossless trajectory representation.
+    `runs.csv` is provided for spreadsheet/statistical inspection.
     """
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
 
-    run_dicts = [_run_to_dict(run) for run in runs]
+    output_path = Path(
+        output_dir
+    )
 
-    # CSV keeps scalar fields easy to inspect while storing trajectory arrays
-    # as JSON strings in the corresponding cells.
+    output_path.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    normalized_runs = tuple(
+        runs
+    )
+
+    normalized_summaries = tuple(
+        summaries
+    )
+
+    for run in normalized_runs:
+        if not isinstance(
+            run,
+            ExperimentRun,
+        ):
+            raise TypeError(
+                "runs must contain only "
+                "ExperimentRun objects"
+            )
+
+    for summary in normalized_summaries:
+        if not isinstance(
+            summary,
+            ExperimentSummary,
+        ):
+            raise TypeError(
+                "summaries must contain only "
+                "ExperimentSummary objects"
+            )
+
+    run_dicts = [
+        _run_to_dict(run)
+        for run in normalized_runs
+    ]
+
+    # --------------------------------------------------------------
+    # Run-level JSON
+    # --------------------------------------------------------------
+
+    runs_json = (
+        output_path
+        / "runs.json"
+    )
+
+    runs_json.write_text(
+        json.dumps(
+            run_dicts,
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+
+    # --------------------------------------------------------------
+    # Run-level CSV
+    # --------------------------------------------------------------
+
+    runs_csv = (
+        output_path
+        / "runs.csv"
+    )
+
     if run_dicts:
-        csv_path = output_path / "runs.csv"
+        fieldnames = list(
+            run_dicts[0].keys()
+        )
 
-        fieldnames = list(run_dicts[0].keys())
-
-        with csv_path.open("w", newline="", encoding="utf-8") as handle:
+        with runs_csv.open(
+            "w",
+            newline="",
+            encoding="utf-8",
+        ) as handle:
             writer = csv.DictWriter(
                 handle,
                 fieldnames=fieldnames,
             )
+
             writer.writeheader()
 
             for row in run_dicts:
@@ -548,26 +946,78 @@ def write_results(
                     csv_row[field] = json.dumps(
                         csv_row[field],
                         separators=(",", ":"),
+                        default=str,
                     )
 
-                writer.writerow(csv_row)
+                writer.writerow(
+                    csv_row
+                )
+    else:
+        # Still create a valid empty CSV with the canonical schema.
+        fieldnames = [
+            "condition",
+            "algorithm",
+            "seed",
+            "best_fitness",
+            "feasible",
+            "evaluations",
+            "iterations",
+            "coordinate_diversity_final",
+            "route_diversity_final",
+            "best_position",
+            "route_signature",
+            "repair_distance",
+            "history_best",
+            "history_mean",
+            "history_coordinate_diversity",
+            "history_route_diversity",
+        ]
 
-    # JSON is the canonical trajectory-preserving representation.
-    (output_path / "runs.json").write_text(
+        with runs_csv.open(
+            "w",
+            newline="",
+            encoding="utf-8",
+        ) as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=fieldnames,
+            )
+            writer.writeheader()
+
+    # --------------------------------------------------------------
+    # Aggregate summary JSON
+    # --------------------------------------------------------------
+
+    summary_json = (
+        output_path
+        / "summary.json"
+    )
+
+    summary_json.write_text(
         json.dumps(
-            run_dicts,
+            [
+                asdict(summary)
+                for summary in normalized_summaries
+            ],
             indent=2,
-            default=str,
         ),
         encoding="utf-8",
     )
 
-    summary_dicts = [asdict(summary) for summary in summaries]
-
-    (output_path / "summary.json").write_text(
-        json.dumps(
-            summary_dicts,
-            indent=2,
-        ),
-        encoding="utf-8",
+    return (
+        runs_csv,
+        runs_json,
+        summary_json,
     )
+
+
+__all__ = [
+    "DEFAULT_QPSO_CONDITIONS",
+    "ExperimentRun",
+    "ExperimentSpec",
+    "ExperimentSummary",
+    "run_ablation_suite",
+    "run_condition",
+    "summarize_runs",
+    "write_results",
+]

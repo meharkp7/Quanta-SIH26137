@@ -7,9 +7,8 @@ Step 8B-1
 The instrumentation layer consumes already-produced optimization candidates.
 It never evaluates, repairs, mutates, or otherwise changes them.
 
-Its primary purpose is to establish whether different representations of the
-same population carry different information about future optimization
-progress.
+Its purpose is to record optimizer-independent observations that can later be
+used to analyze convergence, diversity, feasibility and repair pressure.
 
 The layer is intentionally optimizer-agnostic.
 """
@@ -18,9 +17,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isfinite
-from typing import Iterable, Sequence
+from typing import Sequence
 
-from src.optim.common import FitnessResult
+from src.optim.common import (
+    FitnessResult,
+)
 from src.optim.diversity import (
     PopulationDiversity,
     RouteDistance,
@@ -39,7 +40,8 @@ class CandidateObservation:
     """
     Immutable observation of one already-evaluated candidate.
 
-    No object held here is modified by the instrumentation layer.
+    The instrumentation layer stores references to the already-produced route
+    plans but never mutates, evaluates or repairs them.
     """
 
     position: tuple[float, ...]
@@ -61,12 +63,38 @@ class CandidateObservation:
                     "candidate coordinates must be finite"
                 )
 
+        if not isinstance(
+            self.decoded_plan,
+            RoutePlan,
+        ):
+            raise InstrumentationError(
+                "decoded_plan must be a RoutePlan"
+            )
+
+        if not isinstance(
+            self.repaired_plan,
+            RoutePlan,
+        ):
+            raise InstrumentationError(
+                "repaired_plan must be a RoutePlan"
+            )
+
         if not isfinite(float(self.fitness)):
             raise InstrumentationError(
                 "candidate fitness must be finite"
             )
 
-        if not isfinite(float(self.repair_distance)):
+        if not isinstance(
+            self.feasible,
+            bool,
+        ):
+            raise InstrumentationError(
+                "candidate feasible flag must be boolean"
+            )
+
+        if not isfinite(
+            float(self.repair_distance)
+        ):
             raise InstrumentationError(
                 "repair_distance must be finite"
             )
@@ -87,8 +115,8 @@ class PopulationObservation:
     ``evaluations`` is the cumulative number of objective evaluations at the
     time this observation was captured.
 
-    ``best_fitness`` and ``mean_fitness`` are computed from the supplied
-    candidate observations, not from an independent evaluator call.
+    All aggregate statistics are derived exclusively from the supplied
+    candidate observations. No evaluator or repairer is invoked.
     """
 
     iteration: int
@@ -117,29 +145,82 @@ class PopulationObservation:
                 "population observation cannot be empty"
             )
 
-        if not 0 <= self.best_index < len(self.candidates):
+        if not (
+            0 <= self.best_index < len(self.candidates)
+        ):
             raise InstrumentationError(
                 "best_index is outside the candidate population"
             )
 
-        if not isfinite(float(self.best_fitness)):
+        if not isfinite(
+            float(self.best_fitness)
+        ):
             raise InstrumentationError(
                 "best_fitness must be finite"
             )
 
-        if not isfinite(float(self.mean_fitness)):
+        if not isfinite(
+            float(self.mean_fitness)
+        ):
             raise InstrumentationError(
                 "mean_fitness must be finite"
             )
 
-        if not 0.0 <= self.feasible_rate <= 1.0:
+        if not (
+            0.0 <= float(self.feasible_rate) <= 1.0
+        ):
             raise InstrumentationError(
                 "feasible_rate must lie in [0, 1]"
             )
 
-        if self.candidates[self.best_index].fitness != self.best_fitness:
+        selected = self.candidates[
+            self.best_index
+        ]
+
+        if (
+            float(selected.fitness)
+            != float(self.best_fitness)
+        ):
             raise InstrumentationError(
                 "best_index does not correspond to best_fitness"
+            )
+
+        expected_feasible_rate = (
+            sum(
+                candidate.feasible
+                for candidate in self.candidates
+            )
+            / len(self.candidates)
+        )
+
+        if (
+            abs(
+                float(self.feasible_rate)
+                - expected_feasible_rate
+            )
+            > 1e-12
+        ):
+            raise InstrumentationError(
+                "feasible_rate does not match candidate population"
+            )
+
+        expected_mean = (
+            sum(
+                float(candidate.fitness)
+                for candidate in self.candidates
+            )
+            / len(self.candidates)
+        )
+
+        if (
+            abs(
+                float(self.mean_fitness)
+                - expected_mean
+            )
+            > 1e-12
+        ):
+            raise InstrumentationError(
+                "mean_fitness does not match candidate population"
             )
 
 
@@ -152,30 +233,50 @@ class OptimizationTrace:
     Evaluation counts must be non-decreasing.
     """
 
-    observations: tuple[PopulationObservation, ...]
+    observations: tuple[
+        PopulationObservation,
+        ...
+    ]
 
     def __post_init__(self) -> None:
         previous_iteration = -1
         previous_evaluations = -1
 
         for observation in self.observations:
-            if observation.iteration <= previous_iteration:
+            if (
+                observation.iteration
+                <= previous_iteration
+            ):
                 raise InstrumentationError(
                     "trace iterations must be strictly increasing"
                 )
 
-            if observation.evaluations < previous_evaluations:
+            if (
+                observation.evaluations
+                < previous_evaluations
+            ):
                 raise InstrumentationError(
                     "trace evaluation counts must be non-decreasing"
                 )
 
-            previous_iteration = observation.iteration
-            previous_evaluations = observation.evaluations
+            previous_iteration = (
+                observation.iteration
+            )
+            previous_evaluations = (
+                observation.evaluations
+            )
 
     @property
     def iterations(self) -> tuple[int, ...]:
         return tuple(
             observation.iteration
+            for observation in self.observations
+        )
+
+    @property
+    def evaluations(self) -> tuple[int, ...]:
+        return tuple(
+            observation.evaluations
             for observation in self.observations
         )
 
@@ -194,81 +295,129 @@ class OptimizationTrace:
         )
 
     @property
-    def coordinate_diversity(self) -> tuple[float, ...]:
+    def coordinate_diversity(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.diversity.genotype_coordinate
             for observation in self.observations
         )
 
     @property
-    def decoded_assignment_diversity(self) -> tuple[float, ...]:
+    def decoded_assignment_diversity(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.diversity.decoded_assignment
             for observation in self.observations
         )
 
     @property
-    def decoded_precedence_diversity(self) -> tuple[float, ...]:
+    def decoded_precedence_diversity(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.diversity.decoded_precedence
             for observation in self.observations
         )
 
     @property
-    def decoded_structure_diversity(self) -> tuple[float, ...]:
+    def decoded_structure_diversity(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.diversity.decoded_structure
             for observation in self.observations
         )
 
     @property
-    def repaired_assignment_diversity(self) -> tuple[float, ...]:
+    def repaired_assignment_diversity(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.diversity.repaired_assignment
             for observation in self.observations
         )
 
     @property
-    def repaired_precedence_diversity(self) -> tuple[float, ...]:
+    def repaired_precedence_diversity(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.diversity.repaired_precedence
             for observation in self.observations
         )
 
     @property
-    def repaired_structure_diversity(self) -> tuple[float, ...]:
+    def repaired_structure_diversity(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.diversity.repaired_structure
             for observation in self.observations
         )
 
     @property
-    def repair_assignment_pressure(self) -> tuple[float, ...]:
+    def repair_assignment_pressure(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.repair_pressure.assignment
             for observation in self.observations
         )
 
     @property
-    def repair_precedence_pressure(self) -> tuple[float, ...]:
+    def repair_precedence_pressure(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.repair_pressure.precedence
             for observation in self.observations
         )
 
     @property
-    def repair_structure_pressure(self) -> tuple[float, ...]:
+    def repair_structure_pressure(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.repair_pressure.structure
             for observation in self.observations
         )
 
     @property
-    def feasible_rate(self) -> tuple[float, ...]:
+    def feasible_rate(
+        self,
+    ) -> tuple[float, ...]:
         return tuple(
             observation.feasible_rate
             for observation in self.observations
         )
+
+
+def _best_candidate_index(
+    candidates: Sequence[CandidateObservation],
+) -> int:
+    """
+    Select the candidate with the lowest recorded fitness.
+
+    Instrumentation is observational: ``best_fitness`` describes the
+    numerical best candidate in the supplied population. Feasibility is
+    recorded separately through ``feasible`` and ``feasible_rate``.
+    """
+
+    if not candidates:
+        raise InstrumentationError(
+            "cannot select a best candidate from an empty population"
+        )
+
+    return min(
+        range(len(candidates)),
+        key=lambda index: (
+            float(candidates[index].fitness),
+            index,
+        ),
+    )
+
 
 def observation_from_candidates(
     *,
@@ -280,16 +429,47 @@ def observation_from_candidates(
 ) -> PopulationObservation:
     """
     Construct one immutable population observation from already-computed
-    candidate results.
+    candidate observations.
 
     No evaluator or repairer is invoked.
     """
 
-    candidate_tuple = tuple(candidates)
+    candidate_tuple = tuple(
+        candidates
+    )
 
     if not candidate_tuple:
         raise InstrumentationError(
             "cannot observe an empty candidate population"
+        )
+
+    if iteration < 0:
+        raise InstrumentationError(
+            "iteration must be non-negative"
+        )
+
+    if evaluations < 0:
+        raise InstrumentationError(
+            "evaluations must be non-negative"
+        )
+
+    if not isfinite(
+        float(lower_bound)
+    ):
+        raise InstrumentationError(
+            "lower_bound must be finite"
+        )
+
+    if not isfinite(
+        float(upper_bound)
+    ):
+        raise InstrumentationError(
+            "upper_bound must be finite"
+        )
+
+    if lower_bound >= upper_bound:
+        raise InstrumentationError(
+            "lower_bound must be strictly smaller than upper_bound"
         )
 
     positions = tuple(
@@ -320,16 +500,12 @@ def observation_from_candidates(
         repaired_plans,
     )
 
-    best_index = min(
-        range(len(candidate_tuple)),
-        key=lambda index: (
-            candidate_tuple[index].fitness,
-            index,
-        ),
+    best_index = _best_candidate_index(
+        candidate_tuple
     )
 
     fitness_values = tuple(
-        candidate.fitness
+        float(candidate.fitness)
         for candidate in candidate_tuple
     )
 
@@ -344,9 +520,17 @@ def observation_from_candidates(
         candidates=candidate_tuple,
         diversity=diversity,
         repair_pressure=repair_pressure,
-        best_fitness=fitness_values[best_index],
-        mean_fitness=sum(fitness_values) / len(fitness_values),
-        feasible_rate=feasible_count / len(candidate_tuple),
+        best_fitness=fitness_values[
+            best_index
+        ],
+        mean_fitness=(
+            sum(fitness_values)
+            / len(fitness_values)
+        ),
+        feasible_rate=(
+            feasible_count
+            / len(candidate_tuple)
+        ),
         best_index=best_index,
     )
 
@@ -364,13 +548,30 @@ def candidate_observation_from_fitness(
     This adapter intentionally does not re-run the objective oracle.
     """
 
+    if not isinstance(
+        result,
+        FitnessResult,
+    ):
+        raise InstrumentationError(
+            "result must be a FitnessResult"
+        )
+
     return CandidateObservation(
-        position=tuple(float(value) for value in position),
+        position=tuple(
+            float(value)
+            for value in position
+        ),
         decoded_plan=decoded_plan,
         repaired_plan=repaired_plan,
-        fitness=float(result.fitness),
-        feasible=bool(result.feasible),
-        repair_distance=float(result.repair_distance),
+        fitness=float(
+            result.fitness
+        ),
+        feasible=bool(
+            result.feasible
+        ),
+        repair_distance=float(
+            result.repair_distance
+        ),
     )
 
 
@@ -378,8 +579,8 @@ class OptimizationTraceRecorder:
     """
     Mutable recording facade around immutable observations.
 
-    The recorder itself is deliberately small: it only stores observations
-    and never participates in optimization.
+    The recorder only stores observations and never participates in
+    optimization.
     """
 
     def __init__(
@@ -388,12 +589,16 @@ class OptimizationTraceRecorder:
         lower_bound: float = 0.0,
         upper_bound: float = 1.0,
     ) -> None:
-        if not isfinite(float(lower_bound)):
+        if not isfinite(
+            float(lower_bound)
+        ):
             raise InstrumentationError(
                 "lower_bound must be finite"
             )
 
-        if not isfinite(float(upper_bound)):
+        if not isfinite(
+            float(upper_bound)
+        ):
             raise InstrumentationError(
                 "upper_bound must be finite"
             )
@@ -403,16 +608,25 @@ class OptimizationTraceRecorder:
                 "lower_bound must be strictly smaller than upper_bound"
             )
 
-        self._lower_bound = float(lower_bound)
-        self._upper_bound = float(upper_bound)
-        self._observations: list[PopulationObservation] = []
+        self._lower_bound = float(
+            lower_bound
+        )
+        self._upper_bound = float(
+            upper_bound
+        )
+
+        self._observations: list[
+            PopulationObservation
+        ] = []
 
     def record(
         self,
         *,
         iteration: int,
         evaluations: int,
-        candidates: Sequence[CandidateObservation],
+        candidates: Sequence[
+            CandidateObservation
+        ],
     ) -> PopulationObservation:
         observation = observation_from_candidates(
             iteration=iteration,
@@ -425,30 +639,57 @@ class OptimizationTraceRecorder:
         if self._observations:
             previous = self._observations[-1]
 
-            if observation.iteration <= previous.iteration:
+            if (
+                observation.iteration
+                <= previous.iteration
+            ):
                 raise InstrumentationError(
                     "recorded iterations must be strictly increasing"
                 )
 
-            if observation.evaluations < previous.evaluations:
+            if (
+                observation.evaluations
+                < previous.evaluations
+            ):
                 raise InstrumentationError(
                     "recorded evaluations must be non-decreasing"
                 )
 
-        self._observations.append(observation)
+        self._observations.append(
+            observation
+        )
 
         return observation
 
     def snapshot(self) -> OptimizationTrace:
+        """
+        Return an immutable trace snapshot.
+
+        Subsequent recorder mutations do not affect the returned trace.
+        """
+
         return OptimizationTrace(
-            observations=tuple(self._observations)
+            observations=tuple(
+                self._observations
+            )
         )
 
     def clear(self) -> None:
         """
-        Remove recorded observations.
+        Remove all recorded observations.
 
-        Clearing instrumentation has no effect on optimization state.
+        Clearing instrumentation has no effect on optimizer state.
         """
 
         self._observations.clear()
+
+
+__all__ = [
+    "CandidateObservation",
+    "InstrumentationError",
+    "OptimizationTrace",
+    "OptimizationTraceRecorder",
+    "PopulationObservation",
+    "candidate_observation_from_fitness",
+    "observation_from_candidates",
+]
