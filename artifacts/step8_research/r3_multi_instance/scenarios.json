@@ -1,0 +1,10 @@
+[
+  {
+    "scenario_id": "dynamic-cvrp:10:26157",
+    "scenario_seed": 26157,
+    "customers": 10,
+    "vehicles": 2,
+    "nodes": 203,
+    "edges": 676
+  }
+]

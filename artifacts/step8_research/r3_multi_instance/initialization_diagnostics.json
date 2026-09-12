@@ -1,0 +1,28 @@
+[
+  {
+    "scenario_id": "dynamic-cvrp:10:26157",
+    "scenario_seed": 26157,
+    "customers": 10,
+    "optimizer_seed": 1,
+    "diagnostics": {
+      "optimizer_seed": 1,
+      "requested_population": 20,
+      "unique_feasible_population": 20,
+      "feasible_fraction": 1.0,
+      "route_diversity_mean_pairwise_exact": 1.0,
+      "heuristic_counts": {
+        "earliest_deadline": 20,
+        "earliest_release": 0,
+        "largest_demand": 0,
+        "customer_id": 0,
+        "nearest_feasible": 0
+      },
+      "operation_counts": {
+        "constructive": 1,
+        "relocate": 19,
+        "swap": 0,
+        "reverse": 0
+      }
+    }
+  }
+]

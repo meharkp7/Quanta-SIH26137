@@ -1,0 +1,38 @@
+[
+  {
+    "condition": "canonical",
+    "algorithm": "qpso",
+    "runs": 1,
+    "best_fitness_mean": 16019.156757506447,
+    "best_fitness_std": 0.0,
+    "feasible_rate": 1.0,
+    "evaluations_mean": 30.0,
+    "evaluations_std": 0.0,
+    "iterations_mean": 1.0,
+    "iterations_std": 0.0,
+    "coordinate_diversity_final_mean": 0.2509977095857326,
+    "coordinate_diversity_final_std": 0.0,
+    "route_diversity_final_mean": 0.9947368421052631,
+    "route_diversity_final_std": 0.0,
+    "repair_distance_mean": 0.0,
+    "repair_distance_std": 0.0
+  },
+  {
+    "condition": "matched_pso",
+    "algorithm": "pso",
+    "runs": 1,
+    "best_fitness_mean": 16019.156757506447,
+    "best_fitness_std": 0.0,
+    "feasible_rate": 1.0,
+    "evaluations_mean": 30.0,
+    "evaluations_std": 0.0,
+    "iterations_mean": 1.0,
+    "iterations_std": 0.0,
+    "coordinate_diversity_final_mean": 0.21842908716535542,
+    "coordinate_diversity_final_std": 0.0,
+    "route_diversity_final_mean": 0.9789473684210527,
+    "route_diversity_final_std": 0.0,
+    "repair_distance_mean": 0.0,
+    "repair_distance_std": 0.0
+  }
+]

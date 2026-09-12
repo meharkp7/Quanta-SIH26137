@@ -1,0 +1,2 @@
+pair_index,optimizer_seed,qpso_best_fitness,pso_best_fitness,qpso_minus_pso,qpso_feasible,pso_feasible,qpso_coordinate_diversity_final,pso_coordinate_diversity_final,qpso_route_diversity_final,pso_route_diversity_final,customers,scenario_seed
+0,1,16019.156757506447,16019.156757506447,0.0,True,True,0.2509977095857326,0.21842908716535542,0.9947368421052631,0.9789473684210527,10,26157
