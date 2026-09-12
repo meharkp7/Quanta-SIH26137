@@ -6,5 +6,117 @@
     "vehicles": 2,
     "nodes": 203,
     "edges": 676
+  },
+  {
+    "scenario_id": "dynamic-cvrp:10:26158",
+    "scenario_seed": 26158,
+    "customers": 10,
+    "vehicles": 2,
+    "nodes": 205,
+    "edges": 746
+  },
+  {
+    "scenario_id": "dynamic-cvrp:10:26159",
+    "scenario_seed": 26159,
+    "customers": 10,
+    "vehicles": 2,
+    "nodes": 205,
+    "edges": 680
+  },
+  {
+    "scenario_id": "dynamic-cvrp:10:26160",
+    "scenario_seed": 26160,
+    "customers": 10,
+    "vehicles": 2,
+    "nodes": 203,
+    "edges": 675
+  },
+  {
+    "scenario_id": "dynamic-cvrp:10:26161",
+    "scenario_seed": 26161,
+    "customers": 10,
+    "vehicles": 2,
+    "nodes": 206,
+    "edges": 682
+  },
+  {
+    "scenario_id": "dynamic-cvrp:20:26157",
+    "scenario_seed": 26157,
+    "customers": 20,
+    "vehicles": 4,
+    "nodes": 213,
+    "edges": 695
+  },
+  {
+    "scenario_id": "dynamic-cvrp:20:26158",
+    "scenario_seed": 26158,
+    "customers": 20,
+    "vehicles": 4,
+    "nodes": 211,
+    "edges": 689
+  },
+  {
+    "scenario_id": "dynamic-cvrp:20:26159",
+    "scenario_seed": 26159,
+    "customers": 20,
+    "vehicles": 4,
+    "nodes": 215,
+    "edges": 699
+  },
+  {
+    "scenario_id": "dynamic-cvrp:20:26160",
+    "scenario_seed": 26160,
+    "customers": 20,
+    "vehicles": 4,
+    "nodes": 209,
+    "edges": 687
+  },
+  {
+    "scenario_id": "dynamic-cvrp:20:26161",
+    "scenario_seed": 26161,
+    "customers": 20,
+    "vehicles": 4,
+    "nodes": 213,
+    "edges": 695
+  },
+  {
+    "scenario_id": "dynamic-cvrp:30:26157",
+    "scenario_seed": 26157,
+    "customers": 30,
+    "vehicles": 5,
+    "nodes": 219,
+    "edges": 707
+  },
+  {
+    "scenario_id": "dynamic-cvrp:30:26158",
+    "scenario_seed": 26158,
+    "customers": 30,
+    "vehicles": 6,
+    "nodes": 220,
+    "edges": 708
+  },
+  {
+    "scenario_id": "dynamic-cvrp:30:26159",
+    "scenario_seed": 26159,
+    "customers": 30,
+    "vehicles": 6,
+    "nodes": 218,
+    "edges": 704
+  },
+  {
+    "scenario_id": "dynamic-cvrp:30:26160",
+    "scenario_seed": 26160,
+    "customers": 30,
+    "vehicles": 5,
+    "nodes": 221,
+    "edges": 705
+  },
+  {
+    "scenario_id": "dynamic-cvrp:30:26161",
+    "scenario_seed": 26161,
+    "customers": 30,
+    "vehicles": 6,
+    "nodes": 221,
+    "edges": 709
   }
 ]
