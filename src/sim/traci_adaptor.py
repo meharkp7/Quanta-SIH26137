@@ -188,17 +188,21 @@ class TraciAdapter:
 
         binary = str(_find_sumo_binary(self.gui))
 
+        command = [
+            binary,
+            "-c", str(self._sumo_cfg),
+            "--step-length", str(self.step_length_s),
+            "--no-step-log",
+            "--duration-log.disable",
+            "--tripinfo-output", str(self.output_dir / "tripinfo.xml"),
+            "--fcd-output", str(self.output_dir / "fcd.xml"),
+            "--log", str(self.output_dir / "sumo.log"),
+        ]
+        if self.gui:
+            command.extend(["--start", "--delay", "80"])
+
         traci.start(
-            [
-                binary,
-                "-c", str(self._sumo_cfg),
-                "--step-length", str(self.step_length_s),
-                "--no-step-log",
-                "--duration-log.disable",
-                "--tripinfo-output", str(self.output_dir / "tripinfo.xml"),
-                "--fcd-output", str(self.output_dir / "fcd.xml"),
-                "--log", str(self.output_dir / "sumo.log"),
-            ],
+            command,
             label=self._label,
         )
         self._traci = traci.getConnection(self._label)

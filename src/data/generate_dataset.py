@@ -285,6 +285,25 @@ def build_parser() -> argparse.ArgumentParser:
     canonical.add_argument("output", type=Path)
     canonical.add_argument("--interval-s", type=int, default=None)
 
+    causal_pilot = sub.add_parser(
+        "causal-pilot",
+        help="Generate the Step 11 six-episode causal pilot with matured labels",
+    )
+    causal_pilot.add_argument("scenario", type=Path)
+    causal_pilot.add_argument("output", type=Path)
+    causal_pilot.add_argument("--duration-s", type=int, default=2400)
+    causal_pilot.add_argument("--interval-s", type=int, default=60)
+    causal_pilot.add_argument("--warmup-s", type=int, default=300)
+    causal_pilot.add_argument("--seed", type=int, default=26137)
+
+    windows = sub.add_parser(
+        "forecast-windows",
+        help="Build Step 12 [B,L,E,F] windows and baselines from a causal pilot",
+    )
+    windows.add_argument("pilot", type=Path)
+    windows.add_argument("output", type=Path)
+    windows.add_argument("scenario", type=Path)
+
     return parser
 
 def cmd_metrla_spatial(args) -> int:
@@ -689,6 +708,41 @@ def main() -> int:
         print("Validation: PASS")
 
         return 0
+
+    if args.mode == "causal-pilot":
+        from src.contracts.scenario import Scenario
+        from src.data.causal_episodes import generate_causal_pilot
+
+        scenario = Scenario.model_validate_json(
+            args.scenario.read_text(encoding="utf-8")
+        )
+        coverage = generate_causal_pilot(
+            scenario,
+            args.output,
+            duration_s=args.duration_s,
+            interval_s=args.interval_s,
+            warmup_s=args.warmup_s,
+            base_seed=args.seed,
+        )
+        print(f"Generated causal pilot: {args.output}")
+        print(
+            f"episodes={coverage['episodes']} "
+            f"wall_s={coverage['wall_clock_s']} "
+            f"disk={coverage['disk_bytes']}"
+        )
+        return 0
+
+    if args.mode == "forecast-windows":
+        from src.learning.build_windows import main as build_windows_main
+        import sys
+
+        sys.argv = [
+            "forecast-windows",
+            str(args.pilot),
+            str(args.output),
+            str(args.scenario),
+        ]
+        return build_windows_main()
 
     parser.error(f"unsupported mode: {args.mode}")
     return 2
