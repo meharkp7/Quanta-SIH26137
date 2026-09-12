@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 import random
-from typing import Sequence
+from typing import Callable, Sequence
 
 from src.optim.common import (
-    FitnessOracle,
     FitnessResult,
     OptimizationConfig,
     OptimizationError,
@@ -13,21 +13,29 @@ from src.optim.common import (
     Vector,
     clamp_vector,
     coordinate_diversity,
+    fitness_better,
     route_diversity,
 )
 
 
 @dataclass(frozen=True)
-class MatchedPSOConfig(OptimizationConfig):
+class PSOConfig(OptimizationConfig):
     """
-    Configuration for the matched classical PSO comparator.
+    Configuration for the matched classical PSO baseline.
 
-    This is intentionally a conventional global-best PSO:
-      v <- w*v + c1*r1*(pbest-x) + c2*r2*(gbest-x)
+    The baseline uses conventional global-best PSO:
 
-    The configuration inherits the common optimization contract so that
-    PSO and QPSO can be compared under the same dimensionality, population
-    size, bounds, seed and evaluation budget.
+        v(t+1) =
+            w(t) v(t)
+            + c1 r1 (pbest - x)
+            + c2 r2 (gbest - x)
+
+        x(t+1) = x(t) + v(t+1)
+
+    The implementation is deliberately matched to QPSO on the common
+    optimization contract: bounds, population size, seed, initial
+    population,
+    evaluation budget and feasibility semantics.
     """
 
     inertia_max: float = 0.90
@@ -41,9 +49,25 @@ class MatchedPSOConfig(OptimizationConfig):
     def __post_init__(self) -> None:
         super().__post_init__()
 
-        if not 0.0 <= self.inertia_min <= self.inertia_max:
+        values = (
+            self.inertia_max,
+            self.inertia_min,
+            self.cognitive,
+            self.social,
+            self.velocity_fraction,
+        )
+
+        if any(not isfinite(float(value)) for value in values):
             raise OptimizationError(
-                "inertia bounds must satisfy 0 <= inertia_min <= inertia_max"
+                "PSO parameters must be finite"
+            )
+
+        if not (
+            0.0 <= self.inertia_min <= self.inertia_max
+        ):
+            raise OptimizationError(
+                "inertia bounds must satisfy "
+                "0 <= inertia_min <= inertia_max"
             )
 
         if self.cognitive < 0.0:
@@ -56,18 +80,18 @@ class MatchedPSOConfig(OptimizationConfig):
                 "social coefficient must be non-negative"
             )
 
-        if not 0.0 < self.velocity_fraction <= 1.0:
+        if not (
+            0.0 < self.velocity_fraction <= 1.0
+        ):
             raise OptimizationError(
                 "velocity_fraction must be in (0, 1]"
             )
 
 
-# Backward-compatible name used by the experiment runner.
-PSOConfig = MatchedPSOConfig
-
-
 @dataclass
 class _Particle:
+    """Mutable internal PSO particle state."""
+
     position: list[float]
     velocity: list[float]
     pbest_position: list[float]
@@ -76,27 +100,37 @@ class _Particle:
 
 class ParticleSwarmOptimizer:
     """
-    Classical global-best PSO using the common optimization contract.
+    Classical global-best PSO.
 
-    Important comparison properties:
-      * same continuous search-space dimensionality as QPSO
-      * same bounds
-      * same population size
-      * same seed
-      * same initial population when supplied
-      * same evaluation-budget semantics
-      * same FitnessOracle interface
+    This class intentionally contains no routing-specific behavior.
+    Domain-specific decoding, repair and feasibility evaluation belong to
+    the supplied oracle.
 
-    No route-specific repair or heuristic is performed inside PSO.
-    Route feasibility remains the responsibility of the shared oracle.
+    The oracle is accepted through a callable contract rather than a strict
+    FitnessOracle isinstance check. This permits instrumented/decorated
+    oracles to participate in Step 8 experiments without changing optimizer
+    semantics.
     """
 
     def __init__(
         self,
-        config: MatchedPSOConfig,
-        oracle: FitnessOracle,
+        config: PSOConfig,
+        oracle: Callable[
+            [Sequence[float]],
+            FitnessResult,
+        ],
         initial_population: Sequence[Sequence[float]] | None = None,
     ) -> None:
+        if not isinstance(config, PSOConfig):
+            raise OptimizationError(
+                "config must be a PSOConfig"
+            )
+
+        if not callable(oracle):
+            raise OptimizationError(
+                "oracle must be callable"
+            )
+
         self.config = config
         self.oracle = oracle
         self._rng = random.Random(config.seed)
@@ -111,18 +145,62 @@ class ParticleSwarmOptimizer:
         )
 
         if self._initial_population is not None:
-            if len(self._initial_population) != config.population_size:
+            self._validate_initial_population(
+                self._initial_population
+            )
+
+    # ------------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------------
+
+    def _validate_initial_population(
+        self,
+        population: Sequence[Sequence[float]],
+    ) -> None:
+        if len(population) != self.config.population_size:
+            raise OptimizationError(
+                "initial_population size must equal population_size"
+            )
+
+        for index, position in enumerate(population):
+            if len(position) != self.config.dimensions:
                 raise OptimizationError(
-                    "initial_population size must equal population_size"
+                    "initial_population dimension mismatch "
+                    f"at index {index}: expected "
+                    f"{self.config.dimensions}, "
+                    f"got {len(position)}"
                 )
 
-            if any(
-                len(row) != config.dimensions
-                for row in self._initial_population
-            ):
-                raise OptimizationError(
-                    "initial_population dimension mismatch"
-                )
+            for dimension, value in enumerate(position):
+                if not isfinite(float(value)):
+                    raise OptimizationError(
+                        "initial_population contains a "
+                        f"non-finite value at "
+                        f"[{index}][{dimension}]"
+                    )
+
+    @staticmethod
+    def _validate_fitness_result(
+        result: FitnessResult,
+    ) -> None:
+        if not isinstance(result, FitnessResult):
+            raise OptimizationError(
+                "fitness oracle must return FitnessResult"
+            )
+
+        if not isfinite(float(result.fitness)):
+            raise OptimizationError(
+                "fitness oracle returned non-finite fitness"
+            )
+
+        if not isfinite(float(result.repair_distance)):
+            raise OptimizationError(
+                "fitness oracle returned non-finite repair distance"
+            )
+
+    # ------------------------------------------------------------------
+    # Initialization
+    # ------------------------------------------------------------------
 
     def _initial_positions(self) -> list[list[float]]:
         if self._initial_population is not None:
@@ -148,10 +226,99 @@ class ParticleSwarmOptimizer:
             for _ in range(self.config.population_size)
         ]
 
-    def _initial_velocity_limit(self) -> float:
-        return self.config.velocity_fraction * (
-            self.config.upper_bound - self.config.lower_bound
+    def _velocity_limit(self) -> float:
+        return (
+            self.config.velocity_fraction
+            * (
+                self.config.upper_bound
+                - self.config.lower_bound
+            )
         )
+
+    def _initial_velocity(self) -> list[float]:
+        limit = self._velocity_limit()
+
+        return [
+            self._rng.uniform(-limit, limit)
+            for _ in range(self.config.dimensions)
+        ]
+
+    def _initialize_particles(
+        self,
+    ) -> tuple[list[_Particle], int]:
+        positions = self._initial_positions()
+
+        particles: list[_Particle] = []
+        evaluations = 0
+
+        for position in positions:
+            if evaluations >= self.config.max_evaluations:
+                raise OptimizationError(
+                    "evaluation budget exhausted during "
+                    "initial population evaluation"
+                )
+
+            result = self.oracle(position)
+            self._validate_fitness_result(result)
+
+            evaluations += 1
+
+            particles.append(
+                _Particle(
+                    position=list(position),
+                    velocity=self._initial_velocity(),
+                    pbest_position=list(position),
+                    pbest_result=result,
+                )
+            )
+
+        return particles, evaluations
+
+    # ------------------------------------------------------------------
+    # Selection
+    # ------------------------------------------------------------------
+
+    def _better(
+        self,
+        candidate: FitnessResult,
+        incumbent: FitnessResult,
+    ) -> bool:
+        """
+        Shared feasibility-first comparison.
+
+        A feasible solution dominates an infeasible solution regardless of
+        raw penalty/fitness magnitude. Among solutions with equal feasibility,
+        lower fitness wins subject to the configured tolerance.
+        """
+        return fitness_better(
+            candidate,
+            incumbent,
+            tolerance=self.config.tolerance,
+        )
+
+    def _best_particle_index(
+        self,
+        particles: Sequence[_Particle],
+    ) -> int:
+        if not particles:
+            raise OptimizationError(
+                "cannot select best particle from empty population"
+            )
+
+        best_index = 0
+
+        for index in range(1, len(particles)):
+            if self._better(
+                particles[index].pbest_result,
+                particles[best_index].pbest_result,
+            ):
+                best_index = index
+
+        return best_index
+
+    # ------------------------------------------------------------------
+    # Inertia schedule
+    # ------------------------------------------------------------------
 
     def _inertia(
         self,
@@ -160,6 +327,8 @@ class ParticleSwarmOptimizer:
     ) -> float:
         """
         Linearly decrease inertia from inertia_max to inertia_min.
+
+        Iteration zero corresponds to the first post-initialization update.
         """
         if max_iterations <= 1:
             return self.config.inertia_min
@@ -172,178 +341,267 @@ class ParticleSwarmOptimizer:
             ),
         )
 
-        return self.config.inertia_max + ratio * (
-            self.config.inertia_min - self.config.inertia_max
+        return (
+            self.config.inertia_max
+            + ratio
+            * (
+                self.config.inertia_min
+                - self.config.inertia_max
+            )
         )
 
-    def optimize(self) -> OptimizationResult:
-        positions = self._initial_positions()
-        velocity_limit = self._initial_velocity_limit()
+    # ------------------------------------------------------------------
+    # Particle update
+    # ------------------------------------------------------------------
 
-        particles: list[_Particle] = []
-        evaluations = 0
+    def _update_particle(
+        self,
+        particle: _Particle,
+        global_best: _Particle,
+        inertia: float,
+    ) -> list[float]:
+        """
+        Generate one conventional PSO candidate.
 
-        # ---------------------------------------------------------------
-        # Initial population
-        # ---------------------------------------------------------------
-        for position in positions:
-            result = self.oracle(position)
-            evaluations += 1
+        r1 and r2 are independently sampled for every coordinate.
+        """
 
-            velocity = [
-                self._rng.uniform(
-                    -velocity_limit,
-                    velocity_limit,
+        velocity_limit = self._velocity_limit()
+
+        next_velocity: list[float] = []
+        next_position: list[float] = []
+
+        for dimension in range(self.config.dimensions):
+            r1 = self._rng.random()
+            r2 = self._rng.random()
+
+            current = float(
+                particle.position[dimension]
+            )
+
+            personal_best = float(
+                particle.pbest_position[dimension]
+            )
+
+            global_best_value = float(
+                global_best.pbest_position[dimension]
+            )
+
+            velocity = (
+                inertia
+                * particle.velocity[dimension]
+                + self.config.cognitive
+                * r1
+                * (
+                    personal_best
+                    - current
                 )
-                for _ in range(self.config.dimensions)
-            ]
-
-            particles.append(
-                _Particle(
-                    position=list(position),
-                    velocity=velocity,
-                    pbest_position=list(position),
-                    pbest_result=result,
+                + self.config.social
+                * r2
+                * (
+                    global_best_value
+                    - current
                 )
             )
 
-        global_best = min(
-            particles,
-            key=lambda particle: particle.pbest_result.fitness,
+            if not isfinite(velocity):
+                raise OptimizationError(
+                    "PSO generated a non-finite velocity"
+                )
+
+            velocity = max(
+                -velocity_limit,
+                min(
+                    velocity_limit,
+                    velocity,
+                ),
+            )
+
+            position = current + velocity
+
+            if not isfinite(position):
+                raise OptimizationError(
+                    "PSO generated a non-finite position"
+                )
+
+            next_velocity.append(velocity)
+            next_position.append(position)
+
+        particle.velocity = next_velocity
+
+        return list(
+            clamp_vector(
+                next_position,
+                self.config.lower_bound,
+                self.config.upper_bound,
+            )
         )
 
-        history_best = [
-            global_best.pbest_result.fitness
+    # ------------------------------------------------------------------
+    # Optimization
+    # ------------------------------------------------------------------
+
+    def optimize(self) -> OptimizationResult:
+        """
+        Run PSO until the exact configured evaluation budget is consumed.
+
+        The initial population counts toward the budget. If the remaining
+        budget is smaller than the population size, only the required prefix
+        of the generated population is evaluated.
+        """
+
+        particles, evaluations = (
+            self._initialize_particles()
+        )
+
+        global_best = particles[
+            self._best_particle_index(particles)
         ]
 
-        history_mean = [
+        # Detach the global-best state from mutable particle state.
+        global_best = _Particle(
+            position=list(global_best.position),
+            velocity=list(global_best.velocity),
+            pbest_position=list(global_best.pbest_position),
+            pbest_result=global_best.pbest_result,
+        )
+
+        history_best: list[float] = [
+            float(
+                global_best.pbest_result.fitness
+            )
+        ]
+
+        history_mean: list[float] = [
             sum(
-                particle.pbest_result.fitness
+                float(
+                    particle.pbest_result.fitness
+                )
                 for particle in particles
             )
             / len(particles)
         ]
 
-        history_coordinate = [
+        history_coordinate: list[float] = [
             coordinate_diversity(
-                [particle.position for particle in particles]
+                [
+                    particle.position
+                    for particle in particles
+                ]
             )
         ]
 
-        history_route = [
+        history_route: list[float] = [
             route_diversity(
-                [particle.pbest_result for particle in particles]
+                [
+                    particle.pbest_result
+                    for particle in particles
+                ]
             )
         ]
 
         iterations = 0
 
-        # Number of population-sized update rounds required to exhaust
-        # the remaining evaluation budget.
-        max_iterations = max(
-            1,
-            (
-                self.config.max_evaluations
-                - self.config.population_size
-                + self.config.population_size
-                - 1
-            )
-            // self.config.population_size,
+        # The number of full iterations is used only to define the inertia
+        # schedule. The evaluation loop itself remains strictly budget-based.
+        remaining_evaluations = (
+            self.config.max_evaluations
+            - self.config.population_size
         )
 
-        # ---------------------------------------------------------------
-        # Main PSO loop
-        # ---------------------------------------------------------------
+        max_iterations = (
+            remaining_evaluations
+            + self.config.population_size
+            - 1
+        ) // self.config.population_size
+
         while evaluations < self.config.max_evaluations:
             inertia = self._inertia(
                 iterations,
                 max_iterations,
             )
 
-            iterations += 1
+            candidate_positions = [
+                self._update_particle(
+                    particle,
+                    global_best,
+                    inertia,
+                )
+                for particle in particles
+            ]
 
             remaining = (
-                self.config.max_evaluations - evaluations
+                self.config.max_evaluations
+                - evaluations
             )
 
-            # Only evaluate as many particles as the remaining budget
-            # allows. This guarantees an exact evaluation-budget contract.
-            active_particles = particles[:remaining]
+            evaluated_count = min(
+                len(candidate_positions),
+                remaining,
+            )
 
-            for particle in active_particles:
-                for dimension in range(self.config.dimensions):
-                    r1 = self._rng.random()
-                    r2 = self._rng.random()
-
-                    particle.velocity[dimension] = (
-                        inertia * particle.velocity[dimension]
-                        + self.config.cognitive
-                        * r1
-                        * (
-                            particle.pbest_position[dimension]
-                            - particle.position[dimension]
-                        )
-                        + self.config.social
-                        * r2
-                        * (
-                            global_best.pbest_position[dimension]
-                            - particle.position[dimension]
-                        )
-                    )
-
-                    particle.velocity[dimension] = min(
-                        velocity_limit,
-                        max(
-                            -velocity_limit,
-                            particle.velocity[dimension],
-                        ),
-                    )
-
-                    particle.position[dimension] += (
-                        particle.velocity[dimension]
-                    )
-
-                particle.position = list(
-                    clamp_vector(
-                        particle.position,
-                        self.config.lower_bound,
-                        self.config.upper_bound,
-                    )
+            for index in range(evaluated_count):
+                particle = particles[index]
+                candidate_position = (
+                    candidate_positions[index]
                 )
 
-                result = self.oracle(particle.position)
+                result = self.oracle(
+                    candidate_position
+                )
+                self._validate_fitness_result(result)
+
                 evaluations += 1
 
-                # -------------------------------------------------------
-                # Personal-best update
-                # -------------------------------------------------------
-                if (
-                    result.fitness
-                    < particle.pbest_result.fitness
-                    - self.config.tolerance
+                particle.position = list(
+                    candidate_position
+                )
+
+                # ------------------------------------------------------
+                # Personal best
+                # ------------------------------------------------------
+                if self._better(
+                    result,
+                    particle.pbest_result,
                 ):
                     particle.pbest_position = list(
-                        particle.position
+                        candidate_position
                     )
                     particle.pbest_result = result
 
-                    # ---------------------------------------------------
-                    # Global-best update
-                    # ---------------------------------------------------
-                    if (
-                        result.fitness
-                        < global_best.pbest_result.fitness
-                        - self.config.tolerance
-                    ):
-                        global_best = particle
+                # ------------------------------------------------------
+                # Global best
+                # ------------------------------------------------------
+                if self._better(
+                    result,
+                    global_best.pbest_result,
+                ):
+                    global_best = _Particle(
+                        position=list(
+                            candidate_position
+                        ),
+                        velocity=list(
+                            particle.velocity
+                        ),
+                        pbest_position=list(
+                            candidate_position
+                        ),
+                        pbest_result=result,
+                    )
+
+            iterations += 1
 
             history_best.append(
-                global_best.pbest_result.fitness
+                float(
+                    global_best.pbest_result.fitness
+                )
             )
 
             history_mean.append(
                 sum(
-                    particle.pbest_result.fitness
+                    float(
+                        particle.pbest_result.fitness
+                    )
                     for particle in particles
                 )
                 / len(particles)
@@ -351,21 +609,45 @@ class ParticleSwarmOptimizer:
 
             history_coordinate.append(
                 coordinate_diversity(
-                    [particle.position for particle in particles]
+                    [
+                        particle.position
+                        for particle in particles
+                    ]
                 )
             )
 
             history_route.append(
                 route_diversity(
-                    [particle.pbest_result for particle in particles]
+                    [
+                        particle.pbest_result
+                        for particle in particles
+                    ]
                 )
+            )
+
+        oracle_calls = getattr(
+            self.oracle,
+            "calls",
+            None,
+        )
+
+        if (
+            oracle_calls is not None
+            and int(oracle_calls) != evaluations
+        ):
+            raise OptimizationError(
+                "optimizer/oracle evaluation accounting mismatch: "
+                f"optimizer={evaluations}, "
+                f"oracle={oracle_calls}"
             )
 
         return OptimizationResult(
             best_position=tuple(
                 global_best.pbest_position
             ),
-            best_fitness=global_best.pbest_result.fitness,
+            best_fitness=float(
+                global_best.pbest_result.fitness
+            ),
             best_result=global_best.pbest_result,
             evaluations=evaluations,
             iterations=iterations,
@@ -381,13 +663,22 @@ class ParticleSwarmOptimizer:
         )
 
 
-# Public comparator name used throughout Step 8.
+# ----------------------------------------------------------------------
+# Public compatibility API
+# ----------------------------------------------------------------------
+
+# Existing Step 8 experiment/test code uses MatchedPSO as the public
+# comparator name. Keep the implementation class available as well.
 MatchedPSO = ParticleSwarmOptimizer
 
 
+# Some external code may refer to the descriptive configuration name.
+MatchedPSOConfig = PSOConfig
+
+
 __all__ = [
-    "MatchedPSOConfig",
     "PSOConfig",
+    "MatchedPSOConfig",
     "ParticleSwarmOptimizer",
     "MatchedPSO",
 ]

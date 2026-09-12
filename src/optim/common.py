@@ -17,7 +17,16 @@ class FitnessResult:
     """
     Result returned by a fitness oracle.
 
-    Lower fitness is better throughout Step 8.
+    Lower fitness is better among solutions with the same feasibility status.
+
+    Optimization selection is feasibility-first:
+        feasible > infeasible
+    and only then:
+        lower fitness > higher fitness
+
+    The optimizer therefore never prefers an infeasible solution merely
+    because its numerical penalty is smaller than the objective of a feasible
+    solution.
     """
 
     fitness: float
@@ -34,6 +43,80 @@ class FitnessResult:
 
         if self.repair_distance < 0.0:
             raise OptimizationError("repair_distance must be non-negative")
+
+
+def fitness_better(
+    candidate: FitnessResult,
+    incumbent: FitnessResult,
+    *,
+    tolerance: float = 1e-12,
+) -> bool:
+    """
+    Determine whether ``candidate`` should replace ``incumbent``.
+
+    Step-8 optimization uses lexicographic feasibility-first dominance:
+
+        1. A feasible solution always dominates an infeasible solution.
+        2. If both are feasible, lower objective fitness wins.
+        3. If both are infeasible, lower penalized fitness wins.
+        4. Differences within ``tolerance`` are treated as ties.
+
+    This comparison must be shared by QPSO and the matched PSO comparator so
+    that their search semantics remain identical apart from the update rule.
+
+    Parameters
+    ----------
+    candidate:
+        Candidate optimization result.
+
+    incumbent:
+        Current result against which the candidate is compared.
+
+    tolerance:
+        Numerical tolerance used when comparing equal-feasibility solutions.
+
+    Returns
+    -------
+    bool
+        ``True`` when the candidate should replace the incumbent.
+    """
+    if tolerance < 0.0:
+        raise OptimizationError("tolerance must be non-negative")
+
+    # Feasibility dominates numerical fitness.
+    if candidate.feasible != incumbent.feasible:
+        return candidate.feasible
+
+    # Same feasibility state: lower fitness is better.
+    return candidate.fitness < incumbent.fitness - tolerance
+
+
+def best_result_index(
+    results: Sequence[FitnessResult],
+    *,
+    tolerance: float = 1e-12,
+) -> int:
+    """
+    Return the index of the best result under feasibility-first ordering.
+
+    This deliberately avoids Python's plain ``min(..., key=fitness)`` because
+    numerical penalty values must never allow an infeasible result to outrank
+    a feasible one.
+    """
+    if not results:
+        raise OptimizationError("results cannot be empty")
+
+    best_index = 0
+
+    for index in range(1, len(results)):
+        if fitness_better(
+            results[index],
+            results[best_index],
+            tolerance=tolerance,
+        ):
+            best_index = index
+
+    return best_index
 
 
 @dataclass(frozen=True)
@@ -98,6 +181,14 @@ class OptimizationResult:
         if not self.best_position:
             raise OptimizationError("best_position cannot be empty")
 
+        if not isfinite(float(self.best_fitness)):
+            raise OptimizationError("best_fitness must be finite")
+
+        if self.best_fitness != self.best_result.fitness:
+            raise OptimizationError(
+                "best_fitness must match best_result.fitness"
+            )
+
         if len(self.history_best) != len(self.history_mean):
             raise OptimizationError("history lengths must match")
 
@@ -122,6 +213,10 @@ class FitnessOracle:
 
     The optimizer knows nothing about routing. The oracle translates a
     continuous candidate into a domain-specific result.
+
+    The oracle itself does not decide which candidate is better. Selection
+    semantics belong to ``fitness_better`` so that every optimizer and
+    experiment uses the same feasibility-first rule.
     """
 
     def __init__(
@@ -150,6 +245,13 @@ def clamp(value: float, lower: float, upper: float) -> float:
 
     if not isfinite(value):
         raise OptimizationError("cannot clamp a non-finite value")
+
+    if not (
+        isfinite(float(lower))
+        and isfinite(float(upper))
+        and lower <= upper
+    ):
+        raise OptimizationError("invalid clamp bounds")
 
     return min(max(value, lower), upper)
 
