@@ -1,0 +1,29 @@
+{
+  "certified_optimum": true,
+  "elapsed_s": 0.06635991700022714,
+  "evaluator_feasible": true,
+  "evaluator_objective": 1575.0,
+  "lower_bound": 1575.0,
+  "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+  "method": "milp",
+  "mip_gap_tolerance": 1e-09,
+  "objective": 1575.0,
+  "objective_difference": 0.0,
+  "relative_gap": 0.0,
+  "route": {
+    "V1": [
+      "J1",
+      "J2"
+    ],
+    "V2": [
+      "J3",
+      "J4",
+      "J5"
+    ]
+  },
+  "snapshot_arc_count": 30,
+  "snapshot_path_source": "DirectedPathBuilder",
+  "solver_status_code": 0,
+  "status": "optimal",
+  "time_limit_s": 30.0
+}

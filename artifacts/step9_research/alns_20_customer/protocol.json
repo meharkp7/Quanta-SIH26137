@@ -1,0 +1,52 @@
+{
+  "experiment": "step9_alns_20_customer",
+  "scenario_generation": {
+    "config": {
+      "cluster_strength": 0.2,
+      "customer_count": 20,
+      "customer_spread": 0.85,
+      "dataset_split": "test",
+      "demand_max": 8,
+      "demand_min": 1,
+      "extent_m": 5000.0,
+      "fleet_size": 4,
+      "grid_cols": 14,
+      "grid_rows": 14,
+      "jitter_fraction": 0.08,
+      "max_customer_snap_m": 350.0,
+      "minimum_road_segment_m": 80.0,
+      "one_way_fraction": 0.18,
+      "road_junction_count": 196,
+      "seed": 26157,
+      "service_duration_s": 120.0,
+      "topology_family": "grid",
+      "vehicle_capacity": 30.0,
+      "window_profile": "medium",
+      "window_slack_s": 900.0
+    },
+    "customer_count": 20,
+    "road_junction_count": 196,
+    "seed": 26157,
+    "vehicle_count": 4
+  },
+  "solver": {
+    "certification": false,
+    "evaluation": "actual RouteEvaluator; ALNS integer IDs are only an adapter representation",
+    "evaluations": 2000,
+    "initialization": "same project InitialSolutionBuilder heuristic 'earliest_deadline', requiring complete feasibility",
+    "optimality_gap": null,
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "time_limit_s": 5.0
+  }
+}
