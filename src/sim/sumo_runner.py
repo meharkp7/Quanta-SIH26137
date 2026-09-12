@@ -17,7 +17,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ def run_episode(
     step_length_s: float = 1.0,
     gui: bool = False,
     log_every_n_steps: int = 10,
+    on_step: Callable[[Any], None] | None = None,
 ) -> EpisodeResult:
     """
     Run one simulation episode for the given scenario and route plan.
@@ -166,6 +167,8 @@ def run_episode(
             while not adapter.done:
                 step_out = adapter.step()
                 progress.append(asdict(step_out))
+                if on_step is not None:
+                    on_step(step_out)
                 sim_time = step_out.sim_time_s
                 step_count += 1
 

@@ -2,3 +2,9 @@ pydantic>=2.6,<3
 numpy
 pandas
 h5py
+fastapi>=0.110
+uvicorn>=0.27
+scipy>=1.11
+pytest>=7.4
+traci==1.27.1
+sumolib==1.27.1

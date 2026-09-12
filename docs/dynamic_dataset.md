@@ -49,9 +49,33 @@ Use independent seeds for static scenario, traffic, incidents, windows,
 optimization, and learning. The dynamic episode currently derives its event,
 truth, and observation streams from the episode seed using deterministic offsets.
 
-## SUMO transition
+## Step 11 causal pilot
 
-The next simulator-backed stage should consume the same `Scenario` and episode
-configuration, export a SUMO network, run TraCI, and write the same logical
-observation/truth boundary. In final experiments, `target_kind` must distinguish
-speed proxies from realized vehicle traversal times.
+`src/data/causal_episodes.py` writes six split episodes:
+
+- `observations.csv` — policy-visible 1-minute features, age, missingness
+- `edge_truth.csv` — environment-only
+- `trajectories.csv` — vehicle entry/exit times
+- `issued_forecasts.jsonl` — forecasts stored without future labels
+- `labels.jsonl` — matured `speed_proxy` and `realized_traversal` labels
+
+A speed-proxy label is available only when that future minute was observed.
+A traversal label is aligned to the entry-time bucket and available at exit.
+Unused edges are missing, not 0.0.
+
+```powershell
+python -m src.data.generate_dataset causal-pilot fixtures/step3/base/scenario.json artifacts/step11_pilot
+```
+
+SUMO backend: `src/sim/sumo_causal.py` records TraCI speeds and entry/exit
+times, then the same maturity code writes labels.
+
+## Step 12 windows
+
+```powershell
+python -m src.data.generate_dataset forecast-windows artifacts/step11_pilot artifacts/step12_windows fixtures/step3/base/scenario.json
+```
+
+Inputs are `[B, 12, E, 6]` with 5/10/15-minute targets. The scaler is fit on
+the training episodes only. Baselines: persistence and a temporal-only ridge
+model. `inspect_example.json` shows issue time, visible window, and label times.

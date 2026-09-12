@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quanta · SIH26137 Dispatcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">Q</span>
+      <div>
+        <strong>Quanta</strong>
+        <small>SIH26137 · Quantum-inspired traffic routing</small>
+      </div>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="dispatch">Dispatch</button>
+      <button class="tab" data-tab="compare">Benchmark</button>
+      <button class="tab" data-tab="path">Shortest path</button>
+      <button class="tab" data-tab="story">Why this exists</button>
+    </nav>
+    <div class="status" id="run-status">Ready</div>
+  </header>
+
+  <main id="view-dispatch" class="view active">
+    <section class="map-card">
+      <div class="card-head">
+        <h2>Network</h2>
+        <p id="graph-caption">Weighted directed road graph · meters / seconds</p>
+        <strong id="sim-clock">SUMO idle</strong>
+      </div>
+      <svg id="network" viewBox="0 0 800 420" role="img" aria-label="Road network map"></svg>
+      <div class="playback">
+        <button id="btn-replay" class="primary">Play SUMO here</button>
+        <button id="btn-sumo">Open SUMO-GUI</button>
+        <input id="sim-scrub" type="range" min="0" max="0" value="0" />
+      </div>
+      <div class="legend">
+        <span><i class="swatch depot"></i>Depot</span>
+        <span><i class="swatch job"></i>Customer</span>
+        <span><i class="swatch v1"></i>Vehicle 1</span>
+        <span><i class="swatch v2"></i>Vehicle 2</span>
+        <span><i class="swatch closed"></i>Closed road</span>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <h3>Controls</h3>
+        <label>Scenario
+          <select id="scenario"></select>
+        </label>
+        <label>Solver
+          <select id="method">
+            <option value="qpso">QPSO (quantum-inspired)</option>
+            <option value="pso">PSO (classical)</option>
+            <option value="alns">ALNS (classical)</option>
+            <option value="constructive">Constructive baseline</option>
+            <option value="milp">Tiny MILP exact</option>
+          </select>
+        </label>
+        <div class="row">
+          <label>Particles <input id="particles" type="number" min="2" max="40" value="12" /></label>
+          <label>Evals <input id="evaluations" type="number" min="8" max="200" value="40" /></label>
+        </div>
+        <label>Close a road
+          <select id="closed-edge">
+            <option value="">None</option>
+          </select>
+        </label>
+        <div class="actions">
+          <button id="btn-solve" class="primary">Solve routes</button>
+          <button id="btn-loop">Run loop</button>
+          <button id="btn-bad">Show illegal plan</button>
+          <button id="btn-replay-side">Play SUMO here</button>
+        </div>
+      </section>
+
+      <section class="panel score">
+        <h3>Scoreboard</h3>
+        <div class="chips" id="constraint-chips"></div>
+        <dl id="scoreboard">
+          <div><dt>Method</dt><dd id="sc-method">—</dd></div>
+          <div><dt>Time</dt><dd id="sc-time">—</dd></div>
+          <div><dt>Distance</dt><dd id="sc-dist">—</dd></div>
+          <div><dt>Congestion</dt><dd id="sc-cong">—</dd></div>
+          <div><dt>Solve</dt><dd id="sc-elapsed">—</dd></div>
+        </dl>
+      </section>
+    </aside>
+
+    <section class="bottom">
+      <article class="panel">
+        <h3>Convergence</h3>
+        <canvas id="trace" width="640" height="180"></canvas>
+      </article>
+      <article class="panel">
+        <h3>Routes & constraints</h3>
+        <div id="route-table"></div>
+        <ol id="loop-notes"></ol>
+      </article>
+    </section>
+  </main>
+
+  <main id="view-compare" class="view">
+    <section class="panel wide">
+      <div class="card-head">
+        <h2>Benchmark strip</h2>
+        <button id="btn-compare" class="primary">Compare on this fixture</button>
+      </div>
+      <p class="hint">Same scenario, seed, encoding, validator, and evaluation budget. MILP is only a certified optimum if the solver closes the gap.</p>
+      <table id="compare-table">
+        <thead>
+          <tr>
+            <th>Method</th><th>Feasible</th><th>Objective</th><th>Time (s)</th>
+            <th>Distance (m)</th><th>Runtime (s)</th><th>Evals</th><th>Note</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <main id="view-path" class="view">
+    <section class="panel wide">
+      <h2>Exact shortest path</h2>
+      <p class="hint">Dijkstra on identical nonnegative edge weights. This is the official path-mode reference. QPSO’s hard problem is the constrained fleet VRP, not beating Dijkstra on one pair.</p>
+      <div class="row">
+        <label>From <select id="path-from"></select></label>
+        <label>To <select id="path-to"></select></label>
+        <button id="btn-path" class="primary">Find path</button>
+      </div>
+      <pre id="path-result" class="mono"></pre>
+    </section>
+  </main>
+
+  <main id="view-story" class="view story">
+    <article class="panel">
+      <h2>What SIH asked for</h2>
+      <p id="ps-name"></p>
+      <ul id="ps-wants"></ul>
+    </article>
+    <article class="panel">
+      <h2>What we are building</h2>
+      <ul id="ps-build"></ul>
+    </article>
+    <article class="panel">
+      <h2>What is already working</h2>
+      <ul id="ps-live"></ul>
+      <h3>Honest baselines</h3>
+      <ul id="ps-base"></ul>
+    </article>
+  </main>
+
+  <footer>
+    Official listing <a href="https://www.sih.gov.in/sih2026PS" target="_blank" rel="noreferrer">sih.gov.in/sih2026PS</a>
+    · Mirror <a href="https://sih2026.vuce.in/ps/SIH26137" target="_blank" rel="noreferrer">SIH26137</a>
+    · Quantum-inspired search runs on a laptop, not a quantum computer.
+  </footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>
