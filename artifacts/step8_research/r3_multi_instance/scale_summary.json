@@ -1,13 +1,37 @@
 [
   {
     "customers": 10,
-    "paired_n": 1,
-    "mean_qpso_minus_pso": 0.0,
+    "paired_n": 15,
+    "mean_qpso_minus_pso": 122.05817793449144,
     "median_qpso_minus_pso": 0.0,
-    "std_qpso_minus_pso": 0.0,
-    "qpso_wins": 0,
-    "pso_wins": 0,
-    "ties": 1,
+    "std_qpso_minus_pso": 1027.9703422676116,
+    "qpso_wins": 3,
+    "pso_wins": 2,
+    "ties": 10,
+    "qpso_feasible_rate": 1,
+    "pso_feasible_rate": 1
+  },
+  {
+    "customers": 20,
+    "paired_n": 15,
+    "mean_qpso_minus_pso": 43.95357557040649,
+    "median_qpso_minus_pso": 0.0,
+    "std_qpso_minus_pso": 881.4923547635229,
+    "qpso_wins": 3,
+    "pso_wins": 5,
+    "ties": 7,
+    "qpso_feasible_rate": 1,
+    "pso_feasible_rate": 1
+  },
+  {
+    "customers": 30,
+    "paired_n": 15,
+    "mean_qpso_minus_pso": -819.0947649909518,
+    "median_qpso_minus_pso": -65.3506243373995,
+    "std_qpso_minus_pso": 1772.336838032506,
+    "qpso_wins": 8,
+    "pso_wins": 2,
+    "ties": 5,
     "qpso_feasible_rate": 1,
     "pso_feasible_rate": 1
   }

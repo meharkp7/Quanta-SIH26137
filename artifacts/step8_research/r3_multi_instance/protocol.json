@@ -1,21 +1,29 @@
 {
   "protocol": "step8_r3_multi_instance_robustness",
   "customer_counts": [
-    10
+    10,
+    20,
+    30
   ],
   "scenario_seeds": [
-    26157
+    26157,
+    26158,
+    26159,
+    26160,
+    26161
   ],
   "optimizer_seeds": [
-    1
+    1,
+    2,
+    3
   ],
   "population": 20,
-  "evaluations": 30,
+  "evaluations": 100,
   "initialization_protocol": "R2_diversified_constructive_plus_route_mutation",
   "matched_population": true,
   "same_evaluator_and_repair": true,
   "qpsp_superiority_not_tuned": true,
-  "total_scenarios": 1,
-  "total_paired_runs": 1,
-  "elapsed_seconds": 9.33919650000098
+  "total_scenarios": 15,
+  "total_paired_runs": 45,
+  "elapsed_seconds": 11200.39103975
 }

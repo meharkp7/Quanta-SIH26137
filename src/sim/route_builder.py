@@ -57,10 +57,33 @@ class RouteBuilder:
         scenario: Scenario,
         route_plan: RoutePlan,
         sumo_mapping: dict,
+        *,
+        background_duration_s: float = 0.0,
+        background_interval_s: float = 60.0,
+        background_start_s: float = 0.0,
+        background_target_edges: list[str] | None = None,
+        background_blocked_intervals: list[tuple[float, float]] | None = None,
     ) -> None:
         self.scenario = scenario
         self.route_plan = route_plan
         self._edge_map: dict[str, str] = sumo_mapping.get("edge_mapping", {})
+
+        if background_duration_s < 0:
+            raise ValueError("background_duration_s must be non-negative")
+
+        if background_interval_s <= 0:
+            raise ValueError("background_interval_s must be positive")
+
+        if background_start_s < 0:
+            raise ValueError("background_start_s must be non-negative")
+
+        self._background_duration_s = float(background_duration_s)
+        self._background_interval_s = float(background_interval_s)
+        self._background_start_s = float(background_start_s)
+        self._background_target_edges = list(background_target_edges or [])
+        self._background_blocked_intervals = list(
+            background_blocked_intervals or []
+        )
 
         # Quick look-ups
         self._requests: dict[str, Request] = {
@@ -242,33 +265,83 @@ class RouteBuilder:
 
     def _add_background_trips(self, parent: ET.Element) -> None:
         """
-        Emit lightweight background car trips to create realistic traffic
-        context.  Only edges that exist in the edge_mapping are used.
+        Emit background traffic only when explicit target edges have been
+        supplied by the caller.
 
-        For portability across different scenarios, background trips are
-        generated from the scenario's own edges rather than hard-coded IDs.
-        We pick a subset of edges that form a valid corridor.
+        Ordinary RouteBuilder/SUMO runs do not need background traffic.
+        Causal SUMO episodes opt in by providing background_target_edges.
         """
-        # Use the first and last edge from the scenario as a simple corridor.
-        # This is scenario-agnostic and will always reference valid edges.
-        edge_ids = list(self._edge_map.values())
-        if len(edge_ids) < 2:
+        if not self._background_target_edges:
             return
 
-        background_trips = [
-            ("bg_0", edge_ids[0],  edge_ids[min(4, len(edge_ids)-1)],   5.0),
-            ("bg_1", edge_ids[1],  edge_ids[min(5, len(edge_ids)-1)],  12.0),
+        target_set = set(self._background_target_edges)
+
+        # Current Step-3 fixture causal corridor.
+        #
+        # E01 -> E16 -> E62
+        #
+        # Both E16 and E62 are on the valid event-prone path. Only create
+        # this route when the required physical edges are present.
+        available = set(self._edge_map.values())
+
+        event_route = ["E01", "E12", "E23", "E34", "E45", "E51", "E16", "E62"]
+
+        if not all(edge in available for edge in event_route):
+            logger.warning(
+                "Cannot generate causal background route: "
+                "required event corridor is not present in SUMO mapping"
+            )
+            return
+
+        if not target_set.intersection({"E16", "E62"}):
+            return
+
+        route_id = "bg_event_route"
+
+        ET.SubElement(
+            parent,
+            "route",
+            attrib={
+                "id": route_id,
+                "edges": " ".join(event_route),
+            },
+        )
+
+        if self._background_duration_s <= self._background_start_s:
+            candidate_departures = [self._background_start_s]
+        else:
+            candidate_departures = []
+            departure = self._background_start_s
+
+            while departure < self._background_duration_s:
+                candidate_departures.append(departure)
+                departure += self._background_interval_s
+
+        # Do not inject vehicles onto an event-affected route while one of
+        # its edges is explicitly closed.
+        #
+        # Vehicles may depart before the closure and continue into it.
+        # Vehicles may also resume after the edge is reopened.
+        departures = [
+            departure
+            for departure in candidate_departures
+            if not any(
+                start <= departure < end
+                for start, end in self._background_blocked_intervals
+            )
         ]
-        for trip_id, from_edge, to_edge, depart in background_trips:
-            if from_edge == to_edge:
-                continue
-            ET.SubElement(parent, "trip", attrib={
-                "id": trip_id,
-                "type": "background_car",
-                "from": from_edge,
-                "to": to_edge,
-                "depart": f"{depart:.1f}",
-            })
+
+        for index, departure in enumerate(departures):
+            ET.SubElement(
+                parent,
+                "vehicle",
+                attrib={
+                    "id": f"bg_{index:05d}",
+                    "type": "background_car",
+                    "route": route_id,
+                    "depart": f"{departure:.1f}",
+                },
+            )
 
 
 # ---------------------------------------------------------------------------

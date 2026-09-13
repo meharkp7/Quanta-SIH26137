@@ -17,6 +17,8 @@ from src.learning.windows import ForecastWindow, assert_window_causal, build_epi
 @dataclass(frozen=True)
 class ForecastBatch:
     features: np.ndarray
+    # Unscaled speed ratio is retained only for persistence baseline use.
+    raw_speed_ratio: np.ndarray
     feature_mask: np.ndarray
     speed_targets: np.ndarray
     speed_target_mask: np.ndarray
@@ -54,12 +56,15 @@ class WindowDataset:
 
     def batch(self, size: int | None = None) -> ForecastBatch:
         selected = self.windows if size is None else self.windows[:size]
-        features = np.stack([window.features for window in selected], axis=0)
+        raw_features = np.stack([window.features for window in selected], axis=0)
+        raw_speed_ratio = raw_features[..., 0].copy()
+        features = raw_features
         if self.scaler is not None:
             features = self.scaler.transform(features)
             features = np.where(np.isfinite(features), features, 0.0)
         return ForecastBatch(
             features=features.astype(np.float32),
+            raw_speed_ratio=raw_speed_ratio.astype(np.float32),
             feature_mask=np.stack([window.feature_mask for window in selected], axis=0),
             speed_targets=np.stack([window.speed_targets for window in selected], axis=0),
             speed_target_mask=np.stack(

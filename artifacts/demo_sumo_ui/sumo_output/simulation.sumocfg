@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <input>
+    <net-file value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/network/net.xml"/>
+    <route-files value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/routes/vehicles.rou.xml"/>
+  </input>
+  <time>
+    <begin value="0"/>
+    <end value="400.0"/>
+    <step-length value="1.0"/>
+  </time>
+  <processing>
+    <ignore-route-errors value="false"/>
+    <time-to-teleport value="-1"/>
+  </processing>
+  <report>
+    <no-step-log value="true"/>
+    <no-warnings value="false"/>
+  </report>
+</configuration>

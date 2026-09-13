@@ -49,6 +49,7 @@ def test_demo_loop_records_baseline_forecast():
         particles=4,
         evaluations=12,
         seed=3,
+        execute_sumo=False,
     )
     assert state.forecast_mode == "persistence"
     assert state.scope_action in {"KEEP", "GLOBAL"}

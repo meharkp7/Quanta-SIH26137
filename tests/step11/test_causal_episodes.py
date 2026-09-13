@@ -144,3 +144,74 @@ def test_six_episode_pilot_splits_before_windows(tmp_path):
     assert coverage["split_before_windows"] is True
     assert coverage["disk_bytes"] > 0
     assert coverage["wall_clock_s"] >= 0
+
+
+def test_persistence_uses_latest_valid_observation_when_issue_bucket_is_missing():
+    """
+    Persistence forecast must use the latest valid observation at or before
+    the issue time.
+
+    It must:
+    - use the exact issue bucket when valid;
+    - fall back to the latest earlier valid bucket when issue bucket is missing;
+    - never use a future observation;
+    - preserve missingness when no historical valid observation exists.
+    """
+    from src.data.causal_episodes import _issue_forecasts
+    from src.data.dynamic_episodes import DynamicEpisodeConfig
+
+    scenario = load_scenario("S3_BASE")
+    edge_id = scenario.edges[0].edge_id
+
+    rows = []
+
+    for t in range(0, 901, 60):
+        for edge in scenario.edges:
+            if edge.edge_id == edge_id:
+                if t == 720:
+                    speed = None
+                    missing = 1
+                elif t == 780:
+                    # This must NEVER be used for the 720s forecast.
+                    speed = 99.0
+                    missing = 0
+                else:
+                    speed = 7.0
+                    missing = 0
+            else:
+                speed = 8.0
+                missing = 0
+
+            rows.append(
+                {
+                    "observation_time_s": t,
+                    "edge_id": edge.edge_id,
+                    "observed_speed_mps": speed,
+                    "missing": missing,
+                }
+            )
+
+    config = DynamicEpisodeConfig(
+        duration_s=1800,
+        interval_s=60,
+        warmup_s=0,
+        seed=1,
+    )
+
+    records = _issue_forecasts(
+        scenario=scenario,
+        episode_id="ep",
+        config=config,
+        observations=rows,
+    )
+
+    rec = next(
+        r for r in records
+        if r["issued_at_s"] == 720.0
+    )
+
+    idx = rec["edge_ids"].index(edge_id)
+
+    # 720s is missing, so persistence must fall back to 660s = 7.0.
+    # It must NOT use the future 780s value = 99.0.
+    assert rec["prediction"][idx][0] == 7.0

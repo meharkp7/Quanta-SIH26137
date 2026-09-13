@@ -122,7 +122,13 @@ class PlatformService:
             "validation": validator_payload(result),
         }
 
-    def solve(self, options: SolveOptions | None = None, scenario_id: str = "S3_BASE") -> dict:
+    def solve(
+        self,
+        options: SolveOptions | None = None,
+        scenario_id: str = "S3_BASE",
+        *,
+        include_route_plan: bool = False,
+    ) -> dict:
         options = options or SolveOptions()
         if options.evaluations < options.particles:
             options = SolveOptions(
@@ -134,9 +140,9 @@ class PlatformService:
             )
         method = options.method.lower()
         if method == "qpso":
-            return self._solve_swarm(scenario_id, options, algorithm="qpso")
+            return self._solve_swarm(scenario_id, options, algorithm="qpso", include_route_plan=include_route_plan)
         if method == "pso":
-            return self._solve_swarm(scenario_id, options, algorithm="pso")
+            return self._solve_swarm(scenario_id, options, algorithm="pso", include_route_plan=include_route_plan)
         if method == "constructive":
             return self._solve_constructive(scenario_id, options)
         if method == "alns":
@@ -368,6 +374,7 @@ class PlatformService:
         options: SolveOptions,
         *,
         algorithm: str,
+        include_route_plan: bool = False,
     ) -> dict:
         scenario = self._scenario(scenario_id, options.closed_edge_ids)
         evaluator, engine = self._stack(scenario, options.closed_edge_ids)
@@ -401,7 +408,7 @@ class PlatformService:
         elapsed = time.perf_counter() - started
         candidate = engine.evaluate_keys(result.best_position, repair=True)
         evaluation = candidate.repaired_evaluation
-        return {
+        payload = {
             "method": algorithm.upper(),
             "status": "feasible" if evaluation.feasible else "no_feasible_incumbent",
             "elapsed_s": elapsed,
@@ -417,6 +424,10 @@ class PlatformService:
             "closed_edge_ids": list(options.closed_edge_ids),
             "seed": options.seed,
         }
+        if include_route_plan:
+            payload["route_plan_object"] = evaluation.route_plan
+            payload["evaluation_object"] = evaluation
+        return payload
 
     def _solve_constructive(self, scenario_id: str, options: SolveOptions) -> dict:
         scenario = self._scenario(scenario_id, options.closed_edge_ids)
