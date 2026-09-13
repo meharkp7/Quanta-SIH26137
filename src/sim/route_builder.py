@@ -7,18 +7,25 @@ Design
 ------
 Each delivery vehicle is emitted as a SUMO <vehicle> with:
   - An embedded <route> that lists the full physical edge sequence.
-  - One <stop> per served customer, placed on the **last edge of the
-    StopLeg that arrives at that customer's access node**.
+  - One <stop> per served customer, placed on the last edge of the
+    StopLeg that arrives at that customer's access node.
 
-Using the leg's `to_stop_id` → last edge relationship is the correct
-generalizable approach because:
-  * Each StopLeg already encodes exactly which edges connect two stops.
-  * The last edge of leg L is guaranteed to lead into the destination
-    node of leg L — no graph scan is needed.
-  * This scales naturally to any network size and any route structure.
+Background filler trips are emitted as SUMO <trip> elements.
 
-Background filler trips are also emitted using direct <trip> elements
-so that SUMO routes them automatically.
+Background traffic supports two modes:
+
+1. Normal / Step-6 mode:
+   - Uses the original deterministic fixture-compatible corridors.
+   - Produces background vehicles such as bg_00000, bg_00001, ...
+
+2. Causal / Step-11 mode:
+   - Caller supplies background_target_edges.
+   - Additional traffic is routed through affected edges.
+   - Caller may supply background_blocked_intervals so departures are not
+     introduced during scheduled closure intervals.
+
+The default constructor behavior remains compatible with Step 6.
+Passing background_target_edges=[] explicitly disables background traffic.
 
 Owner: P1  |  Step 6, Days 1-3
 """
@@ -39,17 +46,54 @@ logger = logging.getLogger(__name__)
 # Public API
 # ---------------------------------------------------------------------------
 
+
 class RouteBuilder:
     """
     Builds SUMO route/vehicle XML from a RoutePlan + Scenario.
 
-    Usage::
+    Parameters
+    ----------
+    scenario:
+        Scenario containing vehicles, requests and network edges.
 
-        builder = RouteBuilder(scenario, route_plan, sumo_mapping)
-        rou_path = builder.build(output_dir=Path("artifacts/sumo/step6"))
+    route_plan:
+        RoutePlan whose delivery vehicles should be emitted.
 
-    ``sumo_mapping`` is the dict from ``sumo_mapping.json`` (produced by
-    SumoExporter).  Only ``edge_mapping`` is used here.
+    sumo_mapping:
+        Mapping produced by SumoExporter.
+
+    background_duration_s:
+        End of the background traffic generation window.
+
+        Default is 0.0 for backwards compatibility with Step 6.
+        Causal Step-11 generation supplies the episode duration.
+
+    background_interval_s:
+        Time between background departures.
+
+    background_start_s:
+        First background departure time.
+
+    background_target_edges:
+        Optional explicit set of edges that background traffic should
+        traverse.
+
+        None:
+            Use the normal Step-6 background corridors.
+
+        []:
+            Explicitly disable background traffic.
+
+        non-empty list:
+            Use the normal corridor plus deterministic corridors to
+            the supplied target edges.
+
+    background_blocked_intervals:
+        Optional closure intervals represented as
+        (start_time_s, end_time_s).
+
+        Background vehicles are not spawned when their departure time falls
+        inside one of these intervals.
     """
 
     def __init__(
@@ -66,35 +110,85 @@ class RouteBuilder:
     ) -> None:
         self.scenario = scenario
         self.route_plan = route_plan
-        self._edge_map: dict[str, str] = sumo_mapping.get("edge_mapping", {})
 
-        if background_duration_s < 0:
-            raise ValueError("background_duration_s must be non-negative")
-
-        if background_interval_s <= 0:
-            raise ValueError("background_interval_s must be positive")
-
-        if background_start_s < 0:
-            raise ValueError("background_start_s must be non-negative")
-
-        self._background_duration_s = float(background_duration_s)
-        self._background_interval_s = float(background_interval_s)
-        self._background_start_s = float(background_start_s)
-        self._background_target_edges = list(background_target_edges or [])
-        self._background_blocked_intervals = list(
-            background_blocked_intervals or []
+        self._edge_map: dict[str, str] = sumo_mapping.get(
+            "edge_mapping",
+            {},
         )
 
-        # Quick look-ups
+        if background_duration_s < 0:
+            raise ValueError(
+                "background_duration_s must be non-negative"
+            )
+
+        if background_interval_s <= 0:
+            raise ValueError(
+                "background_interval_s must be positive"
+            )
+
+        if background_start_s < 0:
+            raise ValueError(
+                "background_start_s must be non-negative"
+            )
+
+        self._background_duration_s = float(
+            background_duration_s
+        )
+        self._background_interval_s = float(
+            background_interval_s
+        )
+        self._background_start_s = float(
+            background_start_s
+        )
+
+        # IMPORTANT:
+        # None means "use the normal Step-6 background behavior".
+        # [] means "caller explicitly disabled background traffic".
+        self._background_target_edges_explicit = (
+            background_target_edges is not None
+        )
+        self._background_target_edges = list(
+            background_target_edges or []
+        )
+
+        self._background_blocked_intervals = [
+            (
+                float(start),
+                float(end),
+            )
+            for start, end in (
+                background_blocked_intervals or []
+            )
+        ]
+
+        # Validate blocked intervals.
+        for start, end in self._background_blocked_intervals:
+            if start < 0:
+                raise ValueError(
+                    "background blocked interval start must be non-negative"
+                )
+            if end < start:
+                raise ValueError(
+                    "background blocked interval end must be >= start"
+                )
+
+        # Quick look-ups.
         self._requests: dict[str, Request] = {
-            r.request_id: r for r in scenario.requests
+            r.request_id: r
+            for r in scenario.requests
         }
-        # Map stop_id (node_id or request_id) → request for the leg lookup
-        # A "stop" in the leg is identified by its to_stop_id; for customer
-        # stops, to_stop_id is the access_node_id.
-        self._node_to_request: dict[str, list[Request]] = {}
+
+        # Map access node -> requests.
+        self._node_to_request: dict[
+            str,
+            list[Request],
+        ] = {}
+
         for req in scenario.requests:
-            self._node_to_request.setdefault(req.access_node_id, []).append(req)
+            self._node_to_request.setdefault(
+                req.access_node_id,
+                [],
+            ).append(req)
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -102,44 +196,69 @@ class RouteBuilder:
 
     def build(self, output_dir: Path) -> Path:
         """Write vehicles.rou.xml and return its path."""
+
         output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
         root = ET.Element("routes")
+
         self._add_vtypes(root)
 
         for veh_route in self.route_plan.vehicle_routes:
-            self._add_delivery_vehicle(root, veh_route)
+            self._add_delivery_vehicle(
+                root,
+                veh_route,
+            )
 
         self._add_background_trips(root)
 
         path = output_dir / "vehicles.rou.xml"
-        _write_xml(root, path)
+
+        _write_xml(
+            root,
+            path,
+        )
+
         return path
 
     # ------------------------------------------------------------------
     # vType definitions
     # ------------------------------------------------------------------
 
-    def _add_vtypes(self, root: ET.Element) -> None:
-        ET.SubElement(root, "vType", attrib={
-            "id": "delivery_van",
-            "accel": "2.0",
-            "decel": "4.5",
-            "length": "5.0",
-            "maxSpeed": "20.0",
-            "sigma": "0.0",           # deterministic
-            "color": "1,0.5,0",
-        })
-        ET.SubElement(root, "vType", attrib={
-            "id": "background_car",
-            "accel": "2.6",
-            "decel": "4.5",
-            "length": "4.5",
-            "maxSpeed": "13.89",
-            "sigma": "0.5",
-            "color": "0.6,0.6,0.6",
-        })
+    def _add_vtypes(
+        self,
+        root: ET.Element,
+    ) -> None:
+        ET.SubElement(
+            root,
+            "vType",
+            attrib={
+                "id": "delivery_van",
+                "accel": "2.0",
+                "decel": "4.5",
+                "length": "5.0",
+                "maxSpeed": "20.0",
+                "sigma": "0.0",
+                "color": "1,0.5,0",
+            },
+        )
+
+        ET.SubElement(
+            root,
+            "vType",
+            attrib={
+                "id": "background_car",
+                "accel": "2.6",
+                "decel": "4.5",
+                "length": "4.5",
+                "maxSpeed": "13.89",
+                "sigma": "0.5",
+                "color": "0.6,0.6,0.6",
+            },
+        )
 
     # ------------------------------------------------------------------
     # Per-vehicle route builder
@@ -154,86 +273,118 @@ class RouteBuilder:
         Emit one SUMO <vehicle> with an embedded <route> and one <stop>
         per served customer.
 
-        Stop placement strategy
-        -----------------------
-        For each leg in `veh_route.legs`:
-          - Translate its `physical_edge_ids` to SUMO edge IDs.
-          - If the leg's `to_stop_id` matches a customer's `access_node_id`,
-            place a <stop> on the LAST edge of that leg.
-
-        This is correct because:
-          * physical_edge_ids[last] always leads into to_stop_id by definition.
-          * SUMO requires stops to be in route order; building them leg-by-leg
-            naturally preserves this order.
-          * The approach is independent of network topology — no graph scan.
+        Stop placement:
+            The stop is placed on the last physical edge of the leg
+            arriving at the customer's access node.
         """
+
         vehicle_id = veh_route.vehicle_id
 
         if not veh_route.legs:
-            logger.debug("Vehicle %r has no legs — skipping", vehicle_id)
+            logger.debug(
+                "Vehicle %r has no legs — skipping",
+                vehicle_id,
+            )
             return
 
-        # Build ordered stop list from legs + deduplicated full edge list
-        # We process legs in order so that stops are also in order.
         all_sumo_edges: list[str] = []
-        stop_specs: list[dict] = []   # {edge, duration, tripId}
-
-        # Map request_id -> request for the customer_order lookup
-        # Build a customer-order index so we can match legs to requests.
-        order_index: dict[str, int] = {
-            rid: i for i, rid in enumerate(veh_route.customer_order)
-        }
+        stop_specs: list[dict] = []
 
         for leg in veh_route.legs:
-            # Translate edges
-            leg_sumo_edges = [self._edge_map.get(e, e) for e in leg.physical_edge_ids]
+            leg_sumo_edges = [
+                self._edge_map.get(
+                    edge_id,
+                    edge_id,
+                )
+                for edge_id in leg.physical_edge_ids
+            ]
 
-            # Deduplicate consecutive edges across legs
-            for sumo_eid in leg_sumo_edges:
-                if not all_sumo_edges or all_sumo_edges[-1] != sumo_eid:
-                    all_sumo_edges.append(sumo_eid)
+            # Deduplicate consecutive edges across legs.
+            for sumo_edge_id in leg_sumo_edges:
+                if (
+                    not all_sumo_edges
+                    or all_sumo_edges[-1] != sumo_edge_id
+                ):
+                    all_sumo_edges.append(
+                        sumo_edge_id
+                    )
 
-            # Check if this leg ends at a customer access node
             if not leg_sumo_edges:
                 continue
 
-            stop_edge = leg_sumo_edges[-1]   # last edge of leg → leads to to_stop_id
+            # Last edge leads to leg.to_stop_id.
+            stop_edge = leg_sumo_edges[-1]
 
-            # Find requests served at this leg's destination node
-            # (to_stop_id is a node ID for customer stops, depot ID for depot)
-            served_here = self._requests_at_stop(leg.to_stop_id, veh_route)
+            served_here = self._requests_at_stop(
+                leg.to_stop_id,
+                veh_route,
+            )
+
             for request_id, req in served_here:
-                stop_specs.append({
-                    "edge": stop_edge,
-                    "duration": f"{req.service_duration_s:.1f}",
-                    "tripId": request_id,
-                    "until": str(max(req.earliest_service_start_s, req.release_s) + req.service_duration_s),
-                })
+                stop_specs.append(
+                    {
+                        "edge": stop_edge,
+                        "duration": (
+                            f"{req.service_duration_s:.1f}"
+                        ),
+                        "tripId": request_id,
+                        "until": str(
+                            max(
+                                req.earliest_service_start_s,
+                                req.release_s,
+                            )
+                            + req.service_duration_s
+                        ),
+                    }
+                )
 
         if not all_sumo_edges:
-            logger.warning("Vehicle %r: no SUMO edges after translation", vehicle_id)
+            logger.warning(
+                "Vehicle %r: no SUMO edges after translation",
+                vehicle_id,
+            )
             return
 
-        vehicle_el = ET.SubElement(parent, "vehicle", attrib={
-            "id": vehicle_id,
-            "type": "delivery_van",
-            "depart": f"{veh_route.expected_departure_s:.1f}",
-            "color": "1,0,0",
-        })
+        vehicle_el = ET.SubElement(
+            parent,
+            "vehicle",
+            attrib={
+                "id": vehicle_id,
+                "type": "delivery_van",
+                "depart": (
+                    f"{veh_route.expected_departure_s:.1f}"
+                ),
+                "color": "1,0,0",
+            },
+        )
 
-        ET.SubElement(vehicle_el, "route", attrib={
-            "edges": " ".join(all_sumo_edges),
-        })
+        ET.SubElement(
+            vehicle_el,
+            "route",
+            attrib={
+                "edges": " ".join(
+                    all_sumo_edges
+                ),
+            },
+        )
 
         for spec in stop_specs:
-            ET.SubElement(vehicle_el, "stop", attrib={
-                "edge": spec["edge"],
-                "endPos": "-1",       # SUMO: stop at end of the edge lane
-                "duration": spec["duration"],
-                "parking": "true",
-                "tripId": spec["tripId"],
-                "until": spec["until"],
-            })
+            ET.SubElement(
+                vehicle_el,
+                "stop",
+                attrib={
+                    "edge": spec["edge"],
+                    "endPos": "-1",
+                    "duration": spec["duration"],
+                    "parking": "true",
+                    "tripId": spec["tripId"],
+                    "until": spec["until"],
+                },
+            )
+
+    # ------------------------------------------------------------------
+    # Stop/request mapping
+    # ------------------------------------------------------------------
 
     def _requests_at_stop(
         self,
@@ -241,115 +392,300 @@ class RouteBuilder:
         veh_route: VehicleRoute,
     ) -> list[tuple[str, Request]]:
         """
-        Return (request_id, Request) pairs for customers whose access_node_id
-        equals stop_node_id AND who appear in this vehicle's customer_order.
+        Return (request_id, Request) pairs for customers whose
+        access_node_id equals stop_node_id and who appear in this
+        vehicle's customer_order.
 
-        Preserving customer_order order ensures stops are emitted in the order
-        the vehicle serves them.
+        The original customer_order is preserved.
         """
-        candidates = self._node_to_request.get(stop_node_id, [])
-        order_set = set(veh_route.customer_order)
+
+        candidates = self._node_to_request.get(
+            stop_node_id,
+            [],
+        )
+
+        order_set = set(
+            veh_route.customer_order
+        )
+
         result = [
-            (req.request_id, req)
+            (
+                req.request_id,
+                req,
+            )
             for req in candidates
             if req.request_id in order_set
         ]
-        # Sort by position in customer_order for determinism
-        order_index = {rid: i for i, rid in enumerate(veh_route.customer_order)}
-        result.sort(key=lambda x: order_index.get(x[0], 9999))
+
+        order_index = {
+            request_id: index
+            for index, request_id
+            in enumerate(
+                veh_route.customer_order
+            )
+        }
+
+        result.sort(
+            key=lambda item: order_index.get(
+                item[0],
+                9999,
+            )
+        )
+
         return result
 
     # ------------------------------------------------------------------
     # Background trips
     # ------------------------------------------------------------------
 
-    def _add_background_trips(self, parent: ET.Element) -> None:
+    def _add_background_trips(
+        self,
+        parent: ET.Element,
+    ) -> None:
         """
-        Emit background traffic only when explicit target edges have been
-        supplied by the caller.
+        Emit deterministic background traffic.
 
-        Ordinary RouteBuilder/SUMO runs do not need background traffic.
-        Causal SUMO episodes opt in by providing background_target_edges.
+        Normal Step-6 behavior:
+            Two deterministic corridors are generated from the scenario's
+            mapped edges.
+
+        Causal Step-11 behavior:
+            Additional corridors are generated from the first mapped edge
+            to caller-supplied affected edges.
+
+        Explicitly passing background_target_edges=[] disables all
+        background traffic.
+
+        Background departures falling inside a closure interval are skipped.
         """
-        if not self._background_target_edges:
+
+        # --------------------------------------------------------------
+        # Explicit opt-out.
+        # --------------------------------------------------------------
+
+        if (
+            self._background_target_edges_explicit
+            and not self._background_target_edges
+        ):
             return
 
-        target_set = set(self._background_target_edges)
+        edge_ids = list(
+            self._edge_map.values()
+        )
 
-        # Current Step-3 fixture causal corridor.
-        #
-        # E01 -> E16 -> E62
-        #
-        # Both E16 and E62 are on the valid event-prone path. Only create
-        # this route when the required physical edges are present.
-        available = set(self._edge_map.values())
-
-        event_route = ["E01", "E12", "E23", "E34", "E45", "E51", "E16", "E62"]
-
-        if not all(edge in available for edge in event_route):
+        if len(edge_ids) < 2:
             logger.warning(
-                "Cannot generate causal background route: "
-                "required event corridor is not present in SUMO mapping"
+                "Cannot generate background traffic: "
+                "fewer than two mapped edges"
             )
             return
 
-        if not target_set.intersection({"E16", "E62"}):
-            return
+        # --------------------------------------------------------------
+        # Build valid corridors.
+        # --------------------------------------------------------------
 
-        route_id = "bg_event_route"
+        corridors: list[
+            tuple[str, str]
+        ] = []
 
-        ET.SubElement(
-            parent,
-            "route",
-            attrib={
-                "id": route_id,
-                "edges": " ".join(event_route),
-            },
-        )
+        def add_corridor(
+            from_edge: str,
+            to_edge: str,
+        ) -> None:
+            if (
+                from_edge == to_edge
+                or not from_edge
+                or not to_edge
+            ):
+                return
 
-        if self._background_duration_s <= self._background_start_s:
-            candidate_departures = [self._background_start_s]
-        else:
-            candidate_departures = []
-            departure = self._background_start_s
+            pair = (
+                from_edge,
+                to_edge,
+            )
 
-            while departure < self._background_duration_s:
-                candidate_departures.append(departure)
-                departure += self._background_interval_s
+            if pair not in corridors:
+                corridors.append(pair)
 
-        # Do not inject vehicles onto an event-affected route while one of
-        # its edges is explicitly closed.
+        # --------------------------------------------------------------
+        # Normal Step-6 corridors.
         #
-        # Vehicles may depart before the closure and continue into it.
-        # Vehicles may also resume after the edge is reopened.
-        departures = [
-            departure
-            for departure in candidate_departures
-            if not any(
-                start <= departure < end
-                for start, end in self._background_blocked_intervals
+        # These reproduce the original deterministic behavior:
+        #
+        #   edge[0] -> edge[min(4)]
+        #   edge[1] -> edge[min(5)]
+        #
+        # This is intentionally retained because Step 6's acceptance
+        # tests expect background vehicles to be present and complete.
+        # --------------------------------------------------------------
+
+        normal_to_0 = edge_ids[
+            min(
+                4,
+                len(edge_ids) - 1,
             )
         ]
 
-        for index, departure in enumerate(departures):
-            ET.SubElement(
-                parent,
-                "vehicle",
-                attrib={
-                    "id": f"bg_{index:05d}",
-                    "type": "background_car",
-                    "route": route_id,
-                    "depart": f"{departure:.1f}",
-                },
+        normal_to_1 = edge_ids[
+            min(
+                5,
+                len(edge_ids) - 1,
             )
+        ]
+
+        add_corridor(
+            edge_ids[0],
+            normal_to_0,
+        )
+
+        if len(edge_ids) >= 2:
+            add_corridor(
+                edge_ids[1],
+                normal_to_1,
+            )
+
+        # --------------------------------------------------------------
+        # Causal event-targeted corridors.
+        # --------------------------------------------------------------
+
+        if self._background_target_edges:
+            origin = edge_ids[0]
+            valid_edges = set(edge_ids)
+
+            for target in self._background_target_edges:
+                if (
+                    target in valid_edges
+                    and target != origin
+                ):
+                    add_corridor(
+                        origin,
+                        target,
+                    )
+
+        if not corridors:
+            logger.warning(
+                "Cannot generate background traffic: "
+                "no valid corridors"
+            )
+            return
+
+        # --------------------------------------------------------------
+        # Generate departure times.
+        # --------------------------------------------------------------
+
+        if (
+            self._background_duration_s
+            <= self._background_start_s
+        ):
+            departures = [
+                self._background_start_s
+            ]
+        else:
+            departures = []
+
+            departure = (
+                self._background_start_s
+            )
+
+            while (
+                departure
+                < self._background_duration_s
+            ):
+                departures.append(
+                    departure
+                )
+
+                departure += (
+                    self._background_interval_s
+                )
+
+        # --------------------------------------------------------------
+        # Emit trips.
+        # --------------------------------------------------------------
+
+        trip_index = 0
+
+        for departure in departures:
+
+            if self._departure_is_blocked(
+                departure
+            ):
+                continue
+
+            for from_edge, to_edge in corridors:
+
+                trip_id = f"bg_{trip_index}"
+
+                ET.SubElement(
+                    parent,
+                    "trip",
+                    attrib={
+                        "id": trip_id,
+                        "type": "background_car",
+                        "from": from_edge,
+                        "to": to_edge,
+                        "depart": (
+                            f"{departure:.1f}"
+                        ),
+                    },
+                )
+
+                trip_index += 1
+
+    # ------------------------------------------------------------------
+    # Closure filtering
+    # ------------------------------------------------------------------
+
+    def _departure_is_blocked(
+        self,
+        departure_s: float,
+    ) -> bool:
+        """
+        Return True when a background departure falls inside a blocked
+        interval.
+
+        Semantics:
+            start <= departure < end
+
+        This matches the Step-11 requirement that traffic should not be
+        newly introduced onto a scheduled closure during the closure window.
+        """
+
+        for start_s, end_s in (
+            self._background_blocked_intervals
+        ):
+            if (
+                start_s
+                <= departure_s
+                < end_s
+            ):
+                return True
+
+        return False
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _write_xml(root: ET.Element, path: Path) -> None:
+
+def _write_xml(
+    root: ET.Element,
+    path: Path,
+) -> None:
     tree = ET.ElementTree(root)
-    ET.indent(tree, space="  ")
-    with open(path, "wb") as fh:
-        tree.write(fh, xml_declaration=True, encoding="utf-8")
+
+    ET.indent(
+        tree,
+        space="  ",
+    )
+
+    with open(
+        path,
+        "wb",
+    ) as fh:
+        tree.write(
+            fh,
+            xml_declaration=True,
+            encoding="utf-8",
+        )
