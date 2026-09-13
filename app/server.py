@@ -57,7 +57,7 @@ class CompareRequest(SolveRequest):
 
 
 class LoopRequest(SolveRequest):
-    pass
+    execute_sumo: bool = True
 
 
 class SumoRequest(BaseModel):
@@ -149,6 +149,7 @@ def run_loop(request: LoopRequest) -> dict:
         evaluations=request.evaluations,
         seed=request.seed,
         method=request.method,
+        execute_sumo=request.execute_sumo,
     )
     return loop.as_dict(state)
 
