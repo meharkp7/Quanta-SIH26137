@@ -44,3 +44,8 @@ dist/
 !/data/README.md
 /artifacts/step6_verified/
 /artifacts/step6_debug/
+
+#step 11 and 12 reproducable files
+artifacts/causal_sumo_pilot/
+artifacts/causal_sumo_pilot_repro/
+artifacts/step12_sumo_windows/
