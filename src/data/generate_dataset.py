@@ -295,6 +295,12 @@ def build_parser() -> argparse.ArgumentParser:
     causal_pilot.add_argument("--interval-s", type=int, default=60)
     causal_pilot.add_argument("--warmup-s", type=int, default=300)
     causal_pilot.add_argument("--seed", type=int, default=26137)
+    causal_pilot.add_argument(
+        "--backend",
+        choices=("causal_field_v1", "sumo"),
+        default="causal_field_v1",
+        help="Causal backend; use sumo for real TraCI-derived observations.",
+    )
 
     windows = sub.add_parser(
         "forecast-windows",
@@ -716,6 +722,16 @@ def main() -> int:
         scenario = Scenario.model_validate_json(
             args.scenario.read_text(encoding="utf-8")
         )
+        if args.backend == "sumo":
+            from src.sim.sumo_causal import run_sumo_causal_episode
+
+            def _run_sumo(**kwargs):
+                return run_sumo_causal_episode(**kwargs)
+
+            callback = _run_sumo
+        else:
+            callback = None
+
         coverage = generate_causal_pilot(
             scenario,
             args.output,
@@ -723,6 +739,8 @@ def main() -> int:
             interval_s=args.interval_s,
             warmup_s=args.warmup_s,
             base_seed=args.seed,
+            backend=args.backend,
+            on_sumo_episode=callback,
         )
         print(f"Generated causal pilot: {args.output}")
         print(

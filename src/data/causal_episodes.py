@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import csv
+import hashlib
 import json
 from pathlib import Path
 import random
@@ -125,12 +126,14 @@ def generate_causal_pilot(
         )
         episode_dir = episodes_dir / spec["episode_id"]
         if backend == "sumo" and on_sumo_episode is not None:
+            events = _generate_events(scenario, config, spec["episode_id"])
             on_sumo_episode(
                 scenario=scenario,
                 output_dir=episode_dir,
                 config=config,
                 episode_id=spec["episode_id"],
                 split=spec["split"],
+                events=events,
             )
             result = _finalize_existing_episode(
                 scenario, episode_dir, spec["episode_id"], spec["split"], config
@@ -147,6 +150,23 @@ def generate_causal_pilot(
 
     coverage = _pilot_coverage(results, time.perf_counter() - started)
     _write_json(root / "coverage.json", coverage)
+
+    # Runtime timing is intentionally excluded from the reproducibility hash.
+    # Episode artifacts themselves must remain byte-stable for a fixed seed.
+    deterministic = {}
+    for result in results:
+        for artifact in sorted(result.episode_dir.iterdir()):
+            if artifact.is_file():
+                deterministic[str(artifact.relative_to(root))] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    deterministic["split_manifest.json"] = hashlib.sha256((root / "split_manifest.json").read_bytes()).hexdigest()
+    _write_json(root / "reproducibility.json", {
+        "schema_version": "reproducibility-1.0",
+        "seed": base_seed,
+        "fixed_seed_artifacts_byte_stable": True,
+        "hash_algorithm": "sha256",
+        "artifact_sha256": deterministic,
+        "excluded_from_hash": ["coverage.json"],
+    })
     return coverage
 
 
@@ -507,17 +527,35 @@ def _issue_forecasts(
 
     index = load_observation_index(observations)
     edge_ids = tuple(edge.edge_id for edge in scenario.edges)
+    # Persistence means the latest *available* observation at or before the
+    # issue time, not merely an exact timestamp. This matters when an edge has
+    # a missing sample at the issue bucket.
+    history: dict[str, list[tuple[int, float]]] = {}
+    for row in observations:
+        if bool(int(row.get("missing") or 0)) or row.get("observed_speed_mps") in (None, ""):
+            continue
+        history.setdefault(str(row["edge_id"]), []).append(
+            (int(row["observation_time_s"]), float(row["observed_speed_mps"]))
+        )
+    for values in history.values():
+        values.sort()
+
+    def latest_valid(edge_id: str, issue_time: int) -> float | None:
+        values = history.get(edge_id, ())
+        candidate = None
+        for timestamp, value in values:
+            if timestamp > issue_time:
+                break
+            candidate = value
+        return candidate
+
     records = []
     for issue in _issue_times(config):
         targets = tuple(issue + horizon for horizon in HORIZONS_S)
         prediction = []
         valid = []
         for edge_id in edge_ids:
-            last = index.get((edge_id, issue))
-            missing = last is None or bool(int(last.get("missing") or 0))
-            value = None
-            if not missing and last.get("observed_speed_mps") not in (None, ""):
-                value = float(last["observed_speed_mps"])
+            value = latest_valid(edge_id, issue)
             row = tuple(value for _ in targets)
             prediction.append(row)
             valid.append(tuple(value is not None for _ in targets))
@@ -612,6 +650,43 @@ def _finalize_existing_episode(
     )
     _write_jsonl(episode_dir / "labels.jsonl", [asdict(item) for item in labels])
     _write_jsonl(episode_dir / "issued_forecasts.jsonl", forecasts)
+
+    # SUMO-backed episodes are finalized from observed TraCI measurements.
+    # Recreate the episode manifest here so the generated artifacts have the
+    # same contract as the synthetic backend and remain auditable/replayable.
+    _write_json(
+        episode_dir / "episode_manifest.json",
+        {
+            "schema_version": "causal-1.0",
+            "episode_id": episode_id,
+            "scenario_id": scenario.scenario_id,
+            "graph_version": scenario.graph_version,
+            "split": split,
+            "backend": config.backend,
+            "interval_s": config.interval_s,
+            "duration_s": config.duration_s,
+            "warmup_s": config.warmup_s,
+            "regime": config.regime,
+            "seed": config.seed,
+            "seeds": asdict(stream_seeds(config.seed)),
+            "horizons_s": list(HORIZONS_S),
+            "history_minutes": HISTORY_MINUTES,
+            "target_kinds": [
+                TargetKind.SPEED_PROXY.value,
+                TargetKind.REALIZED_TRAVERSAL.value,
+            ],
+            "causal_visibility": {
+                "future_effect_times_hidden": True,
+                "future_labels_hidden": True,
+                "issued_forecasts_separate": True,
+                "sparse_edges_are_missing": True,
+                "labels_derived_from_observed_sumo_outcomes": True,
+            },
+            "events_source": "declared_event_tape_applied_in_sumo",
+            "trajectory_source": "sumo_traci_vehicle_edge_transitions",
+        },
+    )
+
     coverage = _episode_coverage(labels, observations, trajectories)
     return CausalEpisodeResult(
         episode_dir=episode_dir,
