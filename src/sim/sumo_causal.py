@@ -46,6 +46,14 @@ class _RuntimeEventTape:
                     "restored": False,
                     "lanes": {},
                 })
+    def active_closed_edges(self) -> set[str]:
+        return {
+            rec["edge_id"]
+            for rec in self.records
+            if rec["active"]
+            and not rec["restored"]
+            and rec["event"].event_type in {"closure", "scheduled_closure"}
+        }
 
     def step(self, traci, sim_time_s: float) -> list[tuple[str, str]]:
         emitted: list[tuple[str, str]] = []
@@ -162,17 +170,28 @@ def run_sumo_causal_episode(
         service_earliest={r.request_id: max(r.earliest_service_start_s, r.release_s) for r in scenario.requests},
     ) as adapter:
         while not adapter.done:
-            step = adapter.step()
-            logger_obj.on_step(step)
-            teleports += len(step.teleported_vehicle_ids)
-            if step.teleported_vehicle_ids:
-                raise RuntimeError(f"SUMO teleportation detected: {step.teleported_vehicle_ids}")
-            for event_id, event_type in tape.step(adapter._traci, step.sim_time_s):
+            next_time_s = adapter._traci.simulation.getTime() + 1.0
+
+            for event_id, event_type in tape.step(adapter._traci, next_time_s):
                 runtime_events.append({
                     "event_id": event_id,
                     "event_type": event_type,
-                    "timestamp_s": float(step.sim_time_s),
+                    "timestamp_s": float(next_time_s),
                 })
+
+            step = adapter.step()
+
+            logger_obj.on_step(
+                step,
+                known_closed_edges=tape.active_closed_edges(),
+            )
+
+            teleports += len(step.teleported_vehicle_ids)
+
+            if step.teleported_vehicle_ids:
+                raise RuntimeError(
+                    f"SUMO teleportation detected: {step.teleported_vehicle_ids}"
+            )
 
     if teleports:
         raise RuntimeError(f"SUMO episode had {teleports} teleport events")
