@@ -49,8 +49,14 @@ from src.routing.evaluator_state import (
 )
 from src.routing.path_builder import (
     DirectedPathBuilder,
+    DirectedRoadGraph,
     PathNotFoundError,
     PathResult,
+)
+from src.routing.path_cache import PathCache
+from src.routing.poi_distance_matrix import (
+    POIPrecomputeStats,
+    precompute_poi_distance_matrix,
 )
 from src.routing.route_plan import RoutePlan, VehicleRoute
 from src.routing.route_types import PhysicalRoute, RouteLeg
@@ -81,6 +87,12 @@ class RouteEvaluationConfig:
 
     default_start_time_s: TimeS = 0.0
 
+    # Explicit performance optimization.  Kept disabled by default because
+    # eager precomputation has a non-trivial upfront cost and is not always
+    # faster than lazy path caching on small/sparse workloads.
+    precompute_poi_matrix: bool = False
+    poi_matrix_horizon_margin_s: TimeS = 0.0
+
     def __post_init__(self) -> None:
         numeric_fields = (
             "distance_weight",
@@ -96,6 +108,7 @@ class RouteEvaluationConfig:
             "commitment_penalty",
             "depot_penalty",
             "default_start_time_s",
+            "poi_matrix_horizon_margin_s",
         )
 
         for field_name in numeric_fields:
@@ -117,6 +130,11 @@ class RouteEvaluationConfig:
         if self.default_start_time_s < 0.0:
             raise ValueError(
                 "default_start_time_s must be non-negative"
+            )
+
+        if self.poi_matrix_horizon_margin_s < 0.0:
+            raise ValueError(
+                "poi_matrix_horizon_margin_s must be non-negative"
             )
 
 
@@ -504,6 +522,47 @@ class RouteEvaluator:
 
         self.cost_view = cost_view
 
+        # Step-8 scaling fix: a versioned PathCache already existed in
+        # this codebase (`src/routing/path_cache.py`, fully tested) but
+        # was never instantiated or passed to any DirectedPathBuilder —
+        # every evaluate()/evaluate_vehicle_route() call, and every fresh
+        # DirectedPathBuilder built by `_make_path_builder`, ran a full
+        # Dijkstra search from scratch even for a (from_node, to_node)
+        # pair already solved moments earlier at the same cost/graph
+        # version and time bucket. A single QPSO fitness evaluation was
+        # measured (cProfile) issuing ~11,800 such searches for one
+        # 40-customer candidate; within one full QPSO run the same
+        # depot/customer pairs recur thousands of times more, at
+        # frequently-identical or nearby departure times.
+        #
+        # This cache is scoped to this RouteEvaluator instance and keyed
+        # by (from_node, to_node, graph_version, cost_version,
+        # forecast_version, departure_bucket) — see PathCacheKey — so it
+        # is safe to share across every call this evaluator serves: the
+        # instance's road topology / closed-edge set is fixed for its
+        # lifetime (a new evaluator is created by `with_network_state`
+        # whenever that changes), and calls that pass a different
+        # `cost_view` naturally get different cache keys via that
+        # CostView's own version tags.
+        self._path_cache = PathCache(
+            departure_bucket_s=60.0,
+            max_entries=200_000,
+        )
+
+        # A second scaling fix on top of the PathCache: DirectedPathBuilder
+        # previously built a brand-new DirectedRoadGraph (dict + per-node
+        # adjacency lists, sorted) from `self._edges` on *every single*
+        # `_make_path_builder()` call — measured at ~500 rebuilds per
+        # fitness evaluation (one per evaluate()/evaluate_vehicle_route()
+        # call), even though the road topology and closed-edge set are
+        # fixed for this evaluator's entire lifetime. Build it once here
+        # and share it; `with_network_state` still gets a correctly
+        # rebuilt graph because it constructs a brand-new RouteEvaluator.
+        self._road_graph = DirectedRoadGraph(
+            self._edges,
+            closed_edge_ids=self._closed_edge_ids,
+        )
+
         self.path_builder = DirectedPathBuilder(
             self._edges,
             closed_edge_ids=self._closed_edge_ids,
@@ -511,11 +570,38 @@ class RouteEvaluator:
                 self.travel_time_provider
             ),
             cost_view=self.cost_view,
+            path_cache=self._path_cache,
+            graph=self._road_graph,
         )
+
+        self.poi_precompute_stats: POIPrecomputeStats | None = None
+        if self.config.precompute_poi_matrix:
+            if self.cost_view is None:
+                raise ValueError(
+                    "precompute_poi_matrix requires a CostView; "
+                    "disable precomputation when using the legacy "
+                    "travel_time_provider path"
+                )
+            self.poi_precompute_stats = self.precompute_poi_matrix()
 
     # ==================================================================
     # Public API
     # ==================================================================
+
+    def precompute_poi_matrix(self) -> POIPrecomputeStats:
+        """Explicitly warm the evaluator's shared routing cache.
+
+        The operation is idempotent at the cache level and never changes the
+        evaluator's scenario, cost view, graph, or optimization state.  It is
+        deliberately explicit even when ``config.precompute_poi_matrix`` is
+        true; callers can therefore benchmark the preprocessing cost instead
+        of silently paying it during evaluator construction.
+        """
+        return precompute_poi_distance_matrix(
+            self.scenario,
+            self.path_builder,
+            margin_s=self.config.poi_matrix_horizon_margin_s,
+        )
 
     def evaluate(
         self,
@@ -1871,7 +1957,12 @@ class RouteEvaluator:
         Build a per-evaluation path builder.
 
         This is intentional: a caller-supplied CostView must never mutate
-        shared evaluator state.
+        shared evaluator state. The versioned PathCache is still shared
+        (see __init__) since it is keyed by graph/cost/forecast version
+        and departure bucket, so reusing it across per-evaluation
+        DirectedPathBuilder instances is safe and is what actually makes
+        the cache effective — a fresh, cacheless builder on every call
+        defeated the cache entirely.
         """
 
         return DirectedPathBuilder(
@@ -1883,6 +1974,24 @@ class RouteEvaluator:
                 else None
             ),
             cost_view=cost_view,
+            path_cache=self._path_cache,
+            # Only reuse the shared graph when no caller-supplied
+            # `cost_view` override is in play. `CostView` does not expose
+            # the edge/closed-edge set it was built from, so when a
+            # caller passes an explicit `cost_view` (a supported,
+            # documented capability of this evaluator for evaluating
+            # against a different network state without mutating the
+            # evaluator) we cannot verify it shares `self._road_graph`'s
+            # topology, and reusing it unverified could silently search
+            # the wrong graph. This is not the hot path — no in-repo
+            # caller currently passes a per-call cost_view — so falling
+            # back to a fresh, correct-by-construction graph here costs
+            # nothing in practice.
+            graph=(
+                self._road_graph
+                if cost_view is None
+                else None
+            ),
         )
 
     def _path_travel_time(

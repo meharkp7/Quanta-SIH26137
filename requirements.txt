@@ -8,4 +8,3 @@ scipy>=1.11
 pytest>=7.4
 traci==1.27.1
 sumolib==1.27.1
-torch>=2.1

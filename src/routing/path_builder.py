@@ -66,6 +66,27 @@ class PathResult:
     congestion_delay_s: TimeS
 
 
+@dataclass(frozen=True)
+class PathPrecomputeStats:
+    """Deterministic summary of a POI path-cache warm-up operation."""
+
+    source_count: int
+    departure_bucket_count: int
+    target_count: int
+    searches: int
+    paths_cached: int
+    unreachable_pairs: int
+    skipped_same_node_pairs: int
+
+    @property
+    def requested_pairs(self) -> int:
+        return (
+            self.source_count
+            * self.departure_bucket_count
+            * self.target_count
+        )
+
+
 class DirectedRoadGraph:
     """Lightweight directed graph over active RoadEdge objects."""
 
@@ -162,6 +183,7 @@ class DirectedPathBuilder:
             cost_view: CostView | None = None,
             path_cache: PathCache | None = None,
             graph_version: str = "default",
+            graph: "DirectedRoadGraph | None" = None,
         ) -> None:
         if (
             cost_view is not None
@@ -192,7 +214,7 @@ class DirectedPathBuilder:
             closed_edge_ids=closed_edge_ids,
         )
 
-        self.graph = DirectedRoadGraph(
+        self.graph = graph if graph is not None else DirectedRoadGraph(
             edges,
             closed_edge_ids=closed_edge_ids,
         )
@@ -402,7 +424,15 @@ class DirectedPathBuilder:
                 current_node
             ):
                 try:
-                    edge_cost = cost_view.edge_cost(
+                    # Relaxation only ever needs the travel time (for the
+                    # priority queue) — not the distance / free-flow /
+                    # congestion breakdown that full `edge_cost()` builds
+                    # and validates on every call. `edge_travel_time()`
+                    # applies the same correctness checks without the
+                    # discarded work; the full decomposition is still
+                    # computed once for the winning path in
+                    # `_reconstruct_path`, so reported costs are identical.
+                    edge_travel_time_s = cost_view.edge_travel_time(
                         edge,
                         departure_time_s=(
                             current_arrival
@@ -417,7 +447,7 @@ class DirectedPathBuilder:
 
                 candidate_arrival = (
                     current_arrival
-                    + edge_cost.travel_time_s
+                    + edge_travel_time_s
                 )
 
                 old_arrival = arrival_times.get(
@@ -449,6 +479,136 @@ class DirectedPathBuilder:
         raise PathNotFoundError(
             f"No directed path exists from "
             f"{from_node!r} to {to_node!r}"
+        )
+
+    def precompute_poi_paths(
+        self,
+        poi_node_ids: Iterable[RoadNodeId],
+        departure_times_s: Iterable[TimeS],
+        *,
+        travel_time_provider: TravelTimeProvider | None = None,
+    ) -> PathPrecomputeStats:
+        """Warm the versioned path cache for POI-to-POI routing queries.
+
+        The operation performs one time-dependent Dijkstra search per
+        source/departure bucket and stores the resulting physical paths for
+        all requested targets reached by that search.  It deliberately does
+        not alter :meth:`shortest_path` semantics and is never required for
+        correctness.
+
+        This method is intended as an explicit performance optimization.
+        Callers should benchmark it against lazy caching for their workload;
+        eager precomputation can be slower when the request set is small or
+        sparse.
+
+        Because the existing cache is bucketed, callers should only use this
+        optimization when the configured departure bucket is an acceptable
+        approximation for the application's time-dependent cost model.
+        Versioned cache keys prevent reuse across incompatible network/cost/
+        forecast states.
+        """
+        if self.path_cache is None:
+            raise RuntimeError(
+                "POI precomputation requires a PathCache; construct "
+                "DirectedPathBuilder with path_cache=..."
+            )
+
+        sources = tuple(dict.fromkeys(str(node) for node in poi_node_ids))
+        departures = tuple(sorted({float(t) for t in departure_times_s}))
+
+        if not departures:
+            raise ValueError("departure_times_s must contain at least one time")
+        for value in departures:
+            self._validate_time(value, name="departure_time_s")
+
+        targets = sources
+        for node_id in sources:
+            if not self.graph.contains_node(node_id):
+                raise ValueError(
+                    f"POI node {node_id!r} is not present in the active road graph"
+                )
+
+        searches = 0
+        paths_cached = 0
+        unreachable = 0
+        skipped_same = 0
+
+        for source in sources:
+            for departure_time_s in departures:
+                searches += 1
+                remaining = set(targets)
+                remaining.discard(source)
+                skipped_same += 1
+
+                if not remaining:
+                    continue
+
+                arrival_times: dict[RoadNodeId, float] = {
+                    source: departure_time_s
+                }
+                previous: dict[
+                    RoadNodeId, tuple[RoadNodeId, RoadEdgeId]
+                ] = {}
+                queue: list[tuple[float, str, RoadNodeId]] = [
+                    (departure_time_s, str(source), source)
+                ]
+
+                while queue and remaining:
+                    current_arrival, _, current_node = heapq.heappop(queue)
+                    if current_arrival > arrival_times.get(current_node, inf):
+                        continue
+
+                    if current_node in remaining:
+                        result = self._reconstruct_path(
+                            from_node=source,
+                            to_node=current_node,
+                            departure_time_s=departure_time_s,
+                            arrival_time_s=current_arrival,
+                            previous=previous,
+                            cost_view=self.cost_view,
+                        )
+                        key = self.path_cache.make_key(
+                            from_node=source,
+                            to_node=current_node,
+                            graph_version=self.cost_view.graph_version,
+                            cost_version=self.cost_view.cost_version,
+                            forecast_version=str(self.cost_view.forecast_version),
+                            departure_time_s=departure_time_s,
+                        )
+                        self.path_cache.put_result(key, result)
+                        paths_cached += 1
+                        remaining.remove(current_node)
+
+                    for edge in self.graph.outgoing_edges(current_node):
+                        try:
+                            edge_travel_time_s = self.cost_view.edge_travel_time(
+                                edge, departure_time_s=current_arrival
+                            )
+                        except InvalidEdgeCostError as exc:
+                            if self._legacy_travel_time_provider:
+                                raise InvalidTravelTimeError(str(exc)) from exc
+                            raise
+
+                        candidate_arrival = current_arrival + edge_travel_time_s
+                        old_arrival = arrival_times.get(edge.to_node, inf)
+                        if candidate_arrival < old_arrival:
+                            arrival_times[edge.to_node] = candidate_arrival
+                            previous[edge.to_node] = (current_node, edge.edge_id)
+                            heapq.heappush(
+                                queue,
+                                (candidate_arrival, str(edge.to_node), edge.to_node),
+                            )
+
+                unreachable += len(remaining)
+
+        return PathPrecomputeStats(
+            source_count=len(sources),
+            departure_bucket_count=len(departures),
+            target_count=len(targets),
+            searches=searches,
+            paths_cached=paths_cached,
+            unreachable_pairs=unreachable,
+            skipped_same_node_pairs=skipped_same,
         )
 
     def build_leg(

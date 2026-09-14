@@ -18,3 +18,22 @@ from .metrla_spatial import (
     validate_metrla_spatial,
     write_metrla_spatial,
 )
+# Optional real-road-network ingestion. Dependencies are imported lazily by the
+# ingestion module, so importing src.data does not require OSMnx.
+from .osm_ingestion import (
+    OSMIngestionConfig,
+    OSMIngestionError,
+    OSMNetwork,
+    graph_to_quanta,
+    load_graphml,
+    load_osm_xml,
+)
+
+__all__ += [
+    "OSMIngestionConfig",
+    "OSMIngestionError",
+    "OSMNetwork",
+    "graph_to_quanta",
+    "load_graphml",
+    "load_osm_xml",
+]
