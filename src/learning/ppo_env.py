@@ -59,7 +59,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from src.contracts.decision import ScopeAction
+from src.contracts.decision import ScopeAction, ScopeDecision
 from src.routing.route_plan import RoutePlan
 from src.optim.qpso import (
     AdaptiveQPSO,
@@ -86,8 +86,6 @@ try:
 except ImportError:  # pragma: no cover - compatibility path
     PPOPolicyDecision = Any  # type: ignore[misc,assignment]
     PPORuntime = Any  # type: ignore[misc,assignment]
-
-
 # ============================================================================
 # Action mapping
 # ============================================================================
@@ -894,6 +892,13 @@ class TrafficRoutingPPOEnv(gym.Env):
             DecisionRecord
         ] = []
 
+        # Authoritative causal routing decision for the most recent step.
+        #
+        # This is deliberately separate from `decision_log`, whose
+        # DecisionRecord contains realized reward/audit information and must
+        # not be inserted into DecisionMemory.
+        self._last_scope_decision: ScopeDecision | None = None
+
         self._total_work = max(
             1,
             len(
@@ -946,6 +951,7 @@ class TrafficRoutingPPOEnv(gym.Env):
         }
 
         self._decision_log = []
+        self._last_scope_decision = None
 
         self._remaining_work = float(
             self._total_work
@@ -1091,6 +1097,10 @@ class TrafficRoutingPPOEnv(gym.Env):
         # --------------------------------------------------------------
         # QPSO / KEEP
         # --------------------------------------------------------------
+
+        # Scope decisions are timestamped at the point the action is
+        # resolved, before the simulator advances to the next observation.
+        decision_time_s = float(self._sim_time_s)
 
         qpso_called = False
         qpso_evaluations = 0
@@ -1269,6 +1279,51 @@ class TrafficRoutingPPOEnv(gym.Env):
             )
         else:
             final_override_reason = None
+
+        # --------------------------------------------------------------
+        # Causal scope decision
+        # --------------------------------------------------------------
+        #
+        # DecisionMemory requires ScopeDecision, not DecisionRecord.
+        # The latter is intentionally a post-execution audit record carrying
+        # realized reward and QPSO information.
+        #
+        # If the final execution falls back to KEEP after a failed/rejected
+        # replanning attempt, KEEP has no mutable scope by contract.
+        if executed_action == ScopeAction.KEEP:
+            decision_request_ids: tuple[str, ...] = ()
+        else:
+            decision_request_ids = tuple(
+                selection.request_ids
+            )
+
+        self._last_scope_decision = ScopeDecision(
+            scenario_id=str(
+                self.scenario.scenario_id
+            ),
+            state_version=(
+                f"state-v{self._decision_index}"
+            ),
+            decision_time_s=decision_time_s,
+            requested_action=requested_action,
+            executed_action=executed_action,
+            affected_vehicle_ids=tuple(
+                selection.affected_vehicle_ids
+            ),
+            mutable_request_ids=decision_request_ids,
+            budget_seconds=0.0,
+            overridden=bool(
+                overridden
+            ),
+            override_reason=(
+                final_override_reason
+            ),
+            selection_reason=str(
+                selection.reason
+            ),
+            selected_by="ppo_policy",
+            decision_version="step17.2c-v1",
+        )
 
         # --------------------------------------------------------------
         # Audit record
@@ -2190,6 +2245,14 @@ class TrafficRoutingPPOEnv(gym.Env):
         return tuple(
             self._decision_log
         )
+
+    @property
+    def last_scope_decision(
+        self,
+    ) -> ScopeDecision | None:
+        """Return the authoritative causal scope decision for the latest step."""
+
+        return self._last_scope_decision
 
     @property
     def sim_time_s(self) -> float:

@@ -35,7 +35,7 @@ from src.learning.representation import (
     RepresentationProvider,
     validate_representation_provider,
 )
-
+from src.learning.representation import RepresentationOutput
 
 # ============================================================================
 # Runtime decision
@@ -143,11 +143,17 @@ class PPORuntime:
         `state` must represent only the current causal environment state.
         """
 
-        representation = (
-            self.representation_provider.encode(
-                state
+        if isinstance(
+            state,
+            RepresentationOutput,
+        ):
+            representation = state
+        else:
+            representation = (
+                self.representation_provider.encode(
+                    state
+                )
             )
-        )
 
         mask = self._mask_to_numpy(
             action_mask
