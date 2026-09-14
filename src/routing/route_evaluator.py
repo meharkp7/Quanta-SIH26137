@@ -54,6 +54,10 @@ from src.routing.path_builder import (
     PathResult,
 )
 from src.routing.path_cache import PathCache
+from src.routing.poi_distance_matrix import (
+    POIPrecomputeStats,
+    precompute_poi_distance_matrix,
+)
 from src.routing.route_plan import RoutePlan, VehicleRoute
 from src.routing.route_types import PhysicalRoute, RouteLeg
 
@@ -83,6 +87,12 @@ class RouteEvaluationConfig:
 
     default_start_time_s: TimeS = 0.0
 
+    # Explicit performance optimization.  Kept disabled by default because
+    # eager precomputation has a non-trivial upfront cost and is not always
+    # faster than lazy path caching on small/sparse workloads.
+    precompute_poi_matrix: bool = False
+    poi_matrix_horizon_margin_s: TimeS = 0.0
+
     def __post_init__(self) -> None:
         numeric_fields = (
             "distance_weight",
@@ -98,6 +108,7 @@ class RouteEvaluationConfig:
             "commitment_penalty",
             "depot_penalty",
             "default_start_time_s",
+            "poi_matrix_horizon_margin_s",
         )
 
         for field_name in numeric_fields:
@@ -119,6 +130,11 @@ class RouteEvaluationConfig:
         if self.default_start_time_s < 0.0:
             raise ValueError(
                 "default_start_time_s must be non-negative"
+            )
+
+        if self.poi_matrix_horizon_margin_s < 0.0:
+            raise ValueError(
+                "poi_matrix_horizon_margin_s must be non-negative"
             )
 
 
@@ -558,9 +574,34 @@ class RouteEvaluator:
             graph=self._road_graph,
         )
 
+        self.poi_precompute_stats: POIPrecomputeStats | None = None
+        if self.config.precompute_poi_matrix:
+            if self.cost_view is None:
+                raise ValueError(
+                    "precompute_poi_matrix requires a CostView; "
+                    "disable precomputation when using the legacy "
+                    "travel_time_provider path"
+                )
+            self.poi_precompute_stats = self.precompute_poi_matrix()
+
     # ==================================================================
     # Public API
     # ==================================================================
+
+    def precompute_poi_matrix(self) -> POIPrecomputeStats:
+        """Explicitly warm the evaluator's shared routing cache.
+
+        The operation is idempotent at the cache level and never changes the
+        evaluator's scenario, cost view, graph, or optimization state.  It is
+        deliberately explicit even when ``config.precompute_poi_matrix`` is
+        true; callers can therefore benchmark the preprocessing cost instead
+        of silently paying it during evaluator construction.
+        """
+        return precompute_poi_distance_matrix(
+            self.scenario,
+            self.path_builder,
+            margin_s=self.config.poi_matrix_horizon_margin_s,
+        )
 
     def evaluate(
         self,
