@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2026-09-14T18:08:29.735638+05:30 by Eclipse SUMO netconvert 1.27.1
+<!-- generated on 2026-09-14T18:02:49.137479+05:30 by Eclipse SUMO netconvert 1.27.1
 <netconvertConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
 
     <input>
-        <node-files value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\network\nodes.nod.xml"/>
-        <edge-files value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\network\edges.edg.xml"/>
-        <connection-files value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\network\connections.con.xml"/>
+        <node-files value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo\network\nodes.nod.xml"/>
+        <edge-files value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo\network\edges.edg.xml"/>
+        <connection-files value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo\network\connections.con.xml"/>
     </input>
 
     <output>
-        <output-file value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\network\net.xml"/>
+        <output-file value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo\network\net.xml"/>
     </output>
 
     <processing>
@@ -23,7 +23,7 @@
     </junctions>
 
     <report>
-        <log value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\network\netconvert.log"/>
+        <log value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo\network\netconvert.log"/>
     </report>
 
 </netconvertConfiguration>

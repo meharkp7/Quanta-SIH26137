@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
   <input>
-    <net-file value="C:/Users/Harleen Kaur/Desktop/sih2026/Quanta_SIH26137/artifacts/demo_sumo_ui/network/net.xml"/>
-    <route-files value="C:/Users/Harleen Kaur/Desktop/sih2026/Quanta_SIH26137/artifacts/demo_sumo_ui/routes/vehicles.rou.xml"/>
+    <net-file value="C:/Users/Harleen Kaur/Desktop/sih2026/Quanta_SIH26137/artifacts/step10_complete_loop/network/net.xml"/>
+    <route-files value="C:/Users/Harleen Kaur/Desktop/sih2026/Quanta_SIH26137/artifacts/step10_complete_loop/routes/vehicles.rou.xml"/>
   </input>
   <time>
     <begin value="0"/>

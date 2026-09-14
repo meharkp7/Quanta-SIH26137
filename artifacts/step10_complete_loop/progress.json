@@ -205,6 +205,16 @@
     "sim_time_s": 3.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 5.1,
+        "distance_remaining_m": 94.9,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": "E01_0",
@@ -221,16 +231,6 @@
         "position_m": 23.067531151458624,
         "distance_remaining_m": 76.93246884854138,
         "speed_mps": 8.85665974942688,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 5.1,
-        "distance_remaining_m": 94.9,
-        "speed_mps": 10.484,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -316,6 +316,16 @@
     "sim_time_s": 4.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 15.584,
+        "distance_remaining_m": 84.416,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": "E01_0",
@@ -332,16 +342,6 @@
         "position_m": 32.284109315384185,
         "distance_remaining_m": 67.71589068461581,
         "speed_mps": 9.21657816392556,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 15.584,
-        "distance_remaining_m": 84.416,
-        "speed_mps": 10.484,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -427,22 +427,22 @@
     "sim_time_s": 5.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 26.067999999999998,
+        "distance_remaining_m": 73.932,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": "E01_0",
         "position_m": 49.751999999999995,
         "distance_remaining_m": 50.248000000000005,
         "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 41.2247847458236,
-        "distance_remaining_m": 58.7752152541764,
-        "speed_mps": 8.940675430439413,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -457,12 +457,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 26.067999999999998,
-        "distance_remaining_m": 73.932,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 41.2247847458236,
+        "distance_remaining_m": 58.7752152541764,
+        "speed_mps": 8.940675430439413,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -548,22 +548,22 @@
     "sim_time_s": 6.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 36.552,
+        "distance_remaining_m": 63.448,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": "E01_0",
         "position_m": 60.91499999999999,
         "distance_remaining_m": 39.08500000000001,
         "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 51.37763605041896,
-        "distance_remaining_m": 48.62236394958104,
-        "speed_mps": 10.152851304595359,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -578,12 +578,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 36.552,
-        "distance_remaining_m": 63.448,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 51.37763605041896,
+        "distance_remaining_m": 48.62236394958104,
+        "speed_mps": 10.152851304595359,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -669,22 +669,22 @@
     "sim_time_s": 7.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 47.036,
+        "distance_remaining_m": 52.964,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": "E01_0",
         "position_m": 72.07799999999999,
         "distance_remaining_m": 27.92200000000001,
         "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 61.364074268314994,
-        "distance_remaining_m": 38.635925731685006,
-        "speed_mps": 9.986438217896037,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -699,12 +699,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 47.036,
-        "distance_remaining_m": 52.964,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 61.364074268314994,
+        "distance_remaining_m": 38.635925731685006,
+        "speed_mps": 9.986438217896037,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -790,22 +790,22 @@
     "sim_time_s": 8.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 57.52,
+        "distance_remaining_m": 42.48,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": "E01_0",
         "position_m": 83.24099999999999,
         "distance_remaining_m": 16.759000000000015,
         "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 71.12404193024058,
-        "distance_remaining_m": 28.87595806975942,
-        "speed_mps": 9.759967661925591,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -820,12 +820,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 57.52,
-        "distance_remaining_m": 42.48,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 71.12404193024058,
+        "distance_remaining_m": 28.87595806975942,
+        "speed_mps": 9.759967661925591,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -911,22 +911,22 @@
     "sim_time_s": 9.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 68.004,
+        "distance_remaining_m": 31.995999999999995,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": "E01_0",
         "position_m": 92.994,
         "distance_remaining_m": 7.006,
         "speed_mps": 9.753000000000007,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 79.97828926022723,
-        "distance_remaining_m": 20.02171073977277,
-        "speed_mps": 8.854247329986654,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -941,12 +941,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 68.004,
-        "distance_remaining_m": 31.995999999999995,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 79.97828926022723,
+        "distance_remaining_m": 20.02171073977277,
+        "speed_mps": 8.854247329986654,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -1032,22 +1032,22 @@
     "sim_time_s": 10.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 78.488,
+        "distance_remaining_m": 21.512,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": "E01_0",
         "position_m": 98.24700000000001,
         "distance_remaining_m": 1.752999999999986,
         "speed_mps": 5.253000000000007,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 89.94050659991149,
-        "distance_remaining_m": 10.059493400088513,
-        "speed_mps": 9.962217339684257,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -1062,12 +1062,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 78.488,
-        "distance_remaining_m": 21.512,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 89.94050659991149,
+        "distance_remaining_m": 10.059493400088513,
+        "speed_mps": 9.962217339684257,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -1153,22 +1153,22 @@
     "sim_time_s": 11.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 87.24350000000001,
+        "distance_remaining_m": 12.756499999999988,
+        "speed_mps": 8.755500000000012,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": "E01_0",
         "position_m": 99.00000000000003,
         "distance_remaining_m": 0.9999999999999716,
         "speed_mps": 0.7530000000000072,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 99.78659093076828,
-        "distance_remaining_m": 0.21340906923171588,
-        "speed_mps": 9.846084330856801,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -1183,12 +1183,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 87.24350000000001,
-        "distance_remaining_m": 12.756499999999988,
-        "speed_mps": 8.755500000000012,
+        "vehicle_id": "bg_1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 99.78659093076828,
+        "distance_remaining_m": 0.21340906923171588,
+        "speed_mps": 9.846084330856801,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -1274,6 +1274,16 @@
     "sim_time_s": 12.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 91.49900000000002,
+        "distance_remaining_m": 8.500999999999976,
+        "speed_mps": 4.2555000000000165,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -1282,16 +1292,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 9.819550756567153,
-        "distance_remaining_m": 90.18044924343285,
-        "speed_mps": 10.03295982579887,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -1304,12 +1304,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
+        "vehicle_id": "bg_1",
         "edge_id": "E01",
         "lane_id": "E01_0",
-        "position_m": 91.49900000000002,
-        "distance_remaining_m": 8.500999999999976,
-        "speed_mps": 4.2555000000000165,
+        "position_m": 9.819550756567153,
+        "distance_remaining_m": 90.18044924343285,
+        "speed_mps": 10.03295982579887,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -1400,6 +1400,16 @@
     "sim_time_s": 13.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 97.75450000000004,
+        "distance_remaining_m": 2.2454999999999643,
+        "speed_mps": 6.2555000000000165,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -1408,16 +1418,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 19.533935746447177,
-        "distance_remaining_m": 80.46606425355282,
-        "speed_mps": 9.714384989880026,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -1430,12 +1430,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
+        "vehicle_id": "bg_1",
         "edge_id": "E01",
         "lane_id": "E01_0",
-        "position_m": 97.75450000000004,
-        "distance_remaining_m": 2.2454999999999643,
-        "speed_mps": 6.2555000000000165,
+        "position_m": 19.533935746447177,
+        "distance_remaining_m": 80.46606425355282,
+        "speed_mps": 9.714384989880026,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -1521,6 +1521,16 @@
     "sim_time_s": 14.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 6.010000000000048,
+        "distance_remaining_m": 93.98999999999995,
+        "speed_mps": 8.255500000000016,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -1529,16 +1539,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 29.660651827590534,
-        "distance_remaining_m": 70.33934817240947,
-        "speed_mps": 10.126716081143357,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -1551,12 +1551,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 6.010000000000048,
-        "distance_remaining_m": 93.98999999999995,
-        "speed_mps": 8.255500000000016,
+        "vehicle_id": "bg_1",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 29.660651827590534,
+        "distance_remaining_m": 70.33934817240947,
+        "speed_mps": 10.126716081143357,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -1642,6 +1642,16 @@
     "sim_time_s": 15.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 16.265500000000063,
+        "distance_remaining_m": 83.73449999999994,
+        "speed_mps": 10.255500000000016,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -1650,16 +1660,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 38.73124603189807,
-        "distance_remaining_m": 61.26875396810193,
-        "speed_mps": 9.070594204307534,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -1672,12 +1672,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 16.265500000000063,
-        "distance_remaining_m": 83.73449999999994,
-        "speed_mps": 10.255500000000016,
+        "vehicle_id": "bg_1",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 38.73124603189807,
+        "distance_remaining_m": 61.26875396810193,
+        "speed_mps": 9.070594204307534,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -1763,6 +1763,16 @@
     "sim_time_s": 16.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 26.74950000000006,
+        "distance_remaining_m": 73.25049999999993,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -1771,16 +1781,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 47.87264224794227,
-        "distance_remaining_m": 52.12735775205773,
-        "speed_mps": 9.141396216044203,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -1793,12 +1793,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 26.74950000000006,
-        "distance_remaining_m": 73.25049999999993,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 47.87264224794227,
+        "distance_remaining_m": 52.12735775205773,
+        "speed_mps": 9.141396216044203,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -1884,6 +1884,16 @@
     "sim_time_s": 17.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 37.23350000000006,
+        "distance_remaining_m": 62.76649999999994,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -1892,16 +1902,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 57.84318623729236,
-        "distance_remaining_m": 42.15681376270764,
-        "speed_mps": 9.97054398935009,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -1914,12 +1914,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 37.23350000000006,
-        "distance_remaining_m": 62.76649999999994,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 57.84318623729236,
+        "distance_remaining_m": 42.15681376270764,
+        "speed_mps": 9.97054398935009,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -2005,6 +2005,16 @@
     "sim_time_s": 18.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 47.717500000000065,
+        "distance_remaining_m": 52.282499999999935,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -2013,16 +2023,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 66.86517044845874,
-        "distance_remaining_m": 33.13482955154126,
-        "speed_mps": 9.021984211166389,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -2035,12 +2035,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 47.717500000000065,
-        "distance_remaining_m": 52.282499999999935,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 66.86517044845874,
+        "distance_remaining_m": 33.13482955154126,
+        "speed_mps": 9.021984211166389,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -2126,6 +2126,16 @@
     "sim_time_s": 19.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 58.20150000000007,
+        "distance_remaining_m": 41.79849999999993,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -2134,16 +2144,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 75.88705702207143,
-        "distance_remaining_m": 24.11294297792857,
-        "speed_mps": 9.02188657361269,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -2156,12 +2156,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 58.20150000000007,
-        "distance_remaining_m": 41.79849999999993,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 75.88705702207143,
+        "distance_remaining_m": 24.11294297792857,
+        "speed_mps": 9.02188657361269,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -2247,6 +2247,16 @@
     "sim_time_s": 20.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 68.68550000000006,
+        "distance_remaining_m": 31.31449999999994,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -2255,16 +2265,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 84.76785317630785,
-        "distance_remaining_m": 15.232146823692148,
-        "speed_mps": 8.880796154236421,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -2277,12 +2277,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 68.68550000000006,
-        "distance_remaining_m": 31.31449999999994,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 84.76785317630785,
+        "distance_remaining_m": 15.232146823692148,
+        "speed_mps": 8.880796154236421,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -2368,6 +2368,16 @@
     "sim_time_s": 21.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 79.16950000000006,
+        "distance_remaining_m": 20.830499999999944,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -2376,16 +2386,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E01",
-        "lane_id": "E01_0",
-        "position_m": 94.30516272428444,
-        "distance_remaining_m": 5.694837275715557,
-        "speed_mps": 9.53730954797659,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -2398,12 +2398,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 79.16950000000006,
-        "distance_remaining_m": 20.830499999999944,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E01",
+        "lane_id": "E01_0",
+        "position_m": 94.30516272428444,
+        "distance_remaining_m": 5.694837275715557,
+        "speed_mps": 9.53730954797659,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -2489,6 +2489,16 @@
     "sim_time_s": 22.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 89.65350000000005,
+        "distance_remaining_m": 10.34649999999995,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": null,
@@ -2497,16 +2507,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 3.419256591295806,
-        "distance_remaining_m": 96.5807434087042,
-        "speed_mps": 9.114093867011368,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -2519,12 +2519,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
+        "vehicle_id": "bg_1",
         "edge_id": "E12",
         "lane_id": "E12_0",
-        "position_m": 89.65350000000005,
-        "distance_remaining_m": 10.34649999999995,
-        "speed_mps": 10.484,
+        "position_m": 3.419256591295806,
+        "distance_remaining_m": 96.5807434087042,
+        "speed_mps": 9.114093867011368,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -2610,6 +2610,16 @@
     "sim_time_s": 23.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 97.02625000000003,
+        "distance_remaining_m": 2.973749999999967,
+        "speed_mps": 7.372749999999975,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E01",
         "lane_id": "E01_0",
@@ -2618,16 +2628,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 13.182705510835147,
-        "distance_remaining_m": 86.81729448916485,
-        "speed_mps": 9.763448919539341,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -2640,12 +2640,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
+        "vehicle_id": "bg_1",
         "edge_id": "E12",
         "lane_id": "E12_0",
-        "position_m": 97.02625000000003,
-        "distance_remaining_m": 2.973749999999967,
-        "speed_mps": 7.372749999999975,
+        "position_m": 13.182705510835147,
+        "distance_remaining_m": 86.81729448916485,
+        "speed_mps": 9.763448919539341,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -2731,22 +2731,22 @@
     "sim_time_s": 24.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 6.399000000000001,
+        "distance_remaining_m": 93.601,
+        "speed_mps": 9.372749999999975,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 1.0000000000000284,
         "distance_remaining_m": 98.99999999999997,
         "speed_mps": 2.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 22.513146461016483,
-        "distance_remaining_m": 77.48685353898352,
-        "speed_mps": 9.330440950181336,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -2761,12 +2761,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 6.399000000000001,
-        "distance_remaining_m": 93.601,
-        "speed_mps": 9.372749999999975,
+        "vehicle_id": "bg_1",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 22.513146461016483,
+        "distance_remaining_m": 77.48685353898352,
+        "speed_mps": 9.330440950181336,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -2857,22 +2857,22 @@
     "sim_time_s": 25.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 16.883000000000003,
+        "distance_remaining_m": 83.11699999999999,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 5.000000000000028,
         "distance_remaining_m": 94.99999999999997,
         "speed_mps": 4.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 31.602451722326673,
-        "distance_remaining_m": 68.39754827767332,
-        "speed_mps": 9.08930526131019,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -2887,12 +2887,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 16.883000000000003,
-        "distance_remaining_m": 83.11699999999999,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 31.602451722326673,
+        "distance_remaining_m": 68.39754827767332,
+        "speed_mps": 9.08930526131019,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -2978,22 +2978,22 @@
     "sim_time_s": 26.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 27.367000000000004,
+        "distance_remaining_m": 72.633,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 11.000000000000028,
         "distance_remaining_m": 88.99999999999997,
         "speed_mps": 6.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 41.58049779729916,
-        "distance_remaining_m": 58.41950220270084,
-        "speed_mps": 9.978046074972488,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -3008,12 +3008,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 27.367000000000004,
-        "distance_remaining_m": 72.633,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 41.58049779729916,
+        "distance_remaining_m": 58.41950220270084,
+        "speed_mps": 9.978046074972488,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -3099,22 +3099,22 @@
     "sim_time_s": 27.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 37.851000000000006,
+        "distance_remaining_m": 62.148999999999994,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 19.00000000000003,
         "distance_remaining_m": 80.99999999999997,
         "speed_mps": 8.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 50.97066172465867,
-        "distance_remaining_m": 49.02933827534133,
-        "speed_mps": 9.390163927359508,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -3129,12 +3129,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 37.851000000000006,
-        "distance_remaining_m": 62.148999999999994,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 50.97066172465867,
+        "distance_remaining_m": 49.02933827534133,
+        "speed_mps": 9.390163927359508,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -3220,22 +3220,22 @@
     "sim_time_s": 28.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 48.33500000000001,
+        "distance_remaining_m": 51.66499999999999,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 29.00000000000003,
         "distance_remaining_m": 70.99999999999997,
         "speed_mps": 10.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 60.18798122445027,
-        "distance_remaining_m": 39.81201877554973,
-        "speed_mps": 9.2173194997916,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -3250,12 +3250,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 48.33500000000001,
-        "distance_remaining_m": 51.66499999999999,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 60.18798122445027,
+        "distance_remaining_m": 39.81201877554973,
+        "speed_mps": 9.2173194997916,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -3341,22 +3341,22 @@
     "sim_time_s": 29.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 58.81900000000001,
+        "distance_remaining_m": 41.18099999999999,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 40.163000000000025,
         "distance_remaining_m": 59.836999999999975,
         "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 70.00493371853696,
-        "distance_remaining_m": 29.99506628146304,
-        "speed_mps": 9.816952494086697,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -3371,12 +3371,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 58.81900000000001,
-        "distance_remaining_m": 41.18099999999999,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 70.00493371853696,
+        "distance_remaining_m": 29.99506628146304,
+        "speed_mps": 9.816952494086697,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -3462,22 +3462,22 @@
     "sim_time_s": 30.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 69.30300000000001,
+        "distance_remaining_m": 30.69699999999999,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 51.32600000000002,
         "distance_remaining_m": 48.67399999999998,
         "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 79.44786420714853,
-        "distance_remaining_m": 20.552135792851473,
-        "speed_mps": 9.442930488611571,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -3492,12 +3492,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 69.30300000000001,
-        "distance_remaining_m": 30.69699999999999,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 79.44786420714853,
+        "distance_remaining_m": 20.552135792851473,
+        "speed_mps": 9.442930488611571,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -3583,22 +3583,22 @@
     "sim_time_s": 31.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 79.787,
+        "distance_remaining_m": 20.212999999999994,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 62.48900000000002,
         "distance_remaining_m": 37.51099999999998,
         "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 89.07136402489616,
-        "distance_remaining_m": 10.928635975103845,
-        "speed_mps": 9.623499817747623,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -3613,12 +3613,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 79.787,
-        "distance_remaining_m": 20.212999999999994,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 89.07136402489616,
+        "distance_remaining_m": 10.928635975103845,
+        "speed_mps": 9.623499817747623,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -3704,22 +3704,22 @@
     "sim_time_s": 32.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 90.271,
+        "distance_remaining_m": 9.729,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 73.65200000000002,
         "distance_remaining_m": 26.347999999999985,
         "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E12",
-        "lane_id": "E12_0",
-        "position_m": 96.50510200154315,
-        "distance_remaining_m": 3.4948979984568496,
-        "speed_mps": 7.433737976646992,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -3734,12 +3734,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 90.271,
-        "distance_remaining_m": 9.729,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E12",
+        "lane_id": "E12_0",
+        "position_m": 96.50510200154315,
+        "distance_remaining_m": 3.4948979984568496,
+        "speed_mps": 7.433737976646992,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -3825,22 +3825,22 @@
     "sim_time_s": 33.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 0.7549999999999955,
+        "distance_remaining_m": 99.245,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 84.41394665939673,
         "distance_remaining_m": 15.586053340603272,
         "speed_mps": 10.761946659396708,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 5.278317848244683,
-        "distance_remaining_m": 94.72168215175532,
-        "speed_mps": 8.773215846701536,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -3855,12 +3855,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 0.7549999999999955,
-        "distance_remaining_m": 99.245,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 5.278317848244683,
+        "distance_remaining_m": 94.72168215175532,
+        "speed_mps": 8.773215846701536,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -3946,22 +3946,22 @@
     "sim_time_s": 34.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 11.238999999999995,
+        "distance_remaining_m": 88.76100000000001,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 93.77596443959783,
         "distance_remaining_m": 6.2240355604021715,
         "speed_mps": 9.362017780201093,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 15.102440778932536,
-        "distance_remaining_m": 84.89755922106747,
-        "speed_mps": 9.824122930687853,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -3976,12 +3976,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 11.238999999999995,
-        "distance_remaining_m": 88.76100000000001,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 15.102440778932536,
+        "distance_remaining_m": 84.89755922106747,
+        "speed_mps": 9.824122930687853,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -4067,22 +4067,22 @@
     "sim_time_s": 35.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 21.722999999999995,
+        "distance_remaining_m": 78.277,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 98.63798221979891,
         "distance_remaining_m": 1.3620177802010858,
         "speed_mps": 4.862017780201093,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 24.690211790516045,
-        "distance_remaining_m": 75.30978820948395,
-        "speed_mps": 9.587771011583508,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -4097,12 +4097,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 21.722999999999995,
-        "distance_remaining_m": 78.277,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 24.690211790516045,
+        "distance_remaining_m": 75.30978820948395,
+        "speed_mps": 9.587771011583508,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -4188,22 +4188,22 @@
     "sim_time_s": 36.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 32.206999999999994,
+        "distance_remaining_m": 67.793,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
         "position_m": 99.0,
         "distance_remaining_m": 1.0,
         "speed_mps": 0.3620177802010929,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 33.8300139867859,
-        "distance_remaining_m": 66.1699860132141,
-        "speed_mps": 9.139802196269855,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -4218,12 +4218,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 32.206999999999994,
-        "distance_remaining_m": 67.793,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 33.8300139867859,
+        "distance_remaining_m": 66.1699860132141,
+        "speed_mps": 9.139802196269855,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -4309,6 +4309,16 @@
     "sim_time_s": 37.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 42.690999999999995,
+        "distance_remaining_m": 57.309000000000005,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": null,
@@ -4317,16 +4327,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 43.7260233935332,
-        "distance_remaining_m": 56.2739766064668,
-        "speed_mps": 9.896009406747297,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -4339,12 +4339,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 42.690999999999995,
-        "distance_remaining_m": 57.309000000000005,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 43.7260233935332,
+        "distance_remaining_m": 56.2739766064668,
+        "speed_mps": 9.896009406747297,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -4435,6 +4435,16 @@
     "sim_time_s": 38.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 53.175,
+        "distance_remaining_m": 46.825,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": null,
@@ -4443,16 +4453,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 52.75713218772877,
-        "distance_remaining_m": 47.24286781227123,
-        "speed_mps": 9.031108794195578,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -4465,12 +4465,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 53.175,
-        "distance_remaining_m": 46.825,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 52.75713218772877,
+        "distance_remaining_m": 47.24286781227123,
+        "speed_mps": 9.031108794195578,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -4556,6 +4556,16 @@
     "sim_time_s": 39.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 63.659,
+        "distance_remaining_m": 36.341,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": null,
@@ -4564,16 +4574,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 62.4401869438896,
-        "distance_remaining_m": 37.5598130561104,
-        "speed_mps": 9.683054756160827,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -4586,12 +4586,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 63.659,
-        "distance_remaining_m": 36.341,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 62.4401869438896,
+        "distance_remaining_m": 37.5598130561104,
+        "speed_mps": 9.683054756160827,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -4677,6 +4677,16 @@
     "sim_time_s": 40.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 74.143,
+        "distance_remaining_m": 25.857,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": null,
@@ -4685,16 +4695,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 71.31476606850512,
-        "distance_remaining_m": 28.685233931494878,
-        "speed_mps": 8.874579124615527,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -4707,12 +4707,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 74.143,
-        "distance_remaining_m": 25.857,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 71.31476606850512,
+        "distance_remaining_m": 28.685233931494878,
+        "speed_mps": 8.874579124615527,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -4798,6 +4798,16 @@
     "sim_time_s": 41.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 84.627,
+        "distance_remaining_m": 15.373000000000005,
+        "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": null,
@@ -4806,16 +4816,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 80.68239455037005,
-        "distance_remaining_m": 19.31760544962995,
-        "speed_mps": 9.36762848186493,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -4828,12 +4828,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 84.627,
-        "distance_remaining_m": 15.373000000000005,
-        "speed_mps": 10.484,
+        "vehicle_id": "bg_1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 80.68239455037005,
+        "distance_remaining_m": 19.31760544962995,
+        "speed_mps": 9.36762848186493,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -4919,6 +4919,16 @@
     "sim_time_s": 42.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 93.918,
+        "distance_remaining_m": 6.081999999999994,
+        "speed_mps": 9.291000000000004,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": null,
@@ -4927,16 +4937,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 90.62239963337686,
-        "distance_remaining_m": 9.377600366623142,
-        "speed_mps": 9.940005083006808,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -4949,12 +4949,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 93.918,
-        "distance_remaining_m": 6.081999999999994,
-        "speed_mps": 9.291000000000004,
+        "vehicle_id": "bg_1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 90.62239963337686,
+        "distance_remaining_m": 9.377600366623142,
+        "speed_mps": 9.940005083006808,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -5040,6 +5040,16 @@
     "sim_time_s": 43.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 98.709,
+        "distance_remaining_m": 1.2909999999999968,
+        "speed_mps": 4.791000000000004,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": null,
@@ -5048,16 +5058,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 0.2661035793330484,
-        "distance_remaining_m": 99.73389642066695,
-        "speed_mps": 9.643703945956194,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -5070,12 +5070,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
+        "vehicle_id": "bg_1",
         "edge_id": "E34",
         "lane_id": "E34_0",
-        "position_m": 98.709,
-        "distance_remaining_m": 1.2909999999999968,
-        "speed_mps": 4.791000000000004,
+        "position_m": 0.2661035793330484,
+        "distance_remaining_m": 99.73389642066695,
+        "speed_mps": 9.643703945956194,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -5161,6 +5161,16 @@
     "sim_time_s": 44.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 99.0,
+        "distance_remaining_m": 1.0,
+        "speed_mps": 0.2910000000000039,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": null,
@@ -5169,16 +5179,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 9.791421059326266,
-        "distance_remaining_m": 90.20857894067373,
-        "speed_mps": 9.525317479993218,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -5191,12 +5191,12 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
+        "vehicle_id": "bg_1",
         "edge_id": "E34",
         "lane_id": "E34_0",
-        "position_m": 99.0,
-        "distance_remaining_m": 1.0,
-        "speed_mps": 0.2910000000000039,
+        "position_m": 9.791421059326266,
+        "distance_remaining_m": 90.20857894067373,
+        "speed_mps": 9.525317479993218,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -5282,8 +5282,8 @@
     "sim_time_s": 45.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E12",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -5292,14 +5292,14 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "bg_1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 19.37483721148688,
-        "distance_remaining_m": 80.62516278851312,
-        "speed_mps": 9.583416152160614,
-        "stop_state": 0,
-        "is_stopped": false
+        "vehicle_id": "V1",
+        "edge_id": "E12",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
       },
       {
         "vehicle_id": "bg_0",
@@ -5312,14 +5312,14 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
+        "vehicle_id": "bg_1",
         "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
+        "lane_id": "E34_0",
+        "position_m": 19.37483721148688,
+        "distance_remaining_m": 80.62516278851312,
+        "speed_mps": 9.583416152160614,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -5403,6 +5403,16 @@
     "sim_time_s": 46.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E12",
         "lane_id": "E12_0",
@@ -5411,16 +5421,6 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 28.57119047458935,
-        "distance_remaining_m": 71.42880952541066,
-        "speed_mps": 9.196353263102472,
-        "stop_state": 0,
-        "is_stopped": false
       },
       {
         "vehicle_id": "bg_0",
@@ -5433,14 +5433,14 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
+        "vehicle_id": "bg_1",
         "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
+        "lane_id": "E34_0",
+        "position_m": 28.57119047458935,
+        "distance_remaining_m": 71.42880952541066,
+        "speed_mps": 9.196353263102472,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -5524,22 +5524,22 @@
     "sim_time_s": 47.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
         "position_m": 1.0,
         "distance_remaining_m": 99.0,
         "speed_mps": 2.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
-        "vehicle_id": "bg_1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 38.050743137680925,
-        "distance_remaining_m": 61.949256862319075,
-        "speed_mps": 9.479552663091571,
         "stop_state": 0,
         "is_stopped": false
       },
@@ -5554,14 +5554,14 @@
         "is_stopped": false
       },
       {
-        "vehicle_id": "V2",
+        "vehicle_id": "bg_1",
         "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
+        "lane_id": "E34_0",
+        "position_m": 38.050743137680925,
+        "distance_remaining_m": 61.949256862319075,
+        "speed_mps": 9.479552663091571,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -5650,6 +5650,16 @@
     "sim_time_s": 48.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -5668,16 +5678,6 @@
         "speed_mps": 9.400483813040891,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -5763,6 +5763,16 @@
     "sim_time_s": 49.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -5781,16 +5791,6 @@
         "speed_mps": 9.950700371895918,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -5874,6 +5874,16 @@
     "sim_time_s": 50.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -5892,16 +5902,6 @@
         "speed_mps": 9.31403838174604,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -5985,6 +5985,16 @@
     "sim_time_s": 51.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -6003,16 +6013,6 @@
         "speed_mps": 9.211372653997504,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -6096,6 +6096,16 @@
     "sim_time_s": 52.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -6114,16 +6124,6 @@
         "speed_mps": 8.865708447291516,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -6207,6 +6207,16 @@
     "sim_time_s": 53.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -6225,16 +6235,6 @@
         "speed_mps": 8.96454598700814,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -6318,6 +6318,16 @@
     "sim_time_s": 54.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -6336,16 +6346,6 @@
         "speed_mps": 9.087184344043024,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -6429,6 +6429,16 @@
     "sim_time_s": 55.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -6447,16 +6457,6 @@
         "speed_mps": 10.05379922147561,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -6540,6 +6540,16 @@
     "sim_time_s": 56.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -6558,16 +6568,6 @@
         "speed_mps": 9.857459202568979,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -6651,6 +6651,16 @@
     "sim_time_s": 57.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -6669,16 +6679,6 @@
         "speed_mps": 9.139105565610341,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -6762,6 +6762,16 @@
     "sim_time_s": 58.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -6780,16 +6790,6 @@
         "speed_mps": 9.738336104081943,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -6873,6 +6873,16 @@
     "sim_time_s": 59.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": "E23_0",
@@ -6891,16 +6901,6 @@
         "speed_mps": 9.583068007693626,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -6984,6 +6984,16 @@
     "sim_time_s": 60.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": null,
@@ -7002,16 +7012,6 @@
         "speed_mps": 8.881310235054233,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -7100,6 +7100,16 @@
     "sim_time_s": 61.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": null,
@@ -7118,16 +7128,6 @@
         "speed_mps": 9.212495266270825,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -7211,6 +7211,16 @@
     "sim_time_s": 62.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": null,
@@ -7229,16 +7239,6 @@
         "speed_mps": 9.560739620027134,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -7322,6 +7322,16 @@
     "sim_time_s": 63.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": null,
@@ -7340,16 +7350,6 @@
         "speed_mps": 8.881613628912717,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -7433,6 +7433,16 @@
     "sim_time_s": 64.0,
     "vehicles": [
       {
+        "vehicle_id": "V2",
+        "edge_id": "E34",
+        "lane_id": null,
+        "position_m": 99.0,
+        "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
         "vehicle_id": "V1",
         "edge_id": "E23",
         "lane_id": null,
@@ -7451,16 +7461,6 @@
         "speed_mps": 9.752583402904682,
         "stop_state": 0,
         "is_stopped": false
-      },
-      {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
-        "lane_id": null,
-        "position_m": 99.0,
-        "distance_remaining_m": 0.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
       }
     ],
     "edges": [
@@ -7544,8 +7544,8 @@
     "sim_time_s": 65.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -7554,8 +7554,8 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
+        "vehicle_id": "V1",
+        "edge_id": "E23",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -7647,8 +7647,8 @@
     "sim_time_s": 66.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -7657,8 +7657,8 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
+        "vehicle_id": "V1",
+        "edge_id": "E23",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -7748,8 +7748,8 @@
     "sim_time_s": 67.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -7758,8 +7758,8 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
+        "vehicle_id": "V1",
+        "edge_id": "E23",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -7849,8 +7849,8 @@
     "sim_time_s": 68.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -7859,8 +7859,8 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
+        "vehicle_id": "V1",
+        "edge_id": "E23",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -7950,8 +7950,8 @@
     "sim_time_s": 69.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -7960,8 +7960,8 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
+        "vehicle_id": "V1",
+        "edge_id": "E23",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8051,8 +8051,8 @@
     "sim_time_s": 70.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8061,8 +8061,8 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
+        "vehicle_id": "V1",
+        "edge_id": "E23",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8152,8 +8152,8 @@
     "sim_time_s": 71.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8162,8 +8162,8 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
+        "vehicle_id": "V1",
+        "edge_id": "E23",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8253,8 +8253,8 @@
     "sim_time_s": 72.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8263,8 +8263,8 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
+        "vehicle_id": "V1",
+        "edge_id": "E23",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8354,8 +8354,8 @@
     "sim_time_s": 73.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8364,8 +8364,8 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
+        "vehicle_id": "V1",
+        "edge_id": "E23",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8455,8 +8455,8 @@
     "sim_time_s": 74.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
+        "vehicle_id": "V2",
+        "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8465,8 +8465,8 @@
         "is_stopped": true
       },
       {
-        "vehicle_id": "V2",
-        "edge_id": "E34",
+        "vehicle_id": "V1",
+        "edge_id": "E23",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
@@ -8556,21 +8556,21 @@
     "sim_time_s": 75.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E23",
-        "lane_id": "E23_0",
-        "position_m": 99.0,
-        "distance_remaining_m": 1.0,
-        "speed_mps": 0.0,
-        "stop_state": 3,
-        "is_stopped": true
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
         "position_m": 99.0,
         "distance_remaining_m": 0.0,
+        "speed_mps": 0.0,
+        "stop_state": 3,
+        "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E23",
+        "lane_id": "E23_0",
+        "position_m": 99.0,
+        "distance_remaining_m": 1.0,
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
@@ -8657,16 +8657,6 @@
     "sim_time_s": 76.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 1.0,
-        "distance_remaining_m": 99.0,
-        "speed_mps": 2.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -8675,6 +8665,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 1.0,
+        "distance_remaining_m": 99.0,
+        "speed_mps": 2.0,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -8763,16 +8763,6 @@
     "sim_time_s": 77.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 5.0,
-        "distance_remaining_m": 95.0,
-        "speed_mps": 4.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -8781,6 +8771,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 5.0,
+        "distance_remaining_m": 95.0,
+        "speed_mps": 4.0,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -8864,16 +8864,6 @@
     "sim_time_s": 78.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 11.0,
-        "distance_remaining_m": 89.0,
-        "speed_mps": 6.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -8882,6 +8872,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 11.0,
+        "distance_remaining_m": 89.0,
+        "speed_mps": 6.0,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -8965,16 +8965,6 @@
     "sim_time_s": 79.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 19.0,
-        "distance_remaining_m": 81.0,
-        "speed_mps": 8.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -8983,6 +8973,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 19.0,
+        "distance_remaining_m": 81.0,
+        "speed_mps": 8.0,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -9066,16 +9066,6 @@
     "sim_time_s": 80.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 29.0,
-        "distance_remaining_m": 71.0,
-        "speed_mps": 10.0,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -9084,6 +9074,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 29.0,
+        "distance_remaining_m": 71.0,
+        "speed_mps": 10.0,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -9172,16 +9172,6 @@
     "sim_time_s": 81.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 40.163,
-        "distance_remaining_m": 59.837,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -9190,6 +9180,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 40.163,
+        "distance_remaining_m": 59.837,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -9273,16 +9273,6 @@
     "sim_time_s": 82.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 51.32599999999999,
-        "distance_remaining_m": 48.67400000000001,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -9291,6 +9281,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 51.32599999999999,
+        "distance_remaining_m": 48.67400000000001,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -9374,16 +9374,6 @@
     "sim_time_s": 83.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 62.48899999999999,
-        "distance_remaining_m": 37.51100000000001,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -9392,6 +9382,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 62.48899999999999,
+        "distance_remaining_m": 37.51100000000001,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -9475,16 +9475,6 @@
     "sim_time_s": 84.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 73.65199999999999,
-        "distance_remaining_m": 26.348000000000013,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -9493,6 +9483,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 73.65199999999999,
+        "distance_remaining_m": 26.348000000000013,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -9576,16 +9576,6 @@
     "sim_time_s": 85.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 84.81499999999998,
-        "distance_remaining_m": 15.185000000000016,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -9594,6 +9584,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 84.81499999999998,
+        "distance_remaining_m": 15.185000000000016,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -9677,16 +9677,6 @@
     "sim_time_s": 86.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E34",
-        "lane_id": "E34_0",
-        "position_m": 95.97799999999998,
-        "distance_remaining_m": 4.02200000000002,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -9695,6 +9685,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E34",
+        "lane_id": "E34_0",
+        "position_m": 95.97799999999998,
+        "distance_remaining_m": 4.02200000000002,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -9778,16 +9778,6 @@
     "sim_time_s": 87.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E45",
-        "lane_id": "E45_0",
-        "position_m": 7.140999999999977,
-        "distance_remaining_m": 92.85900000000002,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -9796,6 +9786,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E45",
+        "lane_id": "E45_0",
+        "position_m": 7.140999999999977,
+        "distance_remaining_m": 92.85900000000002,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -9879,16 +9879,6 @@
     "sim_time_s": 88.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E45",
-        "lane_id": "E45_0",
-        "position_m": 18.303999999999977,
-        "distance_remaining_m": 81.69600000000003,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -9897,6 +9887,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E45",
+        "lane_id": "E45_0",
+        "position_m": 18.303999999999977,
+        "distance_remaining_m": 81.69600000000003,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -9980,16 +9980,6 @@
     "sim_time_s": 89.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E45",
-        "lane_id": "E45_0",
-        "position_m": 29.466999999999977,
-        "distance_remaining_m": 70.53300000000002,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": null,
@@ -9998,6 +9988,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E45",
+        "lane_id": "E45_0",
+        "position_m": 29.466999999999977,
+        "distance_remaining_m": 70.53300000000002,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -10081,16 +10081,6 @@
     "sim_time_s": 90.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E45",
-        "lane_id": "E45_0",
-        "position_m": 40.62999999999998,
-        "distance_remaining_m": 59.37000000000002,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E34",
         "lane_id": "E34_0",
@@ -10099,6 +10089,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E45",
+        "lane_id": "E45_0",
+        "position_m": 40.62999999999998,
+        "distance_remaining_m": 59.37000000000002,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -10182,22 +10182,22 @@
     "sim_time_s": 91.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E45",
-        "lane_id": "E45_0",
-        "position_m": 51.79299999999998,
-        "distance_remaining_m": 48.20700000000002,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 1.0,
         "distance_remaining_m": 99.0,
         "speed_mps": 2.0,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E45",
+        "lane_id": "E45_0",
+        "position_m": 51.79299999999998,
+        "distance_remaining_m": 48.20700000000002,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -10288,22 +10288,22 @@
     "sim_time_s": 92.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E45",
-        "lane_id": "E45_0",
-        "position_m": 62.955999999999975,
-        "distance_remaining_m": 37.044000000000025,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 5.0,
         "distance_remaining_m": 95.0,
         "speed_mps": 4.0,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E45",
+        "lane_id": "E45_0",
+        "position_m": 62.955999999999975,
+        "distance_remaining_m": 37.044000000000025,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -10389,22 +10389,22 @@
     "sim_time_s": 93.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E45",
-        "lane_id": "E45_0",
-        "position_m": 74.11899999999997,
-        "distance_remaining_m": 25.88100000000003,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 11.0,
         "distance_remaining_m": 89.0,
         "speed_mps": 6.0,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E45",
+        "lane_id": "E45_0",
+        "position_m": 74.11899999999997,
+        "distance_remaining_m": 25.88100000000003,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -10490,22 +10490,22 @@
     "sim_time_s": 94.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E45",
-        "lane_id": "E45_0",
-        "position_m": 85.28199999999997,
-        "distance_remaining_m": 14.718000000000032,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 19.0,
         "distance_remaining_m": 81.0,
         "speed_mps": 8.0,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E45",
+        "lane_id": "E45_0",
+        "position_m": 85.28199999999997,
+        "distance_remaining_m": 14.718000000000032,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -10591,22 +10591,22 @@
     "sim_time_s": 95.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E45",
-        "lane_id": "E45_0",
-        "position_m": 96.44499999999996,
-        "distance_remaining_m": 3.5550000000000352,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 29.0,
         "distance_remaining_m": 71.0,
         "speed_mps": 10.0,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E45",
+        "lane_id": "E45_0",
+        "position_m": 96.44499999999996,
+        "distance_remaining_m": 3.5550000000000352,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -10692,22 +10692,22 @@
     "sim_time_s": 96.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E51",
-        "lane_id": "E51_0",
-        "position_m": 7.6079999999999615,
-        "distance_remaining_m": 92.39200000000004,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 39.484,
         "distance_remaining_m": 60.516,
         "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E51",
+        "lane_id": "E51_0",
+        "position_m": 7.6079999999999615,
+        "distance_remaining_m": 92.39200000000004,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -10793,22 +10793,22 @@
     "sim_time_s": 97.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E51",
-        "lane_id": "E51_0",
-        "position_m": 18.77099999999996,
-        "distance_remaining_m": 81.22900000000004,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 49.968,
         "distance_remaining_m": 50.032,
         "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E51",
+        "lane_id": "E51_0",
+        "position_m": 18.77099999999996,
+        "distance_remaining_m": 81.22900000000004,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -10894,22 +10894,22 @@
     "sim_time_s": 98.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E51",
-        "lane_id": "E51_0",
-        "position_m": 29.933999999999962,
-        "distance_remaining_m": 70.06600000000003,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 60.452000000000005,
         "distance_remaining_m": 39.547999999999995,
         "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E51",
+        "lane_id": "E51_0",
+        "position_m": 29.933999999999962,
+        "distance_remaining_m": 70.06600000000003,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -10995,22 +10995,22 @@
     "sim_time_s": 99.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E51",
-        "lane_id": "E51_0",
-        "position_m": 41.096999999999966,
-        "distance_remaining_m": 58.903000000000034,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 70.936,
         "distance_remaining_m": 29.063999999999993,
         "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E51",
+        "lane_id": "E51_0",
+        "position_m": 41.096999999999966,
+        "distance_remaining_m": 58.903000000000034,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -11096,22 +11096,22 @@
     "sim_time_s": 100.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E51",
-        "lane_id": "E51_0",
-        "position_m": 52.25999999999996,
-        "distance_remaining_m": 47.74000000000004,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 81.42,
         "distance_remaining_m": 18.58,
         "speed_mps": 10.484,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E51",
+        "lane_id": "E51_0",
+        "position_m": 52.25999999999996,
+        "distance_remaining_m": 47.74000000000004,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -11197,22 +11197,22 @@
     "sim_time_s": 101.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E51",
-        "lane_id": "E51_0",
-        "position_m": 63.42299999999996,
-        "distance_remaining_m": 36.57700000000004,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 91.78,
         "distance_remaining_m": 8.219999999999999,
         "speed_mps": 10.360000000000001,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E51",
+        "lane_id": "E51_0",
+        "position_m": 63.42299999999996,
+        "distance_remaining_m": 36.57700000000004,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -11298,22 +11298,22 @@
     "sim_time_s": 102.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E51",
-        "lane_id": "E51_0",
-        "position_m": 74.58599999999996,
-        "distance_remaining_m": 25.414000000000044,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 97.64,
         "distance_remaining_m": 2.3599999999999994,
         "speed_mps": 5.860000000000001,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E51",
+        "lane_id": "E51_0",
+        "position_m": 74.58599999999996,
+        "distance_remaining_m": 25.414000000000044,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -11399,22 +11399,22 @@
     "sim_time_s": 103.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E51",
-        "lane_id": "E51_0",
-        "position_m": 85.74899999999995,
-        "distance_remaining_m": 14.251000000000047,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
         "position_m": 99.0,
         "distance_remaining_m": 1.0,
         "speed_mps": 1.3600000000000043,
+        "stop_state": 0,
+        "is_stopped": false
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E51",
+        "lane_id": "E51_0",
+        "position_m": 85.74899999999995,
+        "distance_remaining_m": 14.251000000000047,
+        "speed_mps": 11.163,
         "stop_state": 0,
         "is_stopped": false
       }
@@ -11500,16 +11500,6 @@
     "sim_time_s": 104.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E51",
-        "lane_id": "E51_0",
-        "position_m": 96.91199999999995,
-        "distance_remaining_m": 3.0880000000000507,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": null,
@@ -11518,6 +11508,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E51",
+        "lane_id": "E51_0",
+        "position_m": 96.91199999999995,
+        "distance_remaining_m": 3.0880000000000507,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -11606,16 +11606,6 @@
     "sim_time_s": 105.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 8.074999999999946,
-        "distance_remaining_m": 91.92500000000005,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": null,
@@ -11624,6 +11614,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 8.074999999999946,
+        "distance_remaining_m": 91.92500000000005,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -11707,16 +11707,6 @@
     "sim_time_s": 106.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 19.237999999999946,
-        "distance_remaining_m": 80.76200000000006,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": null,
@@ -11725,6 +11715,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 19.237999999999946,
+        "distance_remaining_m": 80.76200000000006,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -11808,16 +11808,6 @@
     "sim_time_s": 107.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 30.400999999999947,
-        "distance_remaining_m": 69.59900000000005,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": null,
@@ -11826,6 +11816,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 30.400999999999947,
+        "distance_remaining_m": 69.59900000000005,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -11909,16 +11909,6 @@
     "sim_time_s": 108.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 41.56399999999995,
-        "distance_remaining_m": 58.43600000000005,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": null,
@@ -11927,6 +11917,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 41.56399999999995,
+        "distance_remaining_m": 58.43600000000005,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -12010,16 +12010,6 @@
     "sim_time_s": 109.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 52.72699999999995,
-        "distance_remaining_m": 47.27300000000005,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": null,
@@ -12028,6 +12018,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 52.72699999999995,
+        "distance_remaining_m": 47.27300000000005,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -12111,16 +12111,6 @@
     "sim_time_s": 110.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 63.889999999999944,
-        "distance_remaining_m": 36.110000000000056,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": null,
@@ -12129,6 +12119,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 63.889999999999944,
+        "distance_remaining_m": 36.110000000000056,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -12212,16 +12212,6 @@
     "sim_time_s": 111.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 75.05299999999994,
-        "distance_remaining_m": 24.94700000000006,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": null,
@@ -12230,6 +12220,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 75.05299999999994,
+        "distance_remaining_m": 24.94700000000006,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -12313,16 +12313,6 @@
     "sim_time_s": 112.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 86.21599999999994,
-        "distance_remaining_m": 13.784000000000063,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": null,
@@ -12331,6 +12321,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 86.21599999999994,
+        "distance_remaining_m": 13.784000000000063,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
@@ -12414,16 +12414,6 @@
     "sim_time_s": 113.0,
     "vehicles": [
       {
-        "vehicle_id": "V1",
-        "edge_id": "E10",
-        "lane_id": "E10_0",
-        "position_m": 97.37899999999993,
-        "distance_remaining_m": 2.621000000000066,
-        "speed_mps": 11.163,
-        "stop_state": 0,
-        "is_stopped": false
-      },
-      {
         "vehicle_id": "V2",
         "edge_id": "E45",
         "lane_id": "E45_0",
@@ -12432,6 +12422,16 @@
         "speed_mps": 0.0,
         "stop_state": 3,
         "is_stopped": true
+      },
+      {
+        "vehicle_id": "V1",
+        "edge_id": "E10",
+        "lane_id": "E10_0",
+        "position_m": 97.37899999999993,
+        "distance_remaining_m": 2.621000000000066,
+        "speed_mps": 11.163,
+        "stop_state": 0,
+        "is_stopped": false
       }
     ],
     "edges": [
