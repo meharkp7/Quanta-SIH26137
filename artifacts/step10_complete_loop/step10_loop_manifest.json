@@ -1,0 +1,1267 @@
+{
+  "scenario_id": "S3_BASE",
+  "state_version": "S3_BASE:t0:graph:open",
+  "route_version": "step10-7-t0",
+  "forecast_mode": "persistence",
+  "scope_action": "KEEP",
+  "committed": true,
+  "solve": {
+    "method": "QPSO",
+    "status": "feasible",
+    "elapsed_s": 0.24323389999335632,
+    "evaluations": 40,
+    "iterations": 3,
+    "plan": {
+      "V1": [
+        "J1",
+        "J2",
+        "J3"
+      ],
+      "V2": [
+        "J4",
+        "J5"
+      ]
+    },
+    "evaluation": {
+      "feasible": true,
+      "capacity": true,
+      "windows": true,
+      "connectivity": true,
+      "commitments": true,
+      "depot": true,
+      "all_served": true,
+      "unserved": [],
+      "objective": 1590.0,
+      "time_s": 245.0,
+      "distance_m": 1400.0,
+      "drive_s": 140.0,
+      "wait_s": 50.0,
+      "service_s": 55.0,
+      "congestion_s": 0.0,
+      "vehicles": [
+        {
+          "id": "V1",
+          "order": [
+            "J1",
+            "J2",
+            "J3"
+          ],
+          "feasible": true,
+          "capacity_ok": true,
+          "windows_ok": true,
+          "connected": true,
+          "depot_ok": true,
+          "load": 7.0,
+          "capacity": 7.0,
+          "distance_m": 700.0,
+          "drive_s": 70.0,
+          "wait_s": 10.0,
+          "service_s": 35.0,
+          "elapsed_s": 115.0,
+          "edge_ids": [
+            "E01",
+            "E12",
+            "E23",
+            "E34",
+            "E45",
+            "E51",
+            "E10"
+          ],
+          "stops": [
+            {
+              "job": "J1",
+              "node": "N1",
+              "arrive_s": 10.0,
+              "wait_s": 0.0,
+              "start_s": 10.0,
+              "end_s": 20.0,
+              "earliest_s": 0.0,
+              "latest_s": 30.0,
+              "window_ok": true
+            },
+            {
+              "job": "J2",
+              "node": "N2",
+              "arrive_s": 30.0,
+              "wait_s": 5.0,
+              "start_s": 35.0,
+              "end_s": 45.0,
+              "earliest_s": 35.0,
+              "latest_s": 60.0,
+              "window_ok": true
+            },
+            {
+              "job": "J3",
+              "node": "N3",
+              "arrive_s": 55.0,
+              "wait_s": 5.0,
+              "start_s": 60.0,
+              "end_s": 75.0,
+              "earliest_s": 60.0,
+              "latest_s": 90.0,
+              "window_ok": true
+            }
+          ]
+        },
+        {
+          "id": "V2",
+          "order": [
+            "J4",
+            "J5"
+          ],
+          "feasible": true,
+          "capacity_ok": true,
+          "windows_ok": true,
+          "connected": true,
+          "depot_ok": true,
+          "load": 3.0,
+          "capacity": 6.0,
+          "distance_m": 700.0,
+          "drive_s": 70.0,
+          "wait_s": 40.0,
+          "service_s": 20.0,
+          "elapsed_s": 130.0,
+          "edge_ids": [
+            "E01",
+            "E12",
+            "E23",
+            "E34",
+            "E45",
+            "E51",
+            "E10"
+          ],
+          "stops": [
+            {
+              "job": "J4",
+              "node": "N4",
+              "arrive_s": 40.0,
+              "wait_s": 40.0,
+              "start_s": 80.0,
+              "end_s": 90.0,
+              "earliest_s": 80.0,
+              "latest_s": 120.0,
+              "window_ok": true
+            },
+            {
+              "job": "J5",
+              "node": "N5",
+              "arrive_s": 100.0,
+              "wait_s": 0.0,
+              "start_s": 100.0,
+              "end_s": 110.0,
+              "earliest_s": 100.0,
+              "latest_s": 140.0,
+              "window_ok": true
+            }
+          ]
+        }
+      ],
+      "violations": []
+    },
+    "trace": {
+      "best": [
+        1590.0,
+        1590.0,
+        1590.0,
+        1590.0
+      ],
+      "mean": [
+        1592.9166666666667,
+        1591.6666666666667,
+        1591.6666666666667,
+        1591.6666666666667
+      ],
+      "diversity": [
+        0.8787878787878788,
+        0.8333333333333334,
+        0.8333333333333334,
+        0.8333333333333334
+      ]
+    },
+    "closed_edge_ids": [],
+    "seed": 7
+  },
+  "progress": [
+    {
+      "t": 1.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 2.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 3.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 4.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 5.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 6.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 7.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 8.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 9.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 10.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 11.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 12.0,
+      "vehicles": 4,
+      "service_begin": [
+        [
+          "V1",
+          "J1"
+        ]
+      ],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 13.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 14.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 15.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 16.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 17.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 18.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 19.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 20.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 21.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 22.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 23.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 24.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [
+        [
+          "V1",
+          "J1"
+        ]
+      ],
+      "teleports": []
+    },
+    {
+      "t": 25.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 26.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 27.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 28.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 29.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 30.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 31.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 32.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 33.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 34.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 35.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 36.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 37.0,
+      "vehicles": 4,
+      "service_begin": [
+        [
+          "V1",
+          "J2"
+        ]
+      ],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 38.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 39.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 40.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 41.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 42.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 43.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 44.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 45.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 46.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 47.0,
+      "vehicles": 4,
+      "service_begin": [],
+      "service_complete": [
+        [
+          "V1",
+          "J2"
+        ]
+      ],
+      "teleports": []
+    },
+    {
+      "t": 48.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 49.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 50.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 51.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 52.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 53.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 54.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 55.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 56.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 57.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 58.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 59.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 60.0,
+      "vehicles": 3,
+      "service_begin": [
+        [
+          "V1",
+          "J3"
+        ]
+      ],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 61.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 62.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 63.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 64.0,
+      "vehicles": 3,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 65.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 66.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 67.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 68.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 69.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 70.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 71.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 72.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 73.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 74.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 75.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 76.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [
+        [
+          "V1",
+          "J3"
+        ]
+      ],
+      "teleports": []
+    },
+    {
+      "t": 77.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 78.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 79.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 80.0,
+      "vehicles": 2,
+      "service_begin": [
+        [
+          "V2",
+          "J4"
+        ]
+      ],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 81.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 82.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 83.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 84.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 85.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 86.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 87.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 88.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 89.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 90.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 91.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [
+        [
+          "V2",
+          "J4"
+        ]
+      ],
+      "teleports": []
+    },
+    {
+      "t": 92.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 93.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 94.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 95.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 96.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 97.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 98.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 99.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 100.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 101.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 102.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 103.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 104.0,
+      "vehicles": 2,
+      "service_begin": [
+        [
+          "V2",
+          "J5"
+        ]
+      ],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 105.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 106.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 107.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 108.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 109.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 110.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 111.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 112.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 113.0,
+      "vehicles": 2,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 114.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [
+        [
+          "V2",
+          "J5"
+        ]
+      ],
+      "teleports": []
+    },
+    {
+      "t": 115.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 116.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 117.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 118.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 119.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 120.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 121.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 122.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 123.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 124.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 125.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 126.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 127.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 128.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 129.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 130.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 131.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 132.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 133.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 134.0,
+      "vehicles": 1,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    },
+    {
+      "t": 135.0,
+      "vehicles": 0,
+      "service_begin": [],
+      "service_complete": [],
+      "teleports": []
+    }
+  ],
+  "episode": {
+    "scenario_id": "S3_BASE",
+    "total_steps": 135,
+    "sim_end_time_s": 135.0,
+    "wall_clock_s": 1.509,
+    "delivered_count": 5,
+    "failed_count": 0,
+    "pending_count": 0,
+    "teleport_events": 0,
+    "service_begin_events": 5,
+    "service_complete_events": 5,
+    "incident_events": [
+      [
+        "INC_E23_CLOSURE",
+        "announced"
+      ],
+      [
+        "INC_E23_CLOSURE",
+        "closed"
+      ],
+      [
+        "INC_E23_CLOSURE",
+        "clearing"
+      ],
+      [
+        "INC_E23_CLOSURE",
+        "cleared"
+      ]
+    ],
+    "vehicle_summaries": [
+      {
+        "vehicle_id": "V1",
+        "state": "finished",
+        "delivered_count": 3,
+        "remaining_load": 0.0
+      },
+      {
+        "vehicle_id": "V2",
+        "state": "finished",
+        "delivered_count": 2,
+        "remaining_load": 0.0
+      }
+    ],
+    "request_summaries": [
+      {
+        "request_id": "J1",
+        "state": "delivered",
+        "assigned_vehicle_id": "V1",
+        "service_start_s": 12.0,
+        "service_end_s": 24.0,
+        "was_late": false
+      },
+      {
+        "request_id": "J2",
+        "state": "delivered",
+        "assigned_vehicle_id": "V1",
+        "service_start_s": 37.0,
+        "service_end_s": 47.0,
+        "was_late": false
+      },
+      {
+        "request_id": "J3",
+        "state": "delivered",
+        "assigned_vehicle_id": "V1",
+        "service_start_s": 60.0,
+        "service_end_s": 76.0,
+        "was_late": false
+      },
+      {
+        "request_id": "J4",
+        "state": "delivered",
+        "assigned_vehicle_id": "V2",
+        "service_start_s": 80.0,
+        "service_end_s": 91.0,
+        "was_late": false
+      },
+      {
+        "request_id": "J5",
+        "state": "delivered",
+        "assigned_vehicle_id": "V2",
+        "service_start_s": 104.0,
+        "service_end_s": 114.0,
+        "was_late": false
+      }
+    ]
+  }
+}

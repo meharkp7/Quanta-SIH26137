@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2026-09-14T18:08:30.269843+05:30 by Eclipse SUMO sumo 1.27.1
+<!-- generated on 2026-09-14T18:05:27.933702+05:30 by Eclipse SUMO sumo 1.27.1
 <sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
 
     <input>
-        <net-file value="C:/Users/Harleen Kaur/Desktop/sih2026/Quanta_SIH26137/artifacts/demo_sumo_ui/network/net.xml"/>
-        <route-files value="C:/Users/Harleen Kaur/Desktop/sih2026/Quanta_SIH26137/artifacts/demo_sumo_ui/routes/vehicles.rou.xml"/>
+        <net-file value="C:/Users/Harleen Kaur/Desktop/sih2026/Quanta_SIH26137/artifacts/step10_complete_loop/network/net.xml"/>
+        <route-files value="C:/Users/Harleen Kaur/Desktop/sih2026/Quanta_SIH26137/artifacts/step10_complete_loop/routes/vehicles.rou.xml"/>
     </input>
 
     <output>
-        <fcd-output value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\sumo_output\fcd.xml"/>
-        <tripinfo-output value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\sumo_output\tripinfo.xml"/>
+        <fcd-output value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\step10_complete_loop\sumo_output\fcd.xml"/>
+        <tripinfo-output value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\step10_complete_loop\sumo_output\tripinfo.xml"/>
     </output>
 
     <time>
@@ -26,13 +26,13 @@
 
     <report>
         <no-warnings value="false"/>
-        <log value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\sumo_output\sumo.log"/>
+        <log value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\step10_complete_loop\sumo_output\sumo.log"/>
         <duration-log.disable value="true"/>
         <no-step-log value="true"/>
     </report>
 
     <traci_server>
-        <remote-port value="60558"/>
+        <remote-port value="54162"/>
     </traci_server>
 
     <random_number>

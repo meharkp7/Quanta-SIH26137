@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<connections>
+  <connection from="E01" to="E12" fromLane="0" toLane="0" />
+  <connection from="E01" to="E16" fromLane="0" toLane="0" />
+  <connection from="E51" to="E10" fromLane="0" toLane="0" />
+  <connection from="E51" to="E12" fromLane="0" toLane="0" />
+  <connection from="E51" to="E16" fromLane="0" toLane="0" />
+  <connection from="E12" to="E23" fromLane="0" toLane="0" />
+  <connection from="E12" to="E27" fromLane="0" toLane="0" />
+  <connection from="E62" to="E23" fromLane="0" toLane="0" />
+  <connection from="E62" to="E27" fromLane="0" toLane="0" />
+  <connection from="E23" to="E34" fromLane="0" toLane="0" />
+  <connection from="E34" to="E45" fromLane="0" toLane="0" />
+  <connection from="E45" to="E51" fromLane="0" toLane="0" />
+  <connection from="E16" to="E62" fromLane="0" toLane="0" />
+</connections>

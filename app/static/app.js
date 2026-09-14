@@ -8,11 +8,24 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
-async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+async function api(path, options = {}, timeoutMs = 20000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      ...options,
+    });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error(`No response from ${path} after ${timeoutMs / 1000}s — is the backend running?`);
+    }
+    throw new Error(`Could not reach ${path} — ${error.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(data.detail || response.statusText);
@@ -22,6 +35,21 @@ async function api(path, options = {}) {
 
 function setStatus(text) {
   $("run-status").textContent = text;
+}
+
+function setBusy(button, isBusy) {
+  if (!button) return;
+  button.classList.toggle("is-busy", isBusy);
+  button.disabled = isBusy;
+}
+
+async function withBusy(button, task) {
+  setBusy(button, true);
+  try {
+    return await task();
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 function closedIds() {
@@ -78,10 +106,10 @@ function drawGraph(graph, routes = [], pathEdges = [], movers = [], closedIds = 
     line.setAttribute("class", `road${blocked ? " closed" : ""}`);
     if (routeSet.has(edge.id) && !blocked) {
       line.setAttribute("class", "route");
-      line.setAttribute("stroke", routeSet.get(edge.id) === 0 ? "#5ee1a8" : "#7aa2ff");
+      line.setAttribute("stroke", routeSet.get(edge.id) === 0 ? "#5c9a6f" : "#4c86bd");
     }
     if (pathSet.has(edge.id)) {
-      line.setAttribute("stroke", "#f5c16c");
+      line.setAttribute("stroke", "#b6873f");
       line.setAttribute("stroke-width", "6");
     }
     svg.appendChild(line);
@@ -94,7 +122,7 @@ function drawGraph(graph, routes = [], pathEdges = [], movers = [], closedIds = 
     circle.setAttribute("cy", p.y);
     circle.setAttribute("r", node.kind.includes("depot") ? 8 : 6);
     circle.setAttribute("class", "node");
-    circle.setAttribute("fill", node.kind.includes("depot") ? "#f5c16c" : "#e8eefc");
+    circle.setAttribute("fill", node.kind.includes("depot") ? "#b6873f" : "#e6e8eb");
     svg.appendChild(circle);
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
     label.setAttribute("x", p.x + 8);
@@ -143,20 +171,20 @@ function drawTrace(trace) {
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!trace || !trace.best || trace.best.length < 2) {
-    ctx.fillStyle = "#93a0bf";
+    ctx.fillStyle = "#8d96a1";
     ctx.fillText("Solve with QPSO or PSO to see the search curve.", 16, 24);
     return;
   }
   const values = trace.best;
   const min = Math.min(...values);
   const max = Math.max(...values);
-  ctx.strokeStyle = "#243049";
+  ctx.strokeStyle = "#2a3038";
   ctx.beginPath();
   ctx.moveTo(20, 10);
   ctx.lineTo(20, 160);
   ctx.lineTo(620, 160);
   ctx.stroke();
-  ctx.strokeStyle = "#7aa2ff";
+  ctx.strokeStyle = "#4c86bd";
   ctx.beginPath();
   values.forEach((value, index) => {
     const x = 20 + (index / (values.length - 1)) * 600;
@@ -208,9 +236,13 @@ function showSolve(result) {
 }
 
 async function loadGraph() {
+  const overlay = $("graph-loading");
+  overlay.hidden = false;
   const closed = closedIds().join(",");
-  state.graph = await api(`/api/scenarios/${state.scenarioId}?closed=${encodeURIComponent(closed)}`);
-  $("graph-caption").textContent = `${state.graph.scenario_id} · ${state.graph.nodes.length} nodes · ${state.graph.edges.length} directed roads`;
+  state.graph = await api(`/api/scenarios/${state.scenarioId}?closed=${encodeURIComponent(closed)}`).finally(
+    () => { overlay.hidden = true; },
+  );
+  $("graph-caption").textContent = `${state.graph.scenario_id} — ${state.graph.nodes.length} nodes, ${state.graph.edges.length} directed roads`;
   $("closed-edge").innerHTML = `<option value="">None</option>` + state.graph.edges
     .map((edge) => `<option value="${edge.id}" ${edge.id === state.closed ? "selected" : ""}>${edge.id} ${edge.from}→${edge.to}</option>`)
     .join("");
@@ -219,6 +251,13 @@ async function loadGraph() {
   $("path-to").innerHTML = nodeOptions;
   if (state.graph.nodes.length > 1) $("path-to").selectedIndex = 1;
   drawGraph(state.graph, state.lastSolve?.evaluation?.vehicles || []);
+}
+
+function revealApp() {
+  $("app-shell").classList.add("ready");
+  const loader = $("boot-loader");
+  loader.classList.add("hidden");
+  setTimeout(() => { loader.style.display = "none"; }, 300);
 }
 
 async function boot() {
@@ -243,6 +282,7 @@ async function boot() {
     body: JSON.stringify({ scenario_id: state.scenarioId, plan: state.graph.reference_plan }),
   });
   chips(checked.validation);
+  revealApp();
 }
 
 document.querySelectorAll(".tab").forEach((button) => {
@@ -265,25 +305,29 @@ $("closed-edge").addEventListener("change", async (event) => {
   await loadGraph();
 });
 
-$("btn-solve").addEventListener("click", async () => {
+$("btn-solve").addEventListener("click", async (event) => {
   setStatus("Solving…");
   try {
-    const result = await api("/api/solve", { method: "POST", body: JSON.stringify(solveBody()) });
-    showSolve(result);
-    $("loop-notes").innerHTML = `<li>${result.method} finished with status ${result.status}.</li>`;
+    await withBusy(event.currentTarget, async () => {
+      const result = await api("/api/solve", { method: "POST", body: JSON.stringify(solveBody()) });
+      showSolve(result);
+      $("loop-notes").innerHTML = `<li>${result.method} finished with status ${result.status}.</li>`;
+    });
     setStatus("Solved");
   } catch (error) {
     setStatus(error.message);
   }
 });
 
-$("btn-loop").addEventListener("click", async () => {
+$("btn-loop").addEventListener("click", async (event) => {
   setStatus("Running loop…");
   try {
-    const result = await api("/api/loop", { method: "POST", body: JSON.stringify(solveBody()) });
-    showSolve(result.solve);
-    $("loop-notes").innerHTML = result.notes.map((note) => `<li>${note}</li>`).join("");
-    setStatus(`Loop · ${result.scope_action} · ${result.forecast_mode}`);
+    await withBusy(event.currentTarget, async () => {
+      const result = await api("/api/loop", { method: "POST", body: JSON.stringify(solveBody()) });
+      showSolve(result.solve);
+      $("loop-notes").innerHTML = result.notes.map((note) => `<li>${note}</li>`).join("");
+      setStatus(`Loop — ${result.scope_action}, ${result.forecast_mode}`);
+    });
   } catch (error) {
     setStatus(error.message);
   }
@@ -312,7 +356,7 @@ function showReplayFrame(index) {
   if (!frames.length || !state.graph) return;
   const frame = frames[Math.max(0, Math.min(index, frames.length - 1))];
   state.replay.index = index;
-  $("sim-clock").textContent = `SUMO t=${frame.t.toFixed(0)}s · ${frame.vehicles.length} vehicles`;
+  $("sim-clock").textContent = `t = ${frame.t.toFixed(0)}s, ${frame.vehicles.length} vehicles`;
   $("sim-scrub").value = String(index);
   drawGraph(
     state.graph,
@@ -337,12 +381,12 @@ function playLoadedReplay() {
   }, 90);
 }
 
-async function playSumoInUi() {
+async function playSumoInUi(event) {
   stopReplay();
   setStatus("Running SUMO…");
   $("sim-clock").textContent = "SUMO running…";
   try {
-    const result = await api("/api/sumo/replay", { method: "POST" });
+    const result = await withBusy(event?.currentTarget, () => api("/api/sumo/replay", { method: "POST" }));
     state.replay.frames = result.frames || [];
     $("sim-scrub").max = String(Math.max(0, state.replay.frames.length - 1));
     const episode = result.episode || {};
@@ -366,10 +410,10 @@ $("sim-scrub").addEventListener("input", (event) => {
   showReplayFrame(Number(event.target.value));
 });
 
-$("btn-sumo").addEventListener("click", async () => {
+$("btn-sumo").addEventListener("click", async (event) => {
   setStatus("Launching SUMO-GUI…");
   try {
-    const result = await api("/api/sumo", { method: "POST", body: JSON.stringify({ gui: true }) });
+    const result = await withBusy(event.currentTarget, () => api("/api/sumo", { method: "POST", body: JSON.stringify({ gui: true }) }));
     $("loop-notes").innerHTML = `<li>${result.message || "SUMO-GUI started."}</li>`;
     setStatus(result.mode === "gui" ? `SUMO-GUI pid ${result.pid}` : "SUMO finished");
   } catch (error) {
@@ -377,15 +421,15 @@ $("btn-sumo").addEventListener("click", async () => {
   }
 });
 
-$("btn-compare").addEventListener("click", async () => {
+$("btn-compare").addEventListener("click", async (event) => {
   setStatus("Comparing solvers…");
   const body = $("compare-table").querySelector("tbody");
   body.innerHTML = "<tr><td colspan=8>Running…</td></tr>";
   try {
-    const result = await api("/api/compare", {
+    const result = await withBusy(event.currentTarget, () => api("/api/compare", {
       method: "POST",
       body: JSON.stringify(solveBody({ methods: ["constructive", "qpso", "pso", "alns", "milp"] })),
-    });
+    }));
     body.innerHTML = result.rows.map((row) => `
       <tr>
         <td>${row.method || ""}</td>
@@ -404,9 +448,9 @@ $("btn-compare").addEventListener("click", async () => {
   }
 });
 
-$("btn-path").addEventListener("click", async () => {
+$("btn-path").addEventListener("click", async (event) => {
   try {
-    const result = await api("/api/path", {
+    const result = await withBusy(event.currentTarget, () => api("/api/path", {
       method: "POST",
       body: JSON.stringify({
         scenario_id: state.scenarioId,
@@ -414,7 +458,7 @@ $("btn-path").addEventListener("click", async () => {
         target: $("path-to").value,
         closed_edge_ids: closedIds(),
       }),
-    });
+    }));
     $("path-result").textContent = JSON.stringify(result, null, 2);
     if (result.feasible) drawGraph(state.graph, [], result.edge_ids);
   } catch (error) {
@@ -422,4 +466,8 @@ $("btn-path").addEventListener("click", async () => {
   }
 });
 
-boot().catch((error) => setStatus(error.message));
+boot().catch((error) => {
+  setStatus(error.message);
+  $("boot-loader-text").textContent = `Could not reach the backend: ${error.message}`;
+  $("boot-ring").style.display = "none";
+});

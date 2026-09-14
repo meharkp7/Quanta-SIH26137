@@ -2,7 +2,7 @@
   "scenario_id": "S3_BASE",
   "total_steps": 135,
   "sim_end_time_s": 135.0,
-  "wall_clock_s": 1.52,
+  "wall_clock_s": 1.509,
   "delivered_count": 5,
   "failed_count": 0,
   "pending_count": 0,
