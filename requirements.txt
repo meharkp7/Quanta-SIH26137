@@ -8,8 +8,3 @@ scipy>=1.11
 pytest>=7.4
 traci==1.27.1
 sumolib==1.27.1
-osmnx>=2.0,<3
-networkx>=3.2,<4
-geopandas>=0.14,<2
-shapely>=2.0,<3
-pyproj>=3.6,<4

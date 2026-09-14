@@ -102,6 +102,7 @@ def run_sumo_causal_episode(
     episode_id: str,
     split: str = "train",
     events: list[DynamicEvent] | None = None,
+    traffic_only: bool = False,
 ) -> Path:
     """Run one full causal episode with the event tape applied inside SUMO."""
     output_dir = Path(output_dir).resolve()
@@ -110,7 +111,7 @@ def run_sumo_causal_episode(
     exporter = SumoExporter(scenario, output_dir=output_dir / "network")
     net_path = exporter.export()
     mapping = exporter.edge_mapping
-    route_plan = fixture_plan(scenario)
+    route_plan = None if traffic_only else fixture_plan(scenario)
 
     affected_sumo_edges = []
 
@@ -131,27 +132,42 @@ def run_sumo_causal_episode(
                 )
             )
 
-    rou_path = RouteBuilder(
-        scenario,
-        route_plan,
-        {
-            "edge_mapping": mapping,
-            "node_mapping": exporter.node_mapping,
-        },
-        background_duration_s=float(config.duration_s),
-        background_interval_s=float(config.interval_s),
-        background_start_s=0.0,
-        background_target_edges=affected_sumo_edges,
-        background_blocked_intervals=blocked_intervals,
-    ).build(
-        output_dir=output_dir / "routes"
-    )
-
     stop_map = {}
-    for vehicle in route_plan.vehicle_routes:
-        stop_map[vehicle.vehicle_id] = []
-        for index, request_id in enumerate(vehicle.customer_order):
-            stop_map[vehicle.vehicle_id].append((index, request_id))
+    if traffic_only:
+        closure_edges = {
+            edge_id
+            for event in (events or [])
+            if event.event_type in {"closure", "scheduled_closure"}
+            for edge_id in _event_edges(scenario, event)
+        }
+        rou_path = _traffic_routes(
+            scenario,
+            config,
+            output_dir / "routes",
+            blocked_edge_ids=closure_edges,
+        )
+    else:
+        rou_path = RouteBuilder(
+            scenario,
+            route_plan,
+            {
+                "edge_mapping": mapping,
+                "node_mapping": exporter.node_mapping,
+            },
+            background_duration_s=float(config.duration_s),
+            background_interval_s=float(config.interval_s),
+            background_start_s=0.0,
+            background_target_edges=affected_sumo_edges,
+            background_blocked_intervals=blocked_intervals,
+        ).build(
+            output_dir=output_dir / "routes"
+        )
+
+        stop_map = {}
+        for vehicle in route_plan.vehicle_routes:
+            stop_map[vehicle.vehicle_id] = []
+            for index, request_id in enumerate(vehicle.customer_order):
+                stop_map[vehicle.vehicle_id].append((index, request_id))
 
     logger_obj = CausalSumoLogger(scenario, interval_s=config.interval_s)
     tape = _RuntimeEventTape(scenario, events or [], mapping)
@@ -167,6 +183,8 @@ def run_sumo_causal_episode(
         end_time_s=float(config.duration_s),
         step_length_s=1.0,
         gui=False,
+        random_seed=config.seed + 211,
+        use_subscriptions=traffic_only,
         service_earliest={r.request_id: max(r.earliest_service_start_s, r.release_s) for r in scenario.requests},
     ) as adapter:
         while not adapter.done:
@@ -219,3 +237,45 @@ def run_sumo_causal_episode(
         __import__("json").dumps(runtime_events, indent=2), encoding="utf-8"
     )
     return output_dir
+
+
+def _traffic_routes(scenario, config, output_dir, *, blocked_edge_ids=()):
+    """Seeded legal walks, independent of the hidden incident tape."""
+    import random
+    import xml.etree.ElementTree as ET
+    from src.data.causal_episodes import stream_seeds
+    from src.data.dynamic_episodes import _daily_profile
+    rng = random.Random(stream_seeds(config.seed).trajectory)
+    traffic_rng = random.Random(stream_seeds(config.seed).traffic)
+    blocked = set(blocked_edge_ids)
+    edges = [e for e in scenario.edges if e.open_by_default and e.edge_id not in blocked]
+    if not edges:
+        raise ValueError("No legal traffic edges remain after applying closures")
+    outgoing = {}
+    for edge in edges:
+        outgoing.setdefault(edge.from_node, []).append(edge)
+    root = ET.Element("routes")
+    ET.SubElement(root, "vType", id="probe_car", sigma="0.3", speedFactor="1", speedDev="0.05")
+    departure, index = 0.0, 0
+    while departure < config.duration_s - 120:
+        edge = rng.choice(edges)
+        route = [edge.edge_id]
+        for _ in range(5):
+            legal = [
+                e for e in outgoing.get(edge.to_node, ())
+                if e.edge_id not in blocked and e.to_node != edge.from_node
+            ]
+            if not legal:
+                break
+            edge = rng.choice(legal)
+            route.append(edge.edge_id)
+        vehicle = ET.SubElement(root, "vehicle", id=f"traffic_{index}", type="probe_car", depart=f"{departure:.3f}")
+        ET.SubElement(vehicle, "route", edges=" ".join(route))
+        # Separate RNG for arrival spacing. Congestion arises inside SUMO.
+        profile = _daily_profile(departure, config.duration_s, config.regime)
+        departure += traffic_rng.uniform(5.0, 10.0) / max(0.5, profile)
+        index += 1
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "traffic.rou.xml"
+    ET.ElementTree(root).write(path, encoding="utf-8", xml_declaration=True)
+    return path
