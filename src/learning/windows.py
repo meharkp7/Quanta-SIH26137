@@ -37,6 +37,8 @@ class ForecastWindow:
     traversal_targets: np.ndarray
     traversal_target_mask: np.ndarray
     label_available_at_s: np.ndarray
+    scenario_id: str = "unknown"
+    graph_version: str = "unknown"
 
 
 def build_episode_windows(
@@ -48,7 +50,8 @@ def build_episode_windows(
     history_minutes: int = HISTORY_MINUTES,
     horizons_minutes: Sequence[int] = HORIZONS_MINUTES,
 ) -> list[ForecastWindow]:
-    observations = list(csv.DictReader((episode_dir / "observations.csv").open(encoding="utf-8")))
+    with (episode_dir / "observations.csv").open(encoding="utf-8", newline="") as handle:
+        observations = list(csv.DictReader(handle))
     labels = [
         MatureLabel(**json.loads(line))
         for line in (episode_dir / "labels.jsonl").read_text(encoding="utf-8").splitlines()
@@ -66,6 +69,10 @@ def build_episode_windows(
     }
     issue_times = sorted({item.issue_time_s for item in labels})
 
+    if interval_s != 60:
+        raise ValueError("Step 12 requires one-minute observations")
+    if manifest.get("scenario_id") != scenario.scenario_id:
+        raise ValueError("Episode scenario does not match the supplied graph")
     history_steps = history_minutes
     horizon_s = tuple(int(item) * interval_s for item in horizons_minutes)
     windows: list[ForecastWindow] = []
@@ -129,6 +136,8 @@ def build_episode_windows(
                 traversal_targets=traversal,
                 traversal_target_mask=traversal_mask,
                 label_available_at_s=available,
+                scenario_id=scenario.scenario_id,
+                graph_version=scenario.graph_version,
             )
         )
     return windows
@@ -142,30 +151,25 @@ def _fill_features(
     row: dict | None,
     speed_limit: float,
 ) -> None:
-    if row is None or bool(int(row.get("missing") or 0)):
-        features[t_index, e_index, 4] = 1.0
-        mask[t_index, e_index, 4] = True
-        return
-    speed = row.get("observed_speed_mps")
-    occupancy = row.get("occupancy")
-    halt = row.get("halting_count")
-    age = float(row.get("observation_age_s") or 0.0)
-    closed = float(int(row.get("known_closed") or 0))
-    if speed not in (None, ""):
-        features[t_index, e_index, 0] = float(speed) / max(speed_limit, 1e-6)
-        mask[t_index, e_index, 0] = True
-    if occupancy not in (None, ""):
-        features[t_index, e_index, 1] = float(occupancy)
-        mask[t_index, e_index, 1] = True
-    if halt not in (None, ""):
-        features[t_index, e_index, 2] = float(halt)
-        mask[t_index, e_index, 2] = True
-    features[t_index, e_index, 3] = age / 60.0
-    features[t_index, e_index, 4] = 0.0
-    features[t_index, e_index, 5] = closed
-    mask[t_index, e_index, 3] = True
+    missing = row is None or bool(int(row.get("missing") or 0))
+    features[t_index, e_index, 4] = float(missing)
     mask[t_index, e_index, 4] = True
-    mask[t_index, e_index, 5] = True
+    if row is None:
+        return
+    # Availability metadata is independent of traffic sensor availability.
+    for key, index, divisor in (("observation_age_s", 3, 60.0), ("known_closed", 5, 1.0)):
+        raw = row.get(key)
+        if raw not in (None, "") and np.isfinite(float(raw)):
+            features[t_index, e_index, index] = float(raw) / divisor
+            mask[t_index, e_index, index] = True
+    if missing:
+        return
+    for key, index, divisor in (("observed_speed_mps", 0, speed_limit),
+                                ("occupancy", 1, 1.0), ("halting_count", 2, 1.0)):
+        raw = row.get(key)
+        if raw not in (None, "") and np.isfinite(float(raw)):
+            features[t_index, e_index, index] = float(raw) / max(divisor, 1e-6)
+            mask[t_index, e_index, index] = True
 
 
 def assert_window_causal(window: ForecastWindow) -> None:
@@ -181,3 +185,13 @@ def assert_window_causal(window: ForecastWindow) -> None:
         FEATURE_COUNT,
     ):
         raise AssertionError("feature shape is not [L, E, F]")
+
+    if len(set(window.edge_ids)) != len(window.edge_ids):
+        raise AssertionError("Duplicate edge IDs")
+    for channel, targets, valid in ((0, window.speed_targets, window.speed_target_mask),
+                                     (1, window.traversal_targets, window.traversal_target_mask)):
+        available = window.label_available_at_s[..., channel]
+        if np.any(valid & (~np.isfinite(targets) | ~np.isfinite(available))):
+            raise AssertionError("Valid labels require finite values and maturity timestamps")
+        if np.any(valid & (available < np.asarray(window.target_times_s)[None, :])):
+            raise AssertionError("Label maturity precedes target time")

@@ -94,6 +94,9 @@ def generate_causal_pilot(
 ) -> dict:
     """Write six split episodes and a coverage report. Split happens first."""
 
+    if backend == "sumo" and on_sumo_episode is None:
+        from src.sim.sumo_causal import run_sumo_causal_episode
+        on_sumo_episode = run_sumo_causal_episode
     root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()

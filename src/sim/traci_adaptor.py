@@ -146,6 +146,8 @@ class TraciAdapter:
         step_length_s: float = 1.0,
         sumo_cfg_path: Path | None = None,
         gui: bool = False,
+        random_seed: int = 0,
+        use_subscriptions: bool = False,
         service_earliest: dict[str, float] | None = None,
     ) -> None:
         self.net_path = Path(net_path).resolve()
@@ -159,6 +161,9 @@ class TraciAdapter:
         self.end_time_s = end_time_s
         self.step_length_s = step_length_s
         self.gui = gui
+        self.random_seed = random_seed
+        self.use_subscriptions = use_subscriptions
+        self._lane_lengths = {}
         self.service_earliest = service_earliest or {}
 
         # Unique label prevents 'Connection already active' when multiple
@@ -191,6 +196,7 @@ class TraciAdapter:
         command = [
             binary,
             "-c", str(self._sumo_cfg),
+            "--seed", str(self.random_seed),
             "--step-length", str(self.step_length_s),
             "--no-step-log",
             "--duration-log.disable",
@@ -206,6 +212,10 @@ class TraciAdapter:
             label=self._label,
         )
         self._traci = traci.getConnection(self._label)
+        if self.use_subscriptions:
+            import traci.constants as tc
+            for eid in self.edge_ids:
+                self._traci.edge.subscribe(eid, [tc.LAST_STEP_MEAN_SPEED, tc.LAST_STEP_OCCUPANCY, tc.LAST_STEP_VEHICLE_NUMBER, tc.LAST_STEP_VEHICLE_HALTING_NUMBER])
         logger.info("SUMO started via TraCI (label=%s)", self._label)
         return self
 
@@ -260,20 +270,36 @@ class TraciAdapter:
         lost = self._previous_active - active_ids - set(output.arrived_vehicle_ids) - teleporting
         if lost:
             raise RuntimeError(f"Vehicles disappeared without arrival: {sorted(lost)}")
+        if self.use_subscriptions:
+            import traci.constants as tc
+            for vid in active_ids - self._previous_active:
+                traci.vehicle.subscribe(vid, [tc.VAR_ROAD_ID, tc.VAR_LANE_ID, tc.VAR_LANEPOSITION, tc.VAR_SPEED, tc.VAR_STOPSTATE])
+            vehicle_values = traci.vehicle.getAllSubscriptionResults()
+            edge_values = traci.edge.getAllSubscriptionResults()
         self._previous_active = active_ids
         self._known_vehicles.update(active_ids)
 
         for vid in active_ids:
-            edge_id = traci.vehicle.getRoadID(vid) or None
-            lane_id = traci.vehicle.getLaneID(vid) or None
-            position_m = traci.vehicle.getLanePosition(vid)
-            speed_mps = traci.vehicle.getSpeed(vid)
-            stop_state = traci.vehicle.getStopState(vid)
+            if self.use_subscriptions:
+                values = vehicle_values[vid]
+                edge_id = values[tc.VAR_ROAD_ID] or None
+                lane_id = values[tc.VAR_LANE_ID] or None
+                position_m = values[tc.VAR_LANEPOSITION]
+                speed_mps = values[tc.VAR_SPEED]
+                stop_state = values[tc.VAR_STOPSTATE]
+            else:
+                edge_id = traci.vehicle.getRoadID(vid) or None
+                lane_id = traci.vehicle.getLaneID(vid) or None
+                position_m = traci.vehicle.getLanePosition(vid)
+                speed_mps = traci.vehicle.getSpeed(vid)
+                stop_state = traci.vehicle.getStopState(vid)
             is_stopped = bool(stop_state & _SUMO_STOP_FLAG)
 
             remaining = 0.0
             if lane_id:
-                remaining = max(0.0, traci.lane.getLength(lane_id) - position_m)
+                if lane_id not in self._lane_lengths:
+                    self._lane_lengths[lane_id] = traci.lane.getLength(lane_id)
+                remaining = max(0.0, self._lane_lengths[lane_id] - position_m)
 
             output.vehicles.append(VehicleStepData(
                 vehicle_id=vid,
@@ -290,7 +316,7 @@ class TraciAdapter:
             # We read the active stop's tripId from SUMO directly, which is the
             # request_id we embedded in the stop XML.  This avoids any
             # stop-index accounting and works regardless of network topology.
-            active_trip_id = self._get_active_stop_trip_id(traci, vid)
+            active_trip_id = self._get_active_stop_trip_id(traci, vid) if is_stopped and vid in self.stop_to_request_map else None
             if active_trip_id and sim_time < self.service_earliest.get(active_trip_id, 0):
                 active_trip_id = None
             prev_trip_id = self._prev_active_trip.get(vid)
@@ -314,6 +340,12 @@ class TraciAdapter:
         # ---- Edge data -----------------------------------------------
         for eid in self.edge_ids:
             try:
+                if self.use_subscriptions:
+                    values = edge_values[eid]
+                    output.edges.append(EdgeStepData(eid, values[tc.LAST_STEP_MEAN_SPEED],
+                        values[tc.LAST_STEP_OCCUPANCY]/100.0, values[tc.LAST_STEP_VEHICLE_NUMBER],
+                        values[tc.LAST_STEP_VEHICLE_HALTING_NUMBER]))
+                    continue
                 output.edges.append(EdgeStepData(
                     edge_id=eid,
                     mean_speed_mps=traci.edge.getLastStepMeanSpeed(eid),
