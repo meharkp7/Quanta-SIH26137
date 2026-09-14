@@ -1,207 +1,79 @@
-"""Record 1-second TraCI samples into Step 11 observation / trajectory logs."""
-
-from __future__ import annotations
-
+"""Causal completed-minute observations and measured edge traversals."""
 from collections import defaultdict
-from math import floor
+from math import ceil, floor, isfinite
 from pathlib import Path
-from typing import Any
-
 from src.contracts.core_types import TargetKind
-from src.contracts.scenario import Scenario
 from src.data.causal_episodes import _write_csv, _write_json
-from src.data.dynamic_episodes import DynamicEpisodeConfig
-from src.sim.traci_adaptor import SimStepOutput
-
 
 class CausalSumoLogger:
-    """Aggregate TraCI steps into minute observations and entry/exit traces."""
-
-    def __init__(
-        self,
-        scenario: Scenario,
-        *,
-        interval_s: int = 60,
-        observation_missing_fraction: float = 0.0,
-    ) -> None:
+    def __init__(self, scenario, *, interval_s=60, observation_missing_fraction=0.0):
         self.scenario = scenario
         self.interval_s = interval_s
-        self.edge_ids = [edge.edge_id for edge in scenario.edges]
-        self._edge_acc: dict[int, dict[str, list[tuple[float, float, int]]]] = defaultdict(
-            lambda: defaultdict(list)
-        )
-        self._truth_acc: dict[int, dict[str, list[tuple[float, float, int]]]] = defaultdict(
-            lambda: defaultdict(list)
-        )
-        self._vehicle_edge: dict[str, tuple[str, float]] = {}
-        self.trajectories: list[dict] = []
+        self.edge_ids = [e.edge_id for e in scenario.edges]
+        self._samples = defaultdict(lambda: defaultdict(list))
+        self._closed = {}
+        self._vehicle_edge = {}
+        self.trajectories = []
         self.latest_time_s = 0.0
-        self._known_closed_by_bucket: dict[int, set[str]] = defaultdict(set)
 
-    #def on_step(self, step: SimStepOutput) -> None:
-    def on_step(
-            self,
-            step: SimStepOutput,
-            *,
-            known_closed_edges: set[str] | None = None,
-    ) -> None:
-        known_closed_edges = known_closed_edges or set()
+    def _exit(self, vid, time_s):
+        previous = self._vehicle_edge.pop(vid, None)
+        if previous is None:
+            return
+        edge, entry = previous
+        if edge in self.edge_ids and time_s > entry:
+            self.trajectories.append(dict(trip_id=vid, edge_id=edge, entry_time_s=entry,
+                exit_time_s=time_s, duration_s=time_s-entry,
+                entry_bucket_s=int(floor(entry/self.interval_s)*self.interval_s),
+                target_kind=TargetKind.REALIZED_TRAVERSAL.value))
+
+    def on_step(self, step, *, known_closed_edges=None):
         t = float(step.sim_time_s)
         self.latest_time_s = t
-        bucket = int(floor(t / self.interval_s) * self.interval_s)
-        self._known_closed_by_bucket[bucket].update(known_closed_edges)
-
-        by_edge = {item.edge_id: item for item in step.edges}
-        for edge_id in self.edge_ids:
-            item = by_edge.get(edge_id)
-            if item is None:
-                continue
-            sample = (item.mean_speed_mps, item.occupancy, item.halting_count)
-            self._edge_acc[bucket][edge_id].append(sample)
-            self._truth_acc[bucket][edge_id].append(sample)
-
+        # Tick 1..60 is published at 60, never at 0. Partial final buckets are omitted.
+        end = int(ceil(t/self.interval_s)*self.interval_s)
+        self._closed[end] = set(known_closed_edges or ())
+        self._samples[end]  # Ensure wholly unobserved minutes are represented.
+        for edge in step.edges:
+            # SUMO returns free-flow speed on an empty lane: this is not a measurement.
+            if edge.vehicle_count > 0 and isfinite(edge.mean_speed_mps) and edge.mean_speed_mps >= 0:
+                self._samples[end][edge.edge_id].append((t, edge.mean_speed_mps, edge.occupancy, edge.halting_count))
         for vehicle in step.vehicles:
-            current = vehicle.edge_id
             previous = self._vehicle_edge.get(vehicle.vehicle_id)
-            if previous is None:
-                if current:
-                    self._vehicle_edge[vehicle.vehicle_id] = (current, t)
-                continue
-            prev_edge, entry = previous
-            if current != prev_edge:
-                if prev_edge in self.edge_ids:
-                    self.trajectories.append(
-                        {
-                            "trip_id": vehicle.vehicle_id,
-                            "edge_id": prev_edge,
-                            "entry_time_s": round(entry, 3),
-                            "exit_time_s": round(t, 3),
-                            "duration_s": round(t - entry, 3),
-                            "entry_bucket_s": int(floor(entry / self.interval_s) * self.interval_s),
-                            "target_kind": TargetKind.REALIZED_TRAVERSAL.value,
-                        }
-                    )
-                if current:
-                    self._vehicle_edge[vehicle.vehicle_id] = (current, t)
-                else:
-                    self._vehicle_edge.pop(vehicle.vehicle_id, None)
+            if previous is not None and previous[0] != vehicle.edge_id:
+                self._exit(vehicle.vehicle_id, t)
+            if vehicle.edge_id and vehicle.vehicle_id not in self._vehicle_edge:
+                self._vehicle_edge[vehicle.vehicle_id] = (vehicle.edge_id, t)
+        for vid in step.arrived_vehicle_ids:
+            self._exit(vid, t)
 
-    def write(
-        self,
-        output_dir: Path,
-        *,
-        episode_id: str,
-        config: DynamicEpisodeConfig,
-        events: list[dict] | None = None,
-    ) -> None:
+    def write(self, output_dir: Path, *, episode_id, config, events=None):
         output_dir.mkdir(parents=True, exist_ok=True)
-        limits = {edge.edge_id: edge.speed_limit_mps for edge in self.scenario.edges}
-        parents = {edge.edge_id: edge.parent_road_id for edge in self.scenario.edges}
-        lengths = {edge.edge_id: edge.length_m for edge in self.scenario.edges}
-        observations: list[dict] = []
-        truth: list[dict] = []
-        buckets = sorted(set(self._edge_acc) | set(self._truth_acc))
-        for bucket in buckets:
-            for edge_id in self.edge_ids:
-                samples = self._edge_acc.get(bucket, {}).get(edge_id, [])
-                if not samples:
-                    observations.append(
-                        {
-                            "observation_time_s": bucket,
-                            "edge_id": edge_id,
-                            "observed_speed_mps": "",
-                            "observed_travel_time_s": "",
-                            "occupancy": "",
-                            "halting_count": "",
-                            "observation_age_s": 0,
-                            "missing": 1,
-                            "known_closed": 0,
-                        }
-                    )
-                    truth.append(
-                        {
-                            "timestamp_s": bucket,
-                            "edge_id": edge_id,
-                            "parent_road_id": parents[edge_id],
-                            "true_speed_mps": "",
-                            "true_speed_ratio": "",
-                            "true_travel_time_s": "",
-                            "congestion_index": "",
-                            "occupancy": "",
-                            "halting_count": "",
-                            "is_closed": False,
-                            "active_event_id": "",
-                        }
-                    )
-                    continue
-                speed = sum(item[0] for item in samples) / len(samples)
-                occupancy = sum(item[1] for item in samples) / len(samples)
-                halt = int(round(sum(item[2] for item in samples) / len(samples)))
-                # closed = speed <= 0.05
-                # travel = "" if closed else round(lengths[edge_id] / max(speed, 0.1), 5)
-                observed_closed = edge_id in self._known_closed_by_bucket.get(bucket, set())
-                truth_closed = speed <= 0.05 or observed_closed
-                travel = "" if observed_closed or speed <= 0.05 else round(
-                    lengths[edge_id] / max(speed, 0.1), 5
-                )
-                ratio = speed / max(limits[edge_id], 1e-6)
-                observations.append(
-                    {
-                        "observation_time_s": bucket,
-                        "edge_id": edge_id,
-                        # "observed_speed_mps": round(speed, 5),
-                        # "observed_travel_time_s": travel,
-                        "observed_speed_mps": None if observed_closed else round(speed, 5),
-                        "observed_travel_time_s": None if observed_closed else travel,
-                        "occupancy": round(min(1.0, max(0.0, occupancy)), 5),
-                        "halting_count": halt,
-                        "observation_age_s": 0,
-                        "missing": 0,
-                        #"known_closed": int(closed),
-                        "known_closed": int(observed_closed),
-                    }
-                )
-                truth.append(
-                    {
-                        "timestamp_s": bucket,
-                        "edge_id": edge_id,
-                        "parent_road_id": parents[edge_id],
-                        "true_speed_mps": round(speed, 5),
-                        "true_speed_ratio": round(ratio, 5),
-                        "true_travel_time_s": (
-                            "" if speed <= 0.05 else round(lengths[edge_id] / max(speed, 0.1), 5)
-                        ),
-                        "congestion_index": round(max(0.0, 1.0 - ratio), 5),
-                        "occupancy": round(min(1.0, max(0.0, occupancy)), 5),
-                        "halting_count": halt,
-                        "is_closed": truth_closed,
-                        "active_event_id": "",
-                    }
-                )
+        observations, truth = [], []
+        last_seen = {}
+        for end in sorted(self._samples):
+            if end > self.latest_time_s:
+                continue
+            for edge in self.scenario.edges:
+                samples = self._samples[end].get(edge.edge_id, [])
+                closed = edge.edge_id in self._closed.get(end, ())
+                speed = sum(s[1] for s in samples)/len(samples) if samples else None
+                occupancy = sum(s[2] for s in samples)/len(samples) if samples else None
+                halt = sum(s[3] for s in samples)/len(samples) if samples else None
+                if samples:
+                    last_seen[edge.edge_id] = samples[-1][0]
+                age = end-last_seen.get(edge.edge_id, 0)
+                travel = edge.length_m/speed if speed is not None and speed > 0.05 and not closed else None
+                observations.append(dict(observation_time_s=end, edge_id=edge.edge_id,
+                    observed_speed_mps=speed if not closed else None, observed_travel_time_s=travel,
+                    occupancy=occupancy, halting_count=halt, observation_age_s=age,
+                    missing=int(not samples), known_closed=int(closed)))
+                truth.append(dict(timestamp_s=end, edge_id=edge.edge_id,
+                    parent_road_id=edge.parent_road_id, true_speed_mps=speed,
+                    true_speed_ratio=speed/edge.speed_limit_mps if speed is not None else None,
+                    true_travel_time_s=travel, congestion_index=None,
+                    occupancy=occupancy, halting_count=halt, is_closed=closed, active_event_id=""))
         _write_csv(output_dir / "observations.csv", observations)
         _write_csv(output_dir / "edge_truth.csv", truth)
-        #_write_csv(output_dir / "trajectories.csv", self.trajectories)
-        _write_csv(
-            output_dir / "trajectories.csv",
-            sorted(
-                self.trajectories,
-                key=lambda row: (
-                    row["entry_bucket_s"],
-                    row["entry_time_s"],
-                    row["exit_time_s"],
-                    row["trip_id"],
-                    row["edge_id"],
-                ),
-            ),
-        )
+        _write_csv(output_dir / "trajectories.csv", self.trajectories)
         _write_json(output_dir / "events.json", events or [])
-        _write_json(
-            output_dir / "sumo_logger.json",
-            {
-                "episode_id": episode_id,
-                "backend": "sumo",
-                "latest_time_s": self.latest_time_s,
-                "interval_s": self.interval_s,
-                "trajectory_count": len(self.trajectories),
-            },
-        )

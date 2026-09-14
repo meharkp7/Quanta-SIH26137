@@ -8,7 +8,7 @@ to the *entry-time* bucket.  Sparse or unused edges are missing, never 0.0.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import floor
+from math import floor, ceil
 from typing import Iterable, Mapping
 
 from src.contracts.core_types import TargetKind
@@ -136,6 +136,6 @@ def mature_traversal_label(
         target_time_s=target_time_s,
         target_kind=TargetKind.REALIZED_TRAVERSAL.value,
         value=sum(durations) / len(durations),
-        available_at_s=int(max(exits)),
+        available_at_s=int(ceil(max(exits))),
         missing=False,
     )

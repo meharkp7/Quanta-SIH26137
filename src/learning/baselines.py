@@ -86,6 +86,7 @@ class TemporalOnlyForecaster:
             for edge_index in range(e):
                 prediction[batch_index, edge_index] = raw[cursor]
                 cursor += 1
+        prediction[batch.edge_padding_mask] = np.nan
         return prediction
 
     def _xy(

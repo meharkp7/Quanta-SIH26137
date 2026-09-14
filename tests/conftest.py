@@ -1,7 +1,15 @@
 from __future__ import annotations
+import os
 import json
 from pathlib import Path
 import pytest
+# Torch and NumPy both use MKL on this Windows environment. Keep their thread
+# pools deterministic when the optional Step 13 tests are collected alongside
+# the Step 12 ridge baseline tests.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("MKL_SERVICE_FORCE_INTEL", "1")
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 from src.contracts.scenario import Scenario
 
 PROJECT_ROOT=Path(__file__).resolve().parents[1]
