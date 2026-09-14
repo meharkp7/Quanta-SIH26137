@@ -832,6 +832,37 @@ class AdaptiveQPSO:
                 remaining,
             )
 
+            positions_to_evaluate = (
+                candidate_positions[:evaluated_count]
+            )
+
+            # If the oracle exposes `evaluate_batch` (see
+            # `src/optim/parallel_oracle.py`), use it to evaluate this
+            # iteration's candidates in parallel across processes. Every
+            # candidate in `positions_to_evaluate` is independent — only
+            # the personal-best/global-best bookkeeping below is
+            # sequential — so batching the evaluation step here changes
+            # nothing about the algorithm's behavior, only how the
+            # (already-independent) fitness calls are scheduled. Any
+            # oracle without `evaluate_batch` (the default
+            # `RouteFitnessOracle`, or any test double) falls through to
+            # the original per-candidate serial call, unchanged.
+            batch_evaluate = getattr(
+                self.oracle,
+                "evaluate_batch",
+                None,
+            )
+
+            if batch_evaluate is not None:
+                batch_results = batch_evaluate(
+                    positions_to_evaluate
+                )
+            else:
+                batch_results = [
+                    self.oracle(position)
+                    for position in positions_to_evaluate
+                ]
+
             for index in range(
                 evaluated_count
             ):
@@ -839,9 +870,7 @@ class AdaptiveQPSO:
                     candidate_positions[index]
                 )
 
-                result = self.oracle(
-                    candidate_position
-                )
+                result = batch_results[index]
 
                 self._validate_fitness_result(
                     result

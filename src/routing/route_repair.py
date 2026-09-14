@@ -862,10 +862,58 @@ class RouteRepairer:
         VehicleId,
         int,
     ] | None:
-        """Find the best deterministic destination insertion."""
+        """Find the best deterministic destination insertion.
+
+        Performance note (Step-8 scaling fix):
+
+        The previous implementation rebuilt and evaluated the *entire*
+        RoutePlan (every vehicle's full route) for every candidate
+        (destination route x insertion position). That is
+        O(vehicles x positions x total_legs_in_plan) full evaluator runs
+        for a single customer relocation, and it dominates repair cost at
+        20+ customers (see artifacts/step8_research/evaluation_scaling).
+
+        This version:
+          1. Evaluates the source route with the customer removed exactly
+             once (it does not depend on destination position at all), using
+             the already-available `evaluate_vehicle_route` single-route
+             API instead of a full-plan evaluate().
+          2. Evaluates only the destination candidate route per
+             (route, position) pair, not the whole plan.
+
+        This preserves the exact original feasibility/selection semantics
+        (same `min(candidates)` tie-break) while removing an O(vehicles)
+        and an O(positions) redundant-evaluation factor.
+        """
 
         if not self._allow_cross_vehicle_relocation:
             return None
+
+        source_route = next(
+            route
+            for route in route_plan.vehicle_routes
+            if route.vehicle_id == source_vehicle_id
+        )
+
+        reduced_source_route = self._route_without_customer(
+            source_route,
+            customer_id,
+        )
+
+        if reason == "connectivity":
+            source_evaluation = (
+                self.evaluator.evaluate_vehicle_route(
+                    reduced_source_route,
+                    planning_time_s=self._planning_time_s,
+                )
+            )
+
+            # Source-route feasibility is independent of destination
+            # position, so a single infeasible check rules out every
+            # candidate at once (the old loop re-derived this same
+            # answer on every iteration and then `continue`d).
+            if not source_evaluation.connectivity_feasible:
+                return None
 
         candidates: list[
             tuple[
@@ -889,39 +937,17 @@ class RouteRepairer:
             for position in range(
                 len(route.customer_ids) + 1
             ):
-                candidate_plan = self._move_customer(
-                    route_plan,
-                    source_vehicle_id=(
-                        source_vehicle_id
-                    ),
-                    customer_id=customer_id,
-                    destination_vehicle_id=(
-                        destination_vehicle_id
-                    ),
-                    destination_position=position,
+                candidate_route = self._route_with_insertion(
+                    route,
+                    customer_id,
+                    position,
                 )
 
-                evaluation = self.evaluator.evaluate(
-                    candidate_plan,
-                    planning_time_s=self._planning_time_s,
-                )
-
-                destination_evaluation = next(
-                    result
-                    for result in (
-                        evaluation.vehicle_evaluations
+                destination_evaluation = (
+                    self.evaluator.evaluate_vehicle_route(
+                        candidate_route,
+                        planning_time_s=self._planning_time_s,
                     )
-                    if result.vehicle_id
-                    == destination_vehicle_id
-                )
-
-                source_evaluation = next(
-                    result
-                    for result in (
-                        evaluation.vehicle_evaluations
-                    )
-                    if result.vehicle_id
-                    == source_vehicle_id
                 )
 
                 if not destination_evaluation.connectivity_feasible:
@@ -933,10 +959,6 @@ class RouteRepairer:
 
                 if reason == "time_window":
                     if not destination_evaluation.time_window_feasible:
-                        continue
-
-                if reason == "connectivity":
-                    if not source_evaluation.connectivity_feasible:
                         continue
 
                 score = self._destination_score(
@@ -962,6 +984,50 @@ class RouteRepairer:
         return (
             selected[4],
             selected[5],
+        )
+
+    @staticmethod
+    def _route_without_customer(
+        route: VehicleRoute,
+        customer_id: CustomerId,
+    ) -> VehicleRoute:
+        """Return a copy of ``route`` with one customer removed."""
+
+        customers = list(route.customer_ids)
+
+        try:
+            customers.remove(customer_id)
+        except ValueError:
+            pass
+
+        return VehicleRoute.from_sequence(
+            vehicle_id=route.vehicle_id,
+            customer_ids=customers,
+        )
+
+    @staticmethod
+    def _route_with_insertion(
+        route: VehicleRoute,
+        customer_id: CustomerId,
+        position: int,
+    ) -> VehicleRoute:
+        """Return a copy of ``route`` with ``customer_id`` inserted."""
+
+        customers = list(route.customer_ids)
+
+        bounded_position = max(
+            0,
+            min(position, len(customers)),
+        )
+
+        customers.insert(
+            bounded_position,
+            customer_id,
+        )
+
+        return VehicleRoute.from_sequence(
+            vehicle_id=route.vehicle_id,
+            customer_ids=customers,
         )
 
     def _destination_score(

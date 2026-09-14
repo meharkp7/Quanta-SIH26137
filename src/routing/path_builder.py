@@ -162,6 +162,7 @@ class DirectedPathBuilder:
             cost_view: CostView | None = None,
             path_cache: PathCache | None = None,
             graph_version: str = "default",
+            graph: "DirectedRoadGraph | None" = None,
         ) -> None:
         if (
             cost_view is not None
@@ -192,7 +193,7 @@ class DirectedPathBuilder:
             closed_edge_ids=closed_edge_ids,
         )
 
-        self.graph = DirectedRoadGraph(
+        self.graph = graph if graph is not None else DirectedRoadGraph(
             edges,
             closed_edge_ids=closed_edge_ids,
         )
@@ -402,7 +403,15 @@ class DirectedPathBuilder:
                 current_node
             ):
                 try:
-                    edge_cost = cost_view.edge_cost(
+                    # Relaxation only ever needs the travel time (for the
+                    # priority queue) — not the distance / free-flow /
+                    # congestion breakdown that full `edge_cost()` builds
+                    # and validates on every call. `edge_travel_time()`
+                    # applies the same correctness checks without the
+                    # discarded work; the full decomposition is still
+                    # computed once for the winning path in
+                    # `_reconstruct_path`, so reported costs are identical.
+                    edge_travel_time_s = cost_view.edge_travel_time(
                         edge,
                         departure_time_s=(
                             current_arrival
@@ -417,7 +426,7 @@ class DirectedPathBuilder:
 
                 candidate_arrival = (
                     current_arrival
-                    + edge_cost.travel_time_s
+                    + edge_travel_time_s
                 )
 
                 old_arrival = arrival_times.get(
