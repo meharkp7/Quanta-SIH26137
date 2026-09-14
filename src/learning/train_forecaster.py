@@ -16,6 +16,11 @@ from src.contracts.scenario import Scenario
 from src.learning.baselines import PersistenceForecaster, TemporalOnlyForecaster, masked_speed_metrics
 from src.learning.gnn_transformer import CausalGNNTransformer, build_graph_batch, forecast_loss
 from src.learning.loader import ForecastBatch, load_pilot_windows
+from src.learning.uncertainty import (
+    calibrated_arrays,
+    fit_residual_calibration,
+    interval_metrics,
+)
 
 
 def seed_everything(seed: int) -> None:
@@ -134,6 +139,31 @@ def train_forecaster(pilot_dir: Path, output_dir: Path, *, epochs: int = 60, see
     for name, dataset in datasets.items():
         metrics[name], _ = _evaluate(model, dataset, scenarios, device_obj)
         breakdowns[name] = _breakdown_metrics(model, dataset, scenarios, device_obj)
+    # Calibrate only on the held-out validation split.  The test split is
+    # used once below for the reported coverage and is never used to tune the
+    # radius.
+    _, validation_outputs = _evaluate(model, datasets["validation"], scenarios, device_obj)
+    validation_batch = datasets["validation"].batch()
+    calibration = fit_residual_calibration(
+        validation_outputs["speed_ratio"].detach().cpu().numpy(),
+        validation_batch.speed_targets,
+        validation_batch.speed_target_mask,
+        nominal_coverage=0.80,
+    )
+    interval_reports = {}
+    for name, dataset in datasets.items():
+        _, outputs = _evaluate(model, dataset, scenarios, device_obj)
+        batch = dataset.batch()
+        _, lower, upper = calibrated_arrays(outputs["speed_ratio"].detach().cpu().numpy(), calibration)
+        interval_reports[name] = interval_metrics(
+            lower, upper, batch.speed_targets, batch.speed_target_mask,
+            nominal_coverage=calibration.nominal_coverage,
+        )
+    (output_dir / "uncertainty.json").write_text(json.dumps({
+        **calibration.to_dict(),
+        "validation": interval_reports["validation"],
+        "test": interval_reports["test"],
+    }, indent=2), encoding="utf-8")
     baseline_metrics = {}
     temporal = TemporalOnlyForecaster().fit(datasets["train"].batch())
     persistence = PersistenceForecaster()
@@ -162,6 +192,11 @@ def train_forecaster(pilot_dir: Path, output_dir: Path, *, epochs: int = 60, see
         "target_schema": {"speed_ratio": [5, 10, 15], "traversal_time_s": [5, 10, 15]},
         "split_policy": split_manifest.get("rule"), "metrics": metrics,
         "breakdowns": breakdowns,
+        "uncertainty": {
+            **calibration.to_dict(),
+            "validation": interval_reports["validation"],
+            "test": interval_reports["test"],
+        },
         "baseline_metrics": baseline_metrics,
         "train_windows": len(datasets["train"]), "validation_windows": len(datasets["validation"]),
         "test_windows": len(datasets["test"]),
