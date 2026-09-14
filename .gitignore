@@ -49,3 +49,8 @@ dist/
 artifacts/causal_sumo_pilot/
 artifacts/causal_sumo_pilot_repro/
 artifacts/step12_sumo_windows/
+
+# Regenerable training episodes and tensor exports
+/artifacts/step11_training_*/
+/artifacts/step12_training_*/
+/artifacts/step13_forecaster_v1/
