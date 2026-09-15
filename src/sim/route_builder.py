@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import heapq
 import logging
+import random
 from math import inf
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -47,6 +48,11 @@ class RouteBuilder:
         background_start_s: float = 0.0,
         background_target_edges: list[str] | None = None,
         background_blocked_intervals: list[tuple[float, float]] | None = None,
+        background_seed: int = 26137,
+        background_min_departure_gap_s: float = 3.0,
+        background_max_departure_gap_s: float = 6.0,
+        background_min_walk_hops: int = 8,
+        background_max_walk_hops: int = 30,
     ) -> None:
         self.scenario = scenario
         self.route_plan = route_plan
@@ -67,6 +73,15 @@ class RouteBuilder:
             raise ValueError(
                 "background_start_s must be non-negative"
             )
+        if background_min_departure_gap_s <= 0 or background_max_departure_gap_s < background_min_departure_gap_s:
+            raise ValueError(
+                "background_max_departure_gap_s must be >= "
+                "background_min_departure_gap_s > 0"
+            )
+        if background_min_walk_hops <= 0 or background_max_walk_hops < background_min_walk_hops:
+            raise ValueError(
+                "background_max_walk_hops must be >= background_min_walk_hops > 0"
+            )
 
         self._background_duration_s = float(
             background_duration_s
@@ -85,6 +100,11 @@ class RouteBuilder:
             for start, end in (background_blocked_intervals or [])
             if float(end) > float(start)
         )
+        self._background_seed = int(background_seed)
+        self._background_min_departure_gap_s = float(background_min_departure_gap_s)
+        self._background_max_departure_gap_s = float(background_max_departure_gap_s)
+        self._background_min_walk_hops = int(background_min_walk_hops)
+        self._background_max_walk_hops = int(background_max_walk_hops)
 
         self._requests: dict[str, Request] = {
             r.request_id: r
@@ -372,6 +392,28 @@ class RouteBuilder:
                         (next_cost, str(edge.to_node), str(edge.edge_id), edge.to_node, edge.from_node),
                     )
 
+            # Dead-end fallback: if every outgoing edge from `node` was
+            # excluded above as an immediate reversal, `node` is a genuine
+            # cul-de-sac under this arrival direction -- the compiled SUMO
+            # network (see SumoExporter._write_connections) permits the
+            # U-turn there because it is the only physically possible way
+            # out. Explore it here too, but only as a fallback so a normal
+            # through-junction still never gets an unnecessary U-turn.
+            node_out_edges = outgoing.get(node, ())
+            if node_out_edges and prev_from is not None and all(
+                edge.to_node == prev_from for edge in node_out_edges
+            ):
+                for edge in node_out_edges:
+                    next_state = (edge.to_node, edge.from_node)
+                    next_cost = cost + edge.free_flow_time_s
+                    if next_cost < distances.get(next_state, inf):
+                        distances[next_state] = next_cost
+                        previous[next_state] = (state, edge.edge_id)
+                        heapq.heappush(
+                            queue,
+                            (next_cost, str(edge.to_node), str(edge.edge_id), edge.to_node, edge.from_node),
+                        )
+
         if goal_state is None:
             raise ValueError(
                 f"No SUMO-compatible no-U-turn path exists from "
@@ -602,54 +644,156 @@ class RouteBuilder:
         return result
 
     def _add_background_trips(self, parent: ET.Element) -> None:
-        """Emit deterministic background trips on safe road-edge pairs."""
+        """Emit background trips that spread across the whole real network.
+
+        The previous implementation ran at most two fixed edge-to-edge
+        corridors regardless of network size -- fine for a ~10-edge
+        synthetic fixture (near-total coverage), but on a real OSM extract
+        with thousands of edges it touched a negligible fraction of the
+        network, producing near-zero observation/label coverage.
+
+        This instead departs a continuous stream of probe vehicles between
+        *randomly sampled* origin/destination edge pairs, every few
+        seconds for the full episode duration, letting SUMO's own router
+        pick each path through the compiled network (reusing the
+        no-U-turn-aware connections already written by SumoExporter,
+        rather than duplicating that pathfinding here). Over a full
+        episode this drives traffic across a large fraction of the real
+        graph instead of two fixed routes, while fully avoiding any
+        event-affected edge (``background_target_edges``) so it never
+        pollutes the specific signal an event episode is trying to
+        isolate.
+        """
         edge_ids = list(dict.fromkeys(self._edge_map.values()))
         if len(edge_ids) < 2:
             logger.warning("Cannot generate background traffic: fewer than two mapped edges")
             return
+
         affected = set(self._background_target_edges)
         safe_edges = [edge for edge in edge_ids if edge not in affected]
-        preferred = [
-            (edge_ids[0], edge_ids[min(4, len(edge_ids) - 1)]),
-            (edge_ids[1], edge_ids[min(5, len(edge_ids) - 1)]),
-        ]
-        corridors = [
-            pair for pair in preferred
-            if pair[0] != pair[1] and pair[0] not in affected and pair[1] not in affected
-        ]
-        if not corridors and len(safe_edges) >= 2:
-            corridors = [(safe_edges[0], safe_edges[1])]
-            if len(safe_edges) >= 4:
-                corridors.append((safe_edges[2], safe_edges[3]))
-        if not corridors:
+        if len(safe_edges) < 2:
             logger.warning("Cannot generate background traffic: no safe edge pair")
             return
+
+        rng = random.Random(self._background_seed)
+
         if self._background_duration_s <= self._background_start_s:
-            departures = [self._background_start_s]
-        else:
-            departures = []
-            departure = self._background_start_s
-            while departure < self._background_duration_s:
-                departures.append(departure)
-                departure += self._background_interval_s
-        trip_index = 0
-        for departure in departures:
+            # No explicit episode duration configured: preserve the original
+            # deterministic "two fixed corridors, one departure" behaviour
+            # exactly, since callers throughout the codebase (e.g.
+            # sim/sumo_runner.py) rely on this exact small, fixed trip count
+            # when they construct a RouteBuilder without configuring
+            # background traffic at all.
+            preferred = [
+                (edge_ids[0], edge_ids[min(4, len(edge_ids) - 1)]),
+                (edge_ids[1], edge_ids[min(5, len(edge_ids) - 1)]),
+            ]
+            corridors = [
+                pair for pair in preferred
+                if pair[0] != pair[1] and pair[0] not in affected and pair[1] not in affected
+            ]
+            if not corridors:
+                corridors = [(safe_edges[0], safe_edges[1])]
+                if len(safe_edges) >= 4:
+                    corridors.append((safe_edges[2], safe_edges[3]))
+            trip_index = 0
             for from_edge, to_edge in corridors:
-                if any(
-                    start <= departure < end and (from_edge in affected or to_edge in affected)
-                    for start, end in self._background_blocked_intervals
-                ):
-                    continue
                 ET.SubElement(parent, "trip", attrib={
                     "id": f"bg_{trip_index}",
                     "type": "background_car",
                     "from": from_edge,
                     "to": to_edge,
-                    "depart": f"{departure:.1f}",
+                    "depart": f"{self._background_start_s:.1f}",
                     "departLane": "best",
                     "departSpeed": "max",
                 })
                 trip_index += 1
+            return
+
+        # Explicit positive duration: a real episode. Depart a continuous
+        # stream of probe vehicles for the full duration, letting SUMO's
+        # own router pick each path through the compiled network (reusing
+        # the no-U-turn-aware connections already written by SumoExporter,
+        # rather than duplicating that pathfinding here). Over a full
+        # episode this drives traffic across a large fraction of a real,
+        # thousands-of-edges graph instead of two fixed routes -- the
+        # previous behaviour touched a negligible fraction of a real OSM
+        # extract, producing near-zero observation/label coverage.
+        #
+        # Destinations are NOT sampled uniformly at random from every edge:
+        # on a real directed OSM graph, most random edge pairs have no
+        # legal path between them at all (one-way streets, disconnected
+        # service roads -- see osm_demand_generator's SCC filtering for the
+        # same underlying issue), and SUMO aborts the entire simulation the
+        # moment one vehicle has zero valid route. Instead each destination
+        # is chosen by a bounded random walk forward from the origin along
+        # real directed edges, which guarantees at least one legal path
+        # exists by construction -- SUMO's router is then free to find the
+        # same or a better one. This fully avoids any event-affected edge
+        # (``background_target_edges``) so it never pollutes the specific
+        # signal an event episode is trying to isolate.
+        contract_edges = [e for e in self.scenario.edges if e.open_by_default]
+        outgoing: dict[str, list] = {}
+        for edge in contract_edges:
+            sumo_id = self._edge_map.get(edge.edge_id, edge.edge_id)
+            if sumo_id in affected:
+                continue
+            outgoing.setdefault(edge.from_node, []).append(edge)
+        for values in outgoing.values():
+            values.sort(key=lambda e: str(e.edge_id))
+
+        safe_contract_edges = [
+            e for e in contract_edges
+            if self._edge_map.get(e.edge_id, e.edge_id) not in affected
+        ]
+        if not safe_contract_edges:
+            logger.warning("Cannot generate background traffic: no safe edge available")
+            return
+
+        def _reachable_destination(start: object) -> object:
+            current = start
+            hops = rng.randint(self._background_min_walk_hops, self._background_max_walk_hops)
+            for _ in range(hops):
+                candidates = [
+                    e for e in outgoing.get(current.to_node, ())
+                    if e.to_node != current.from_node  # no immediate U-turn
+                ]
+                if not candidates:
+                    candidates = outgoing.get(current.to_node, ())
+                if not candidates:
+                    break
+                current = rng.choice(candidates)
+            return current
+
+        departures = []
+        departure = self._background_start_s
+        while departure < self._background_duration_s:
+            departures.append(departure)
+            departure += rng.uniform(
+                self._background_min_departure_gap_s,
+                self._background_max_departure_gap_s,
+            )
+
+        trip_index = 0
+        for departure in departures:
+            if any(start <= departure < end for start, end in self._background_blocked_intervals):
+                continue
+            start_edge = rng.choice(safe_contract_edges)
+            dest_edge = _reachable_destination(start_edge)
+            from_edge = self._edge_map.get(start_edge.edge_id, start_edge.edge_id)
+            to_edge = self._edge_map.get(dest_edge.edge_id, dest_edge.edge_id)
+            if to_edge == from_edge:
+                continue
+            ET.SubElement(parent, "trip", attrib={
+                "id": f"bg_{trip_index}",
+                "type": "background_car",
+                "from": from_edge,
+                "to": to_edge,
+                "depart": f"{departure:.1f}",
+                "departLane": "best",
+                "departSpeed": "max",
+            })
+            trip_index += 1
 
 
 def _write_xml(

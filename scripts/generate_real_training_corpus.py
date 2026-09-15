@@ -495,6 +495,8 @@ def _run_episode_with_recovery(
     seed: int,
     duration_s: int,
     failed_attempts: list[dict[str, Any]],
+    route_strategy: str,
+    route_attempt: int,
 ) -> tuple[dict[str, Any], DynamicEpisodeConfig, int]:
     ep_dir = output / "episodes" / eid
     network_cache_dir = output / "maps" / f"map_{map_index:03d}" / "network"
@@ -774,6 +776,8 @@ def generate_corpus(
                     seed=seed,
                     duration_s=duration_s,
                     failed_attempts=failed_attempts,
+                    route_strategy=route_strategy,
+                    route_attempt=route_attempt,
                 )
             except RuntimeError as episode_exc:
                 message = str(episode_exc)

@@ -137,6 +137,7 @@ class OSMScenarioBuilder:
         self._node_ids = {n.node_id for n in self._nodes}
         if len(self._node_ids) != len(self._nodes):
             raise OSMScenarioError("OSM network contains duplicate node IDs")
+        self._edge_ids = {e.edge_id for e in network.edges}
         self._index = _NearestNodeIndex(self._nodes)
 
     def snap(self, coordinate: Any) -> OSMSnapResult:
@@ -144,6 +145,61 @@ class OSMScenarioBuilder:
             coordinate,
             self.snap_config.max_snap_distance_m,
         )
+
+    def _resolve_in_transit_state(
+        self,
+        vehicle: Any,
+        *,
+        vid: str,
+        reset_in_transit_state: bool,
+    ) -> dict[str, Any]:
+        """Reset or validate a vehicle's road-network-dependent dynamic state.
+
+        Returns a ``model_copy(update=...)`` payload fragment. See
+        ``build()`` for the reset-vs-validate contract.
+        """
+
+        if reset_in_transit_state:
+            return {
+                "current_edge_id": None,
+                "current_node_id": None,
+                "distance_remaining_m": 0.0,
+                "executed_prefix_edge_ids": (),
+            }
+
+        current_node_id = vehicle.current_node_id
+        if current_node_id is not None and current_node_id not in self._node_ids:
+            raise OSMScenarioError(
+                f"Vehicle {vid!r} current_node_id {current_node_id!r} is a stale "
+                "reference to the previous road network and does not exist in "
+                "this OSM network. Pass reset_in_transit_state=True if this "
+                "vehicle is meant to start fresh on the new network."
+            )
+
+        current_edge_id = vehicle.current_edge_id
+        if current_edge_id is not None and current_edge_id not in self._edge_ids:
+            raise OSMScenarioError(
+                f"Vehicle {vid!r} current_edge_id {current_edge_id!r} is a stale "
+                "reference to the previous road network and does not exist in "
+                "this OSM network. Pass reset_in_transit_state=True if this "
+                "vehicle is meant to start fresh on the new network."
+            )
+
+        stale_prefix_edges = [
+            edge_id
+            for edge_id in vehicle.executed_prefix_edge_ids
+            if edge_id not in self._edge_ids
+        ]
+        if stale_prefix_edges:
+            raise OSMScenarioError(
+                f"Vehicle {vid!r} executed_prefix_edge_ids contains stale "
+                f"references to the previous road network: {stale_prefix_edges!r}. "
+                "Pass reset_in_transit_state=True if this vehicle is meant to "
+                "start fresh on the new network."
+            )
+
+        # Nothing stale: no field needs to change.
+        return {}
 
     def build(
         self,
@@ -153,6 +209,7 @@ class OSMScenarioBuilder:
         vehicle_start_nodes: Mapping[str, RoadNodeId] | None = None,
         vehicle_depot_nodes: Mapping[str, RoadNodeId] | None = None,
         scenario_id: str | None = None,
+        reset_in_transit_state: bool = False,
     ) -> OSMScenarioBuildResult:
         """Return a fully validated Scenario using the OSM road graph.
 
@@ -163,6 +220,28 @@ class OSMScenarioBuilder:
         Vehicles have no coordinate fields in the current contract, so
         production callers must explicitly provide OSM start/depot mappings
         when their existing node IDs are not OSM IDs.
+
+        ``Vehicle`` also carries dynamic in-transit fields
+        (``current_node_id``, ``current_edge_id``,
+        ``executed_prefix_edge_ids``) that describe progress along the
+        *previous* road network, not demand/fleet state. Swapping in a new
+        OSM road graph invalidates those references outright -- they point
+        at nodes/edges that no longer exist in ``self.network``. By default
+        this method fails loudly if any such stale reference is found,
+        exactly like the existing start/depot-node checks, rather than
+        silently reinterpreting a leftover node ID as if it were meaningful
+        on the new graph.
+
+        Pass ``reset_in_transit_state=True`` when the intent is genuinely
+        to place a fresh (not-yet-dispatched) fleet onto the new network --
+        for example when an existing demand/fleet template is being
+        re-based onto real OSM geometry for scenario generation. This
+        clears every vehicle's in-transit fields
+        (``current_edge_id=None``, ``current_node_id=None``,
+        ``distance_remaining_m=0.0``, ``executed_prefix_edge_ids=()``)
+        unconditionally. It does not touch ``onboard_request_ids`` or
+        ``remaining_load``, which describe carried demand rather than road
+        geometry and remain valid across a network swap.
         """
         request_coordinates = request_coordinates or {}
         vehicle_start_nodes = vehicle_start_nodes or {}
@@ -213,9 +292,19 @@ class OSMScenarioBuilder:
                     "provide vehicle_depot_nodes"
                 )
 
+            in_transit_update = self._resolve_in_transit_state(
+                vehicle,
+                vid=vid,
+                reset_in_transit_state=reset_in_transit_state,
+            )
+
             new_fleet.append(
                 vehicle.model_copy(
-                    update={"start_node_id": start_id, "depot_node_id": depot_id}
+                    update={
+                        "start_node_id": start_id,
+                        "depot_node_id": depot_id,
+                        **in_transit_update,
+                    }
                 )
             )
             depot_ids.add(depot_id)

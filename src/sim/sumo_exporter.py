@@ -175,11 +175,21 @@ class SumoExporter:
             in_edges = incoming.get(junction_id, [])
             out_edges = outgoing.get(junction_id, [])
             for in_e in in_edges:
-                for out_e in out_edges:
-                    # Disallow direct U-turn (from_node of in_e == to_node of out_e
-                    # means the out edge goes back where we came from)
-                    if in_e.from_node == out_e.to_node:
-                        continue
+                # Disallow direct U-turn (from_node of in_e == to_node of out_e
+                # means the out edge goes back where we came from) -- except
+                # when that is the *only* physically possible continuation.
+                # Real road networks contain genuine dead ends / cul-de-sacs
+                # (a real vehicle that drives in must be able to turn around
+                # and drive back out); forbidding the U-turn there would
+                # strand every vehicle that enters via in_e with zero legal
+                # moves, which a synthetic small fixture never exercises but
+                # a real OSM extract does.
+                allowed_out = [
+                    out_e for out_e in out_edges if in_e.from_node != out_e.to_node
+                ]
+                if not allowed_out and out_edges:
+                    allowed_out = out_edges
+                for out_e in allowed_out:
                     ET.SubElement(
                         root,
                         "connection",

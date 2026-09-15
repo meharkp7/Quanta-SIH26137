@@ -264,6 +264,7 @@ def run_sumo_causal_episode(
             background_start_s=0.0,
             background_target_edges=affected_sumo_edges,
             background_blocked_intervals=blocked_intervals,
+            background_seed=config.seed,
         ).build(
             output_dir=output_dir / "routes"
         )

@@ -212,3 +212,107 @@ def test_fingerprint_is_deterministic():
     b = OSMScenarioBuilder(make_network()).network_fingerprint()
     assert a == b
     assert len(a) == 64
+
+
+# ============================================================================
+# Regression: stale in-transit vehicle state from a discarded network
+# ============================================================================
+#
+# `Vehicle.current_node_id` / `current_edge_id` / `executed_prefix_edge_ids`
+# describe progress along whatever road network the scenario previously
+# used. `build()` used to remap `start_node_id`/`depot_node_id` only, so a
+# vehicle already mid-route on the *old* network would silently carry stale
+# node/edge references onto the new OSM network -- references that name
+# nodes/edges the new network never had.
+
+
+def make_mid_transit_scenario():
+    base = make_scenario()
+    vehicle = base.fleet[0].model_copy(
+        update={
+            "current_node_id": "synthetic-depot",
+            "current_edge_id": "synthetic-edge",
+            "executed_prefix_edge_ids": ("synthetic-edge",),
+            "distance_remaining_m": 42.0,
+        }
+    )
+    return base.model_copy(update={"fleet": (vehicle,)})
+
+
+def test_stale_current_node_id_is_rejected_by_default():
+    with pytest.raises(OSMScenarioError, match="current_node_id"):
+        OSMScenarioBuilder(make_network()).build(
+            make_mid_transit_scenario(),
+            request_coordinates={"c1": (98.0, 0.0)},
+            vehicle_start_nodes={"v1": "osm:n:1"},
+            vehicle_depot_nodes={"v1": "osm:n:1"},
+        )
+
+
+def test_stale_current_edge_id_is_rejected_by_default():
+    base = make_scenario()
+    vehicle = base.fleet[0].model_copy(
+        update={"current_edge_id": "synthetic-edge"}
+    )
+    base = base.model_copy(update={"fleet": (vehicle,)})
+
+    with pytest.raises(OSMScenarioError, match="current_edge_id"):
+        OSMScenarioBuilder(make_network()).build(
+            base,
+            request_coordinates={"c1": (98.0, 0.0)},
+            vehicle_start_nodes={"v1": "osm:n:1"},
+            vehicle_depot_nodes={"v1": "osm:n:1"},
+        )
+
+
+def test_stale_executed_prefix_edge_ids_are_rejected_by_default():
+    base = make_scenario()
+    vehicle = base.fleet[0].model_copy(
+        update={"executed_prefix_edge_ids": ("synthetic-edge",)}
+    )
+    base = base.model_copy(update={"fleet": (vehicle,)})
+
+    with pytest.raises(OSMScenarioError, match="executed_prefix_edge_ids"):
+        OSMScenarioBuilder(make_network()).build(
+            base,
+            request_coordinates={"c1": (98.0, 0.0)},
+            vehicle_start_nodes={"v1": "osm:n:1"},
+            vehicle_depot_nodes={"v1": "osm:n:1"},
+        )
+
+
+def test_reset_in_transit_state_clears_stale_dynamic_fields():
+    result = OSMScenarioBuilder(make_network()).build(
+        make_mid_transit_scenario(),
+        request_coordinates={"c1": (98.0, 0.0)},
+        vehicle_start_nodes={"v1": "osm:n:1"},
+        vehicle_depot_nodes={"v1": "osm:n:1"},
+        reset_in_transit_state=True,
+    )
+
+    vehicle = result.scenario.fleet[0]
+    assert vehicle.current_node_id is None
+    assert vehicle.current_edge_id is None
+    assert vehicle.executed_prefix_edge_ids == ()
+    assert vehicle.distance_remaining_m == 0.0
+    # Demand/capacity state is untouched by a road-network swap.
+    assert vehicle.capacity == 10.0
+
+
+def test_current_node_id_already_on_new_network_is_preserved():
+    base = make_scenario()
+    vehicle = base.fleet[0].model_copy(
+        update={"current_node_id": "osm:n:2", "current_edge_id": "osm:e:1"}
+    )
+    base = base.model_copy(update={"fleet": (vehicle,)})
+
+    result = OSMScenarioBuilder(make_network()).build(
+        base,
+        request_coordinates={"c1": (98.0, 0.0)},
+        vehicle_start_nodes={"v1": "osm:n:1"},
+        vehicle_depot_nodes={"v1": "osm:n:1"},
+    )
+
+    rebuilt_vehicle = result.scenario.fleet[0]
+    assert rebuilt_vehicle.current_node_id == "osm:n:2"
+    assert rebuilt_vehicle.current_edge_id == "osm:e:1"
