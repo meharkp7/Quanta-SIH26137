@@ -29,6 +29,13 @@ from .osm_ingestion import (
     load_osm_xml,
 )
 
+from .osm_demand_generator import (
+    OSMDemandConfig,
+    OSMDemandGenerationError,
+    OSMDemandGenerationResult,
+    generate_osm_scenario,
+)
+
 __all__ += [
     "OSMIngestionConfig",
     "OSMIngestionError",
@@ -36,4 +43,8 @@ __all__ += [
     "graph_to_quanta",
     "load_graphml",
     "load_osm_xml",
+    "OSMDemandConfig",
+    "OSMDemandGenerationError",
+    "OSMDemandGenerationResult",
+    "generate_osm_scenario",
 ]

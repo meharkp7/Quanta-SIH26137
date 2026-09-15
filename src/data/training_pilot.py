@@ -20,7 +20,7 @@ def map_fingerprint(scenario):
 
 def generate_training_pilot(root, *, duration_s=2400, seed=26137):
     root = Path(root).resolve()
-    if (root / "split_manifest.json").exists():
+    if (root / "corpus_manifest.json").exists():
         raise ValueError("Output already contains a pilot; choose a new directory")
     root.mkdir(parents=True, exist_ok=True)
     specs = [("train",0,"normal",None), ("train",0,"morning_peak","incident"),
@@ -46,7 +46,7 @@ def generate_training_pilot(root, *, duration_s=2400, seed=26137):
         manifest[split].append(f"ep-{i+1:03d}")
     manifest.update(map_disjoint=True, scenario_files=files, map_fingerprints=hashes,
         rule="disjoint base maps and episodes assigned before windows", seed=seed, backend="sumo")
-    _write_json(root / "split_manifest.json", manifest)
+    _write_json(root / "corpus_manifest.json", manifest)
     results, audits = [], []
     started = time.perf_counter()
     for i,(split,index,regime,event_type) in enumerate(specs):

@@ -1,0 +1,15 @@
+{
+  "episodes_requested": 1000,
+  "max_steps": 10,
+  "seed": 42,
+  "scenario_cases": [
+    "feasible_reference",
+    "early_arrival_wait",
+    "closure_with_detour"
+  ],
+  "forecaster": "persistence-pilot",
+  "forecaster_frozen_within_update": true,
+  "device": "cpu",
+  "representation_dim": 332,
+  "action_dim": 5
+}

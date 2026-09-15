@@ -34,6 +34,15 @@ class OSMIngestionConfig:
     require_projected_coordinates: bool = True
     provenance: str = "openstreetmap"
 
+    # Real OSM extracts genuinely contain self-loop edges (a way whose two
+    # endpoints round-trip to the same node, typically a roundabout or
+    # simplification artifact). A self-loop carries no legal directed
+    # movement in this graph model -- RoadEdge correctly rejects
+    # from_node == to_node -- so by default these are dropped rather than
+    # failing the whole ingestion. Set to False to fail loud instead if a
+    # self-loop should be treated as a data-quality error for your source.
+    skip_self_loop_edges: bool = True
+
     def __post_init__(self) -> None:
         if self.default_speed_limit_mps <= 0:
             raise ValueError("default_speed_limit_mps must be positive")
@@ -53,6 +62,7 @@ class OSMNetwork:
     edges: tuple[RoadEdge, ...]
     source_crs: str | None
     projected: bool
+    self_loop_edges_skipped: int = 0
 
 
 _HIGHWAY_CLASS = {
@@ -107,6 +117,35 @@ def load_graphml(path: str, *, config: OSMIngestionConfig | None = None) -> OSMN
     return graph_to_quanta(graph, config=cfg)
 
 
+def _is_projected_crs(crs: Any) -> bool:
+    """Determine whether ``crs`` is a projected (metric) CRS.
+
+    ``crs`` is usually a live ``pyproj.CRS`` object with an ``is_projected``
+    attribute -- but GraphML only stores string-typed graph attributes, so
+    after a ``save_graphml`` -> ``load_graphml`` round trip ``crs`` comes
+    back as a plain string (e.g. ``"epsg:32643"`` or a WKT/proj4 blob). A
+    string has no ``.is_projected``, so this falls back to parsing it with
+    pyproj before deciding, rather than silently treating every
+    string-valued CRS as unprojected.
+    """
+    is_projected = getattr(crs, "is_projected", None)
+    if is_projected is not None:
+        return bool(is_projected)
+
+    if isinstance(crs, str) and crs.strip():
+        try:
+            from pyproj import CRS  # type: ignore
+        except ImportError:  # pragma: no cover - environment dependent
+            return False
+        try:
+            parsed = CRS.from_user_input(crs)
+        except Exception:
+            return False
+        return bool(parsed.is_projected)
+
+    return False
+
+
 def graph_to_quanta(graph: Any, *, config: OSMIngestionConfig | None = None) -> OSMNetwork:
     """Convert an OSMnx/NetworkX directed graph into Quanta contracts.
 
@@ -120,7 +159,7 @@ def graph_to_quanta(graph: Any, *, config: OSMIngestionConfig | None = None) -> 
 
     graph_attrs = getattr(graph, "graph", {}) or {}
     crs = graph_attrs.get("crs")
-    projected = bool(getattr(crs, "is_projected", False))
+    projected = _is_projected_crs(crs)
     if cfg.require_projected_coordinates and not projected:
         raise OSMIngestionError(
             "OSM graph is not projected. Project the graph to a metric CRS before ingestion "
@@ -148,9 +187,18 @@ def graph_to_quanta(graph: Any, *, config: OSMIngestionConfig | None = None) -> 
         )
 
     edge_records: list[RoadEdge] = []
+    self_loop_edges_skipped = 0
     for ordinal, (u, v, key, attrs) in enumerate(_iter_multiedges(graph)):
         if u not in node_ids or v not in node_ids:
             raise OSMIngestionError(f"edge {u!r}->{v!r} references an unknown node")
+        if u == v:
+            if cfg.skip_self_loop_edges:
+                self_loop_edges_skipped += 1
+                continue
+            raise OSMIngestionError(
+                f"OSM edge {u!r}->{v!r}/{key!r} is a self-loop (from_node == "
+                "to_node); set skip_self_loop_edges=True to drop these instead"
+            )
         length = _edge_length(attrs)
         if length is None:
             if cfg.require_length:
@@ -186,6 +234,7 @@ def graph_to_quanta(graph: Any, *, config: OSMIngestionConfig | None = None) -> 
         edges=tuple(edge_records),
         source_crs=str(crs) if crs is not None else None,
         projected=projected,
+        self_loop_edges_skipped=self_loop_edges_skipped,
     )
 
 

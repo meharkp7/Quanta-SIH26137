@@ -194,8 +194,19 @@ class TestSumoExporterXml:
                 f"Edge mapping is not identity: {contract_id!r} -> {sumo_id!r}"
             )
 
-    def test_connections_no_u_turns(self, tmp_path):
-        """Connections XML must not contain any U-turn connections."""
+    def test_connections_no_unnecessary_u_turns(self, tmp_path):
+        """Connections XML must not contain a U-turn wherever a real
+        alternative continuation exists.
+
+        A blanket "never any U-turn" rule is actually wrong: this fixture's
+        depot (N0) has exactly one neighbor (N1, via E01/E10), making N0 a
+        genuine dead end. Forbidding the U-turn there would strand any
+        vehicle that ever needs to leave N0 after arriving -- the U-turn
+        must be permitted specifically because no other option exists. The
+        invariant this test actually needs to hold is: a U-turn connection
+        may only appear when it is the *only* physically possible way out
+        of that junction for vehicles arriving via that particular edge.
+        """
         from sim.sumo_exporter import SumoExporter
         import xml.etree.ElementTree as ET
 
@@ -205,19 +216,32 @@ class TestSumoExporterXml:
         exp._write_edges()
         con_path = exp._write_connections()
 
-        # Build a from_node/to_node lookup by edge_id
         edge_map = {e.edge_id: e for e in scenario.edges}
+        outgoing: dict[str, list] = {}
+        for e in scenario.edges:
+            outgoing.setdefault(e.from_node, []).append(e)
 
         tree = ET.parse(con_path)
         for conn in tree.getroot().findall("connection"):
             from_eid = conn.get("from")
             to_eid = conn.get("to")
-            if from_eid in edge_map and to_eid in edge_map:
-                in_edge = edge_map[from_eid]
-                out_edge = edge_map[to_eid]
-                assert in_edge.from_node != out_edge.to_node, (
-                    f"U-turn connection found: {from_eid} -> {to_eid}"
-                )
+            if from_eid not in edge_map or to_eid not in edge_map:
+                continue
+            in_edge = edge_map[from_eid]
+            out_edge = edge_map[to_eid]
+            if in_edge.from_node != out_edge.to_node:
+                continue  # not a U-turn
+
+            junction = in_edge.to_node
+            non_uturn_options = [
+                out_e for out_e in outgoing.get(junction, [])
+                if in_edge.from_node != out_e.to_node
+            ]
+            assert not non_uturn_options, (
+                f"Unnecessary U-turn connection found at {junction!r}: "
+                f"{from_eid} -> {to_eid}, but a non-U-turn continuation "
+                f"exists ({[e.edge_id for e in non_uturn_options]})"
+            )
 
 
 class TestRouteBuilder:
@@ -594,4 +618,3 @@ class TestFullEpisodeIntegration:
             evt for evt in result.incident_events if evt[1] == "closed"
         ]
         assert len(closed_events) == 1
-

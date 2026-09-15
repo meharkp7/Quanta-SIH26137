@@ -1,4 +1,9 @@
-"""Train and evaluate the Step 13 ``forecaster_v1`` artifact."""
+"""Train and evaluate the Step 13 ``forecaster_v1`` artifact.
+
+Training is performed in deterministic mini-batches of Step-13 windows.
+The real SUMO episode corpus is loaded once, but the full corpus is never
+materialised as one giant model tensor.
+"""
 from __future__ import annotations
 
 import argparse
@@ -6,15 +11,22 @@ import json
 import random
 import shutil
 from pathlib import Path
-from typing import Mapping
 
 import numpy as np
 import torch
 from torch import nn
 
 from src.contracts.scenario import Scenario
-from src.learning.baselines import PersistenceForecaster, TemporalOnlyForecaster, masked_speed_metrics
-from src.learning.gnn_transformer import CausalGNNTransformer, build_graph_batch, forecast_loss
+from src.learning.baselines import (
+    PersistenceForecaster,
+    TemporalOnlyForecaster,
+    masked_speed_metrics,
+)
+from src.learning.gnn_transformer import (
+    CausalGNNTransformer,
+    build_graph_batch,
+    forecast_loss,
+)
 from src.learning.loader import ForecastBatch, load_pilot_windows
 from src.learning.uncertainty import (
     calibrated_arrays,
@@ -29,168 +41,612 @@ def seed_everything(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def _tensor_batch(batch: ForecastBatch, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
-    features = torch.as_tensor(batch.features, dtype=torch.float32, device=device)
-    padding = torch.as_tensor(batch.edge_padding_mask, dtype=torch.bool, device=device)
+def _batch_from_windows(windows):
+    """Use the existing WindowDataset batching contract."""
+    from src.learning.loader import WindowDataset
+    return WindowDataset(list(windows)).batch()
+
+
+def _tensor_batch(
+    batch: ForecastBatch,
+    device: torch.device,
+):
+    features = torch.as_tensor(
+        batch.features,
+        dtype=torch.float32,
+        device=device,
+    )
+    padding = torch.as_tensor(
+        batch.edge_padding_mask,
+        dtype=torch.bool,
+        device=device,
+    )
     return features, padding
 
 
-def _evaluate(model, dataset, scenarios, device):
-    batch = dataset.batch()
-    graph = build_graph_batch(batch, scenarios, device=device)
+def _scenario_subset(scenarios, batch):
+    return {
+        scenario_id: scenarios[scenario_id]
+        for scenario_id in set(batch.scenario_ids)
+    }
+
+
+def _forward_batch(model, batch, scenarios, device):
+    """Build sparse graph and run one mini-batch."""
+    graph = build_graph_batch(
+        batch,
+        _scenario_subset(scenarios, batch),
+        device=device,
+    )
     features, padding = _tensor_batch(batch, device)
+    outputs = model(features, graph, padding)
+    return outputs
+
+
+def _iter_batches(dataset, batch_size, *, shuffle=False, rng=None):
+    windows = list(dataset.windows)
+    indices = np.arange(len(windows))
+
+    if shuffle:
+        if rng is None:
+            rng = np.random.default_rng(26137)
+        rng.shuffle(indices)
+
+    for start in range(0, len(indices), batch_size):
+        selected = [
+            windows[int(i)]
+            for i in indices[start:start + batch_size]
+        ]
+        yield _batch_from_windows(selected)
+
+
+def _predict_dataset(
+    model,
+    dataset,
+    scenarios,
+    device,
+    *,
+    batch_size,
+    collect_outputs=False,
+):
+    """Chunked deterministic inference over a complete split."""
+    predictions = []
+    speed_targets = []
+    speed_masks = []
+    all_outputs = []
+
     model.eval()
+
     with torch.no_grad():
-        outputs = model(features, graph, padding)
-    prediction = outputs["speed_ratio"].cpu().numpy()
+        for batch in _iter_batches(
+            dataset,
+            batch_size,
+            shuffle=False,
+        ):
+            outputs = _forward_batch(
+                model,
+                batch,
+                scenarios,
+                device,
+            )
+
+            predictions.append(
+                outputs["speed_ratio"].detach().cpu().numpy()
+            )
+            speed_targets.append(batch.speed_targets)
+            speed_masks.append(batch.speed_target_mask)
+
+            if collect_outputs:
+                all_outputs.append(outputs)
+
+    prediction = np.concatenate(predictions, axis=0)
+    targets = np.concatenate(speed_targets, axis=0)
+    masks = np.concatenate(speed_masks, axis=0)
+
     metrics = {}
     for horizon in range(prediction.shape[-1]):
         metric = masked_speed_metrics(
-            batch.speed_targets[:, :, horizon],
-            batch.speed_target_mask[:, :, horizon],
+            targets[:, :, horizon],
+            masks[:, :, horizon],
             prediction[:, :, horizon],
         )
-        total = int(batch.speed_target_mask[:, :, horizon].sum())
-        metric["label_coverage"] = float(metric["count"] / total) if total else 0.0
-        metrics[str((horizon + 1) * 5)] = metric
-    return metrics, outputs
-
-
-def _breakdown_metrics(model, dataset, scenarios, device):
-    """Report per-map and incident-window metrics on the same predictions."""
-    batch = dataset.batch()
-    graph = build_graph_batch(batch, scenarios, device=device)
-    features, padding = _tensor_batch(batch, device)
-    model.eval()
-    with torch.no_grad():
-        prediction = model(features, graph, padding)["speed_ratio"].cpu().numpy()
-    groups = {"per_map": {}}
-    scenario_ids = np.asarray(batch.scenario_ids)
-    incident = np.asarray([
-        bool(np.nan_to_num(window.features[..., 5], nan=0.0).max() > 0.0)
-        for window in dataset.windows
-    ])
-    groups["incident"] = _group_metrics(batch, prediction, incident)
-    for scenario_id in sorted(set(batch.scenario_ids)):
-        groups["per_map"][scenario_id] = _group_metrics(
-            batch, prediction, scenario_ids == scenario_id
+        total = int(masks[:, :, horizon].sum())
+        metric["label_coverage"] = (
+            float(metric["count"] / total)
+            if total
+            else 0.0
         )
-    return groups
+        metrics[str((horizon + 1) * 5)] = metric
+
+    if not collect_outputs:
+        return metrics, None
+
+    # The uncertainty code expects the complete [N,E,H] prediction array.
+    return metrics, {
+        "speed_ratio": torch.as_tensor(
+            prediction,
+            dtype=torch.float32,
+            device=device,
+        ),
+        "targets": targets,
+        "masks": masks,
+    }
+
+
+def _evaluate(
+    model,
+    dataset,
+    scenarios,
+    device,
+    *,
+    batch_size,
+):
+    metrics, packed = _predict_dataset(
+        model,
+        dataset,
+        scenarios,
+        device,
+        batch_size=batch_size,
+        collect_outputs=True,
+    )
+    return metrics, packed
 
 
 def _group_metrics(batch, prediction, selected):
     selected = np.asarray(selected, dtype=bool)
     result = {}
+
     for horizon in range(prediction.shape[-1]):
         target = batch.speed_targets[selected, :, horizon]
         mask = batch.speed_target_mask[selected, :, horizon]
-        metric = masked_speed_metrics(target, mask, prediction[selected, :, horizon])
+
+        metric = masked_speed_metrics(
+            target,
+            mask,
+            prediction[selected, :, horizon],
+        )
+
         total = int(mask.sum())
-        metric["label_coverage"] = float(metric["count"] / total) if total else 0.0
+        metric["label_coverage"] = (
+            float(metric["count"] / total)
+            if total
+            else 0.0
+        )
         result[str((horizon + 1) * 5)] = metric
+
     return result
 
 
-def train_forecaster(pilot_dir: Path, output_dir: Path, *, epochs: int = 60, seed: int = 26137,
-                     width: int = 32, device: str = "cpu") -> dict:
-    """Train on Step 12 windows and write a reproducible artifact manifest."""
+def _breakdown_metrics(
+    model,
+    dataset,
+    scenarios,
+    device,
+    *,
+    batch_size,
+):
+    """Report per-map and incident-window metrics without giant tensors."""
+    predictions = []
+    batches = []
+
+    for batch in _iter_batches(
+        dataset,
+        batch_size,
+        shuffle=False,
+    ):
+        outputs = _forward_batch(
+            model,
+            batch,
+            scenarios,
+            device,
+        )
+        predictions.append(
+            outputs["speed_ratio"].detach().cpu().numpy()
+        )
+        batches.append(batch)
+
+    prediction = np.concatenate(predictions, axis=0)
+    batch = _batch_from_windows(dataset.windows)
+
+    groups = {"per_map": {}}
+
+    scenario_ids = np.asarray(batch.scenario_ids)
+    incident = np.asarray([
+        bool(
+            np.nan_to_num(
+                window.features[..., 5],
+                nan=0.0,
+            ).max() > 0.0
+        )
+        for window in dataset.windows
+    ])
+
+    groups["incident"] = _group_metrics(
+        batch,
+        prediction,
+        incident,
+    )
+
+    for scenario_id in sorted(set(batch.scenario_ids)):
+        groups["per_map"][scenario_id] = _group_metrics(
+            batch,
+            prediction,
+            scenario_ids == scenario_id,
+        )
+
+    return groups
+
+
+def _calibration_inputs(
+    model,
+    dataset,
+    scenarios,
+    device,
+    *,
+    batch_size,
+):
+    predictions = []
+    targets = []
+    masks = []
+
+    for batch in _iter_batches(
+        dataset,
+        batch_size,
+        shuffle=False,
+    ):
+        outputs = _forward_batch(
+            model,
+            batch,
+            scenarios,
+            device,
+        )
+        predictions.append(
+            outputs["speed_ratio"].detach().cpu().numpy()
+        )
+        targets.append(batch.speed_targets)
+        masks.append(batch.speed_target_mask)
+
+    return (
+        np.concatenate(predictions, axis=0),
+        np.concatenate(targets, axis=0),
+        np.concatenate(masks, axis=0),
+    )
+
+
+def _batch_metrics_for_baselines(dataset):
+    batch = _batch_from_windows(dataset.windows)
+    persistence = PersistenceForecaster()
+    return batch, persistence
+
+
+def train_forecaster(
+    pilot_dir: Path,
+    output_dir: Path,
+    *,
+    epochs: int = 60,
+    seed: int = 26137,
+    width: int = 32,
+    device: str = "cpu",
+    batch_size: int = 2,
+) -> dict:
+    """Train on Step-13 windows and write a reproducible artifact manifest."""
+    if epochs <= 0:
+        raise ValueError("epochs must be positive")
+    if width <= 0:
+        raise ValueError("width must be positive")
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+
     seed_everything(seed)
+
     device_obj = torch.device(device)
-    pilot_dir, output_dir = Path(pilot_dir), Path(output_dir)
+    pilot_dir = Path(pilot_dir)
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    split_manifest = json.loads((pilot_dir / "split_manifest.json").read_text(encoding="utf-8"))
+
+    split_manifest = json.loads(
+        (pilot_dir / "corpus_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
     scenarios = {
-        sid: Scenario.model_validate_json((pilot_dir / relative).read_text(encoding="utf-8"))
-        for sid, relative in split_manifest.get("scenario_files", {}).items()
+        sid: Scenario.model_validate_json(
+            (pilot_dir / relative).read_text(
+                encoding="utf-8"
+            )
+        )
+        for sid, relative in split_manifest.get(
+            "scenario_files",
+            {},
+        ).items()
     }
+
+    if not scenarios:
+        raise ValueError(
+            "No scenario_files found in corpus_manifest.json"
+        )
+
+    print(
+        f"Loading Step-13 windows from {pilot_dir}...",
+        flush=True,
+    )
     datasets = load_pilot_windows(pilot_dir)
-    train_batch = datasets["train"].batch()
-    graph = build_graph_batch(train_batch, scenarios, device=device_obj)
+
+    train_windows = len(datasets["train"])
+    validation_windows = len(datasets["validation"])
+    test_windows = len(datasets["test"])
+
+    print(
+        "Windows loaded: "
+        f"train={train_windows}, "
+        f"validation={validation_windows}, "
+        f"test={test_windows}",
+        flush=True,
+    )
+
     model = CausalGNNTransformer(width=width).to(device_obj)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=1e-4)
-    train_features, train_padding = _tensor_batch(train_batch, device_obj)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=2e-3,
+        weight_decay=1e-4,
+    )
+
     history = []
     best = float("inf")
     best_state = None
+    rng = np.random.default_rng(seed)
+
+    steps_per_epoch = (
+        (train_windows + batch_size - 1)
+        // batch_size
+    )
+
+    print(
+        f"Training on {device_obj} | "
+        f"batch_size={batch_size} | "
+        f"steps/epoch={steps_per_epoch}",
+        flush=True,
+    )
+
     for epoch in range(1, epochs + 1):
         model.train()
-        optimizer.zero_grad(set_to_none=True)
-        outputs = model(train_features, graph, train_padding)
-        losses = forecast_loss(outputs, train_batch, device=device_obj)
-        losses["total"].backward()
-        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
-        val_metrics, _ = _evaluate(model, datasets["validation"], scenarios, device_obj)
-        val_values = [m["mae"] for m in val_metrics.values() if m["mae"] is not None]
-        val_mae = float(np.mean(val_values)) if val_values else float("inf")
-        row = {"epoch": epoch, "train_loss": float(losses["total"].item()),
-               "train_speed_loss": float(losses["speed"].item()),
-               "train_traversal_loss": float(losses["traversal"].item()),
-               "validation_speed_mae": val_mae}
+        running_total = 0.0
+        running_speed = 0.0
+        running_traversal = 0.0
+        count = 0
+
+        for batch in _iter_batches(
+            datasets["train"],
+            batch_size,
+            shuffle=True,
+            rng=rng,
+        ):
+            optimizer.zero_grad(set_to_none=True)
+
+            outputs = _forward_batch(
+                model,
+                batch,
+                scenarios,
+                device_obj,
+            )
+
+            losses = forecast_loss(
+                outputs,
+                batch,
+                device=device_obj,
+            )
+
+            losses["total"].backward()
+            nn.utils.clip_grad_norm_(
+                model.parameters(),
+                1.0,
+            )
+            optimizer.step()
+
+            running_total += float(
+                losses["total"].detach().cpu()
+            )
+            running_speed += float(
+                losses["speed"].detach().cpu()
+            )
+            running_traversal += float(
+                losses["traversal"].detach().cpu()
+            )
+            count += 1
+
+        val_metrics, _ = _evaluate(
+            model,
+            datasets["validation"],
+            scenarios,
+            device_obj,
+            batch_size=batch_size,
+        )
+
+        val_values = [
+            metric["mae"]
+            for metric in val_metrics.values()
+            if metric["mae"] is not None
+        ]
+        val_mae = (
+            float(np.mean(val_values))
+            if val_values
+            else float("inf")
+        )
+
+        row = {
+            "epoch": epoch,
+            "train_loss": running_total / max(count, 1),
+            "train_speed_loss": running_speed / max(count, 1),
+            "train_traversal_loss": running_traversal / max(count, 1),
+            "validation_speed_mae": val_mae,
+        }
         history.append(row)
+
+        print(
+            f"Epoch {epoch:03d}/{epochs:03d} | "
+            f"train={row['train_loss']:.6f} | "
+            f"speed={row['train_speed_loss']:.6f} | "
+            f"travel={row['train_traversal_loss']:.6f} | "
+            f"val_MAE={val_mae:.6f}",
+            flush=True,
+        )
+
         if val_mae < best:
             best = val_mae
-            best_state = {name: value.detach().cpu().clone() for name, value in model.state_dict().items()}
+            best_state = {
+                name: value.detach().cpu().clone()
+                for name, value in model.state_dict().items()
+            }
+
     if best_state is None:
         raise RuntimeError("No model checkpoint was produced")
+
     model.load_state_dict(best_state)
+
     metrics = {}
     breakdowns = {}
+
     for name, dataset in datasets.items():
-        metrics[name], _ = _evaluate(model, dataset, scenarios, device_obj)
-        breakdowns[name] = _breakdown_metrics(model, dataset, scenarios, device_obj)
-    # Calibrate only on the held-out validation split.  The test split is
-    # used once below for the reported coverage and is never used to tune the
-    # radius.
-    _, validation_outputs = _evaluate(model, datasets["validation"], scenarios, device_obj)
-    validation_batch = datasets["validation"].batch()
+        metrics[name], _ = _evaluate(
+            model,
+            dataset,
+            scenarios,
+            device_obj,
+            batch_size=batch_size,
+        )
+        breakdowns[name] = _breakdown_metrics(
+            model,
+            dataset,
+            scenarios,
+            device_obj,
+            batch_size=batch_size,
+        )
+
+    validation_prediction, validation_targets, validation_masks = (
+        _calibration_inputs(
+            model,
+            datasets["validation"],
+            scenarios,
+            device_obj,
+            batch_size=batch_size,
+        )
+    )
+
     calibration = fit_residual_calibration(
-        validation_outputs["speed_ratio"].detach().cpu().numpy(),
-        validation_batch.speed_targets,
-        validation_batch.speed_target_mask,
+        validation_prediction,
+        validation_targets,
+        validation_masks,
         nominal_coverage=0.80,
     )
+
     interval_reports = {}
+
     for name, dataset in datasets.items():
-        _, outputs = _evaluate(model, dataset, scenarios, device_obj)
-        batch = dataset.batch()
-        _, lower, upper = calibrated_arrays(outputs["speed_ratio"].detach().cpu().numpy(), calibration)
+        prediction, targets, masks = _calibration_inputs(
+            model,
+            dataset,
+            scenarios,
+            device_obj,
+            batch_size=batch_size,
+        )
+
+        _, lower, upper = calibrated_arrays(
+            prediction,
+            calibration,
+        )
+
         interval_reports[name] = interval_metrics(
-            lower, upper, batch.speed_targets, batch.speed_target_mask,
+            lower,
+            upper,
+            targets,
+            masks,
             nominal_coverage=calibration.nominal_coverage,
         )
-    (output_dir / "uncertainty.json").write_text(json.dumps({
-        **calibration.to_dict(),
-        "validation": interval_reports["validation"],
-        "test": interval_reports["test"],
-    }, indent=2), encoding="utf-8")
+
+    (output_dir / "uncertainty.json").write_text(
+        json.dumps(
+            {
+                **calibration.to_dict(),
+                "validation": interval_reports["validation"],
+                "test": interval_reports["test"],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
     baseline_metrics = {}
-    temporal = TemporalOnlyForecaster().fit(datasets["train"].batch())
+
+    train_batch = _batch_from_windows(
+        datasets["train"].windows
+    )
+    temporal = TemporalOnlyForecaster().fit(train_batch)
     persistence = PersistenceForecaster()
+
     for name, dataset in datasets.items():
-        batch = dataset.batch()
+        batch = _batch_from_windows(dataset.windows)
+
         baseline_metrics[name] = {
             "persistence": masked_speed_metrics(
-                batch.speed_targets, batch.speed_target_mask, persistence.predict(batch)
+                batch.speed_targets,
+                batch.speed_target_mask,
+                persistence.predict(batch),
             ),
             "temporal_only": masked_speed_metrics(
-                batch.speed_targets, batch.speed_target_mask, temporal.predict(batch)
+                batch.speed_targets,
+                batch.speed_target_mask,
+                temporal.predict(batch),
             ),
         }
-    cutoff = max(
+
+    cutoff_values = [
         int(np.nanmax(window.label_available_at_s))
         for window in datasets["train"].windows
         if np.isfinite(window.label_available_at_s).any()
+    ]
+
+    if not cutoff_values:
+        raise RuntimeError(
+            "Training windows contain no finite label_available_at_s values"
+        )
+
+    cutoff = max(cutoff_values)
+
+    torch.save(
+        model.state_dict(),
+        output_dir / "weights.pt",
     )
-    torch.save(model.state_dict(), output_dir / "weights.pt")
-    shutil.copy2(pilot_dir / "split_manifest.json", output_dir / "split_manifest.json")
-    datasets["train"].scaler.save(output_dir / "scaler.json")
+
+    shutil.copy2(
+        pilot_dir / "corpus_manifest.json",
+        output_dir / "corpus_manifest.json",
+    )
+
+    datasets["train"].scaler.save(
+        output_dir / "scaler.json"
+    )
+
     manifest = {
-        "artifact": "forecaster_v1", "architecture": model.config, "seed": seed,
-        "device": str(device_obj), "training_cutoff_s": cutoff,
-        "feature_schema": ["speed_ratio", "occupancy", "halting", "observation_age_min", "missing", "known_closed"],
-        "target_schema": {"speed_ratio": [5, 10, 15], "traversal_time_s": [5, 10, 15]},
-        "split_policy": split_manifest.get("rule"), "metrics": metrics,
+        "artifact": "forecaster_v1",
+        "architecture": model.config,
+        "seed": seed,
+        "device": str(device_obj),
+        "training_cutoff_s": cutoff,
+        "feature_schema": [
+            "speed_ratio",
+            "occupancy",
+            "halting",
+            "observation_age_min",
+            "missing",
+            "known_closed",
+        ],
+        "target_schema": {
+            "speed_ratio": [5, 10, 15],
+            "traversal_time_s": [5, 10, 15],
+        },
+        "split_policy": split_manifest.get("rule"),
+        "metrics": metrics,
         "breakdowns": breakdowns,
         "uncertainty": {
             **calibration.to_dict(),
@@ -198,11 +654,22 @@ def train_forecaster(pilot_dir: Path, output_dir: Path, *, epochs: int = 60, see
             "test": interval_reports["test"],
         },
         "baseline_metrics": baseline_metrics,
-        "train_windows": len(datasets["train"]), "validation_windows": len(datasets["validation"]),
-        "test_windows": len(datasets["test"]),
+        "train_windows": train_windows,
+        "validation_windows": validation_windows,
+        "test_windows": test_windows,
+        "batch_size": batch_size,
     }
-    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    (output_dir / "training_curve.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
+
+    (output_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2),
+        encoding="utf-8",
+    )
+
+    (output_dir / "training_curve.json").write_text(
+        json.dumps(history, indent=2),
+        encoding="utf-8",
+    )
+
     return manifest
 
 
@@ -213,9 +680,22 @@ def main() -> int:
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--seed", type=int, default=26137)
     parser.add_argument("--width", type=int, default=32)
+    parser.add_argument("--batch-size", type=int, default=2)
     args = parser.parse_args()
-    print(json.dumps(train_forecaster(args.pilot, args.output, epochs=args.epochs,
-                                       seed=args.seed, width=args.width), indent=2))
+
+    print(
+        json.dumps(
+            train_forecaster(
+                args.pilot,
+                args.output,
+                epochs=args.epochs,
+                seed=args.seed,
+                width=args.width,
+                batch_size=args.batch_size,
+            ),
+            indent=2,
+        )
+    )
     return 0
 
 

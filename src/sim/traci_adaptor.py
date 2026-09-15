@@ -280,7 +280,7 @@ class TraciAdapter:
         self._known_vehicles.update(active_ids)
 
         for vid in active_ids:
-            if self.use_subscriptions:
+            if self.use_subscriptions and vid in vehicle_values:
                 values = vehicle_values[vid]
                 edge_id = values[tc.VAR_ROAD_ID] or None
                 lane_id = values[tc.VAR_LANE_ID] or None

@@ -109,7 +109,7 @@ def generate_causal_pilot(
         "scenario_id": scenario.scenario_id,
         "graph_version": scenario.graph_version,
     }
-    _write_json(root / "split_manifest.json", split)
+    _write_json(root / "corpus_manifest.json", split)
 
     results: list[CausalEpisodeResult] = []
     for index, spec in enumerate(PILOT_SPECS):
@@ -161,7 +161,7 @@ def generate_causal_pilot(
         for artifact in sorted(result.episode_dir.iterdir()):
             if artifact.is_file():
                 deterministic[str(artifact.relative_to(root))] = hashlib.sha256(artifact.read_bytes()).hexdigest()
-    deterministic["split_manifest.json"] = hashlib.sha256((root / "split_manifest.json").read_bytes()).hexdigest()
+    deterministic["corpus_manifest.json"] = hashlib.sha256((root / "corpus_manifest.json").read_bytes()).hexdigest()
     _write_json(root / "reproducibility.json", {
         "schema_version": "reproducibility-1.0",
         "seed": base_seed,
