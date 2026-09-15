@@ -244,7 +244,12 @@ class PlatformService:
             "elapsed_s": time.perf_counter() - started,
         }
 
-    def replay_sumo(self, scenario_id: str = "S3_BASE") -> dict:
+    def replay_sumo(
+        self,
+        scenario_id: str = "S3_BASE",
+        plan: dict[str, list[str]] | None = None,
+        closed_edge_ids: Sequence[str] = (),
+    ) -> dict:
         """Run the fixture in headless SUMO and return map frames for the UI."""
         _ensure_sumo_env()
         from src.sim.fcd_replay import parse_fcd
@@ -253,8 +258,25 @@ class PlatformService:
 
         output = PROJECT_ROOT / "artifacts" / "demo_sumo_ui"
         output.mkdir(parents=True, exist_ok=True)
-        scenario = load_scenario(scenario_id)
-        episode = run_episode(scenario, fixture_plan(scenario), output, gui=False)
+        scenario = self._scenario(scenario_id, closed_edge_ids)
+        executable_plan = fixture_plan(scenario)
+        if plan:
+            evaluator, engine = self._stack(scenario, closed_edge_ids)
+            logical_plan = RoutePlan.from_routes(
+                [VehicleRoute.from_sequence(vehicle.vehicle_id, plan.get(vehicle.vehicle_id, ())) for vehicle in scenario.fleet]
+            )
+            encoded = engine.encoder.encode(logical_plan)
+            candidate = engine.evaluate_keys(encoded.keys, repair=True)
+            if not candidate.repaired_evaluation.feasible:
+                raise ValueError("The requested replay plan failed independent validation")
+            from src.runtime.loop import DemoLoop
+            executable_plan = DemoLoop._to_executable_plan(
+                candidate.repaired_evaluation,
+                scenario_id=scenario_id,
+                state_version=f"{scenario_id}:replay",
+                route_version=f"ui-replay-{int(time.time())}",
+            )
+        episode = run_episode(scenario, executable_plan, output, gui=False)
         fcd_path = output / "sumo_output" / "fcd.xml"
         if not fcd_path.is_file():
             raise RuntimeError("SUMO finished but wrote no FCD trace")

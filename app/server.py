@@ -12,6 +12,7 @@ the domain modules so the HTTP layer does not duplicate project logic.
 from __future__ import annotations
 
 from pathlib import Path
+import json
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
@@ -24,6 +25,7 @@ from src.runtime.loop import DemoLoop
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 
 service = PlatformService()
 loop = DemoLoop(service)
@@ -79,6 +81,8 @@ class SumoRequest(BaseModel):
 
 class ReplayRequest(BaseModel):
     scenario_id: str = Field(default="S3_BASE", min_length=1)
+    plan: dict[str, list[str]] | None = None
+    closed_edge_ids: list[str] = Field(default_factory=list)
 
 
 def _solve_options(request: SolveRequest) -> SolveOptions:
@@ -111,6 +115,31 @@ def health() -> dict:
 @app.get("/api/meta")
 def meta() -> dict:
     return service.project_meta()
+
+
+@app.get("/api/evidence")
+def evidence() -> dict:
+    """Expose saved Step 13/14 measurements for the presentation UI."""
+    artifact_dir = PROJECT_ROOT / "artifacts" / "step13_forecaster_v1"
+    manifest_path = artifact_dir / "manifest.json"
+    uncertainty_path = artifact_dir / "uncertainty.json"
+    if not manifest_path.is_file() or not uncertainty_path.is_file():
+        return {"available": False, "reason": "forecaster_v1 artifacts are not present"}
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    uncertainty = json.loads(uncertainty_path.read_text(encoding="utf-8"))
+    test_metrics = manifest.get("metrics", {}).get("test", {})
+    maes = [float(item["mae"]) for item in test_metrics.values() if item.get("mae") is not None]
+    return {
+        "available": True,
+        "artifact": manifest.get("artifact", "forecaster_v1"),
+        "model_version": manifest.get("architecture", {}).get("width"),
+        "test_metrics": test_metrics,
+        "model_mae": sum(maes) / len(maes) if maes else None,
+        "temporal_baseline_mae": manifest.get("baseline_metrics", {}).get("test", {}).get("temporal_only", {}).get("mae"),
+        "uncertainty": uncertainty,
+        "training_cutoff_s": manifest.get("training_cutoff_s"),
+        "split_policy": manifest.get("split_policy"),
+    }
 
 
 @app.get("/api/scenarios")
@@ -220,20 +249,29 @@ def replay_sumo(request: ReplayRequest | None = None) -> dict:
     """Run a headless SUMO episode and return FCD frames for the UI."""
     request = request or ReplayRequest()
     try:
-        return service.replay_sumo(scenario_id=request.scenario_id)
+        return service.replay_sumo(
+            scenario_id=request.scenario_id,
+            plan=request.plan,
+            closed_edge_ids=request.closed_edge_ids,
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+if FRONTEND_DIST.is_dir() and (FRONTEND_DIST / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="frontend-assets")
 
 
 @app.get("/")
 def index() -> FileResponse:
-    if not STATIC_DIR.joinpath("index.html").is_file():
+    frontend_index = FRONTEND_DIST / "index.html"
+    legacy_index = STATIC_DIR / "index.html"
+    index_path = frontend_index if frontend_index.is_file() else legacy_index
+    if not index_path.is_file():
         raise HTTPException(status_code=500, detail="UI index.html is missing")
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(index_path)
 
 
 def main() -> None:
