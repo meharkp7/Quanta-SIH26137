@@ -54,3 +54,7 @@ artifacts/step12_sumo_windows/
 /artifacts/step11_training_*/
 /artifacts/step12_training_*/
 /artifacts/step13_forecaster_v1/
+
+# Cache folders
+/cache/
+
