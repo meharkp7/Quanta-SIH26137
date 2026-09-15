@@ -243,34 +243,31 @@ class EdgeAwareGraphLayer(nn.Module):
                 )
 
             b, e, _ = adjacency.shape
-            rows, cols = torch.nonzero(
-                adjacency > 0,
-                as_tuple=True,
-            )
-            source_index = torch.stack(
-                (
-                    rows * e + cols,
-                    rows * e + rows * 0,
-                ),
-                dim=0,
-            )
 
-            # The expression above is intentionally replaced below with the
-            # explicit source/target mapping. adjacency[row=target,col=source].
-            target = rows
-            source = cols
-            # Dense compatibility path: construct block offsets directly.
-            flat = torch.nonzero(adjacency.reshape(-1) > 0, as_tuple=False).flatten()
+            # adjacency[b, target, source].
+            # Flatten first so the batch dimension can be converted into the
+            # block offset used by the flattened [B*E, D] representation.
+            flat = torch.nonzero(
+                adjacency.reshape(-1) > 0,
+                as_tuple=False,
+            ).flatten()
+
             block = flat // (e * e)
             local = flat % (e * e)
             target = local // e
             source = local % e
+
             source_index = torch.stack(
-                (block * e + source, block * e + target),
+                (
+                    block * e + source,
+                    block * e + target,
+                ),
                 dim=0,
             )
+
             edge_weight = adjacency.reshape(-1).index_select(
-                0, flat
+                0,
+                flat,
             ).float()
 
             degree = torch.zeros(
