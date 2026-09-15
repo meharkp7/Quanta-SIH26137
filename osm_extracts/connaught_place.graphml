@@ -23,7 +23,7 @@
 <key id="d2" for="graph" attr.name="crs" attr.type="string"/>
 <key id="d1" for="graph" attr.name="created_with" attr.type="string"/>
 <key id="d0" for="graph" attr.name="created_date" attr.type="string"/>
-<graph edgedefault="directed"><data key="d0">2026-09-15 03:32:16</data>
+<graph edgedefault="directed"><data key="d0">2026-09-15 09:44:05</data>
 <data key="d1">OSMnx 2.1.1</data>
 <data key="d2">EPSG:32643</data>
 <data key="d3">True</data>
@@ -18262,7 +18262,7 @@
 <edge source="395135138" target="458640640" id="0">
   <data key="d9">[289747210, 38699587]</data>
   <data key="d10">residential</data>
-  <data key="d11">['Tagore Road', 'Turkman Road']</data>
+  <data key="d11">['Turkman Road', 'Tagore Road']</data>
   <data key="d12">False</data>
   <data key="d13">True</data>
   <data key="d14">696.9348724422669</data>
@@ -18307,7 +18307,7 @@
 <edge source="458640640" target="395135138" id="0">
   <data key="d9">[289747210, 38699587]</data>
   <data key="d10">residential</data>
-  <data key="d11">['Tagore Road', 'Turkman Road']</data>
+  <data key="d11">['Turkman Road', 'Tagore Road']</data>
   <data key="d12">False</data>
   <data key="d13">False</data>
   <data key="d14">696.9348724422669</data>
@@ -18879,7 +18879,7 @@
 <edge source="9873780773" target="9873780774" id="0">
   <data key="d9">[714986189, 38235141]</data>
   <data key="d10">secondary</data>
-  <data key="d11">['Babu Ram Solanki Marg', 'Qutab Road']</data>
+  <data key="d11">['Qutab Road', 'Babu Ram Solanki Marg']</data>
   <data key="d12">True</data>
   <data key="d13">False</data>
   <data key="d14">57.7319423700186</data>
@@ -29247,7 +29247,7 @@
 <edge source="1588306401" target="9786433663" id="0">
   <data key="d9">[1420918096, 145411842]</data>
   <data key="d10">residential</data>
-  <data key="d11">['Gali Leshwan', 'Gali Kucha Sharif Beg']</data>
+  <data key="d11">['Gali Kucha Sharif Beg', 'Gali Leshwan']</data>
   <data key="d12">False</data>
   <data key="d13">False</data>
   <data key="d14">105.83714713004949</data>
@@ -29280,7 +29280,7 @@
 <edge source="7084322351" target="7469479264" id="0">
   <data key="d9">[798632018, 1156956443]</data>
   <data key="d10">residential</data>
-  <data key="d11">['Gali Beri Wali', 'Gali Kucha Sharif Beg']</data>
+  <data key="d11">['Gali Kucha Sharif Beg', 'Gali Beri Wali']</data>
   <data key="d12">False</data>
   <data key="d13">False</data>
   <data key="d14">151.0781285794148</data>
@@ -29543,7 +29543,7 @@
 <edge source="7469479264" target="7084322351" id="0">
   <data key="d9">[798632018, 1156956443]</data>
   <data key="d10">residential</data>
-  <data key="d11">['Gali Beri Wali', 'Gali Kucha Sharif Beg']</data>
+  <data key="d11">['Gali Kucha Sharif Beg', 'Gali Beri Wali']</data>
   <data key="d12">False</data>
   <data key="d13">True</data>
   <data key="d14">151.0781285794148</data>
@@ -32707,7 +32707,7 @@
 <edge source="7469479256" target="7469479209" id="1">
   <data key="d9">[798632008, 798632017]</data>
   <data key="d10">residential</data>
-  <data key="d11">['Gali Bandool Wali', 'Gali Bandook Wali']</data>
+  <data key="d11">['Gali Bandook Wali', 'Gali Bandool Wali']</data>
   <data key="d12">False</data>
   <data key="d13">[False, True]</data>
   <data key="d14">229.9134167324119</data>
@@ -33827,7 +33827,7 @@
 <edge source="7469479209" target="7469479256" id="1">
   <data key="d9">[798632008, 798632017]</data>
   <data key="d10">residential</data>
-  <data key="d11">['Gali Bandool Wali', 'Gali Bandook Wali']</data>
+  <data key="d11">['Gali Bandook Wali', 'Gali Bandool Wali']</data>
   <data key="d12">False</data>
   <data key="d13">[False, True]</data>
   <data key="d14">229.91341673241186</data>
@@ -42296,7 +42296,7 @@
 <edge source="6965585184" target="6720350039" id="0">
   <data key="d9">[714986188, 714986189]</data>
   <data key="d10">secondary</data>
-  <data key="d11">['Chelmsford Road', 'Babu Ram Solanki Marg']</data>
+  <data key="d11">['Babu Ram Solanki Marg', 'Chelmsford Road']</data>
   <data key="d12">True</data>
   <data key="d13">False</data>
   <data key="d14">780.5740717816165</data>

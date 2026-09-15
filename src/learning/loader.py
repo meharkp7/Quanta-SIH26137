@@ -94,7 +94,7 @@ class WindowDataset:
 
 def load_pilot_windows(pilot_dir: Path, scenario: Scenario | None = None):
     root = Path(pilot_dir)
-    split = json.loads((root / "split_manifest.json").read_text(encoding="utf-8"))
+    split = json.loads((root / "corpus_manifest.json").read_text(encoding="utf-8"))
     names = ("train", "validation", "test")
     all_ids = [eid for name in names for eid in split[name]]
     if len(all_ids) != len(set(all_ids)):

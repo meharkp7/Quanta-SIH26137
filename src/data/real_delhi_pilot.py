@@ -118,7 +118,7 @@ def generate_real_delhi_pilot(
         )
 
     root = Path(root).resolve()
-    if (root / "split_manifest.json").exists():
+    if (root / "corpus_manifest.json").exists():
         raise RealDelhiPilotError("Output already contains a pilot; choose a new directory")
     root.mkdir(parents=True, exist_ok=True)
 
@@ -174,7 +174,7 @@ def generate_real_delhi_pilot(
         backend="sumo",
         source="openstreetmap",
     )
-    _write_json(root / "split_manifest.json", manifest)
+    _write_json(root / "corpus_manifest.json", manifest)
 
     results, audits = [], []
     started = time.perf_counter()

@@ -136,7 +136,7 @@ def test_six_episode_pilot_splits_before_windows(tmp_path):
         warmup_s=180,
         base_seed=9,
     )
-    split = json.loads((tmp_path / "pilot" / "split_manifest.json").read_text())
+    split = json.loads((tmp_path / "pilot" / "corpus_manifest.json").read_text())
     assert set(split["train"]) == {"ep-001", "ep-002", "ep-003", "ep-004"}
     assert split["validation"] == ["ep-005"]
     assert split["test"] == ["ep-006"]

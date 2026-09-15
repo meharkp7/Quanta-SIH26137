@@ -124,7 +124,7 @@ def test_full_pilot_runs_end_to_end_with_real_route_plans(tmp_path):
         tmp_path / "pilot", _map_specs(), duration_s=1200, traffic_only=False
     )
     assert coverage["episodes"] == 6
-    manifest = (tmp_path / "pilot" / "split_manifest.json").is_file()
+    manifest = (tmp_path / "pilot" / "corpus_manifest.json").is_file()
     assert manifest
     assert (tmp_path / "pilot" / "coverage.json").is_file()
     assert (tmp_path / "pilot" / "audit.json").is_file()

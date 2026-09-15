@@ -73,7 +73,7 @@ def main() -> int:
         "history_minutes": 12,
         "horizons_minutes": [5, 10, 15],
         "scaler_fit_on": "train_only",
-        "split_policy": json.loads((args.pilot_dir / "split_manifest.json").read_text())["rule"],
+        "split_policy": json.loads((args.pilot_dir / "corpus_manifest.json").read_text())["rule"],
         "baseline_metrics": baseline_report,
     }
     (args.output_dir / "loader_report.json").write_text(
