@@ -48,12 +48,14 @@ acquisition snippet in this repo's README/chat history), then point
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
+import random
 import sys
 import time
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -62,14 +64,18 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.contracts.scenario import Scenario
-from src.data.causal_episodes import _write_json
-from src.data.dynamic_episodes import _generate_events
+from src.data.causal_episodes import _finalize_existing_episode, _write_json
+from src.data.causal_audit import audit_episode
+from src.data.dynamic_episodes import DynamicEpisodeConfig, DynamicEvent, _generate_events
 from src.data.osm_demand_generator import (
     OSMDemandConfig,
     OSMDemandGenerationError,
     generate_osm_scenario,
 )
 from src.data.osm_ingestion import OSMNetwork, load_graphml
+from src.routing.route_evaluator import RouteEvaluator
+from src.routing.route_plan import RoutePlan
+from src.sim.sumo_causal import run_sumo_causal_episode
 
 # Reused verbatim from the synthetic corpus generator: episode execution,
 # fault tolerance, and checkpointing do not depend on where the base map
@@ -82,7 +88,6 @@ from scripts.generate_real_training_corpus import (
     _attempt_record,
     _build_route_plan_with_recovery,
     _load_checkpoint,
-    _run_episode_with_recovery,
     _safe_remove,
     _save_checkpoint,
     _scenario_from_map_dir,
@@ -254,6 +259,434 @@ def _generate_osm_map_with_recovery(
     )
 
 
+
+def _event_type_for_index(event_type: str, index: int) -> str:
+    if event_type == "multi_disruption":
+        return "incident" if index % 2 == 0 else "closure"
+    return event_type
+
+
+def _generate_decision_relevant_events(
+    *,
+    scenario: Scenario,
+    ep_cfg: DynamicEpisodeConfig,
+    episode_id: str,
+    baseline_dir: Path,
+) -> list[DynamicEvent]:
+    """Generate disruptions from *observed baseline traffic*, not geometry alone.
+
+    The baseline SUMO rollout tells us which controlled vehicles actually visit
+    which parent roads and when.  Events are then placed around those real
+    traversals, making the resulting episode a genuine decision opportunity.
+    """
+    if ep_cfg.event_type is None or ep_cfg.event_count == 0:
+        return []
+
+    trajectory_path = baseline_dir / "trajectories.csv"
+    if not trajectory_path.exists():
+        raise RuntimeError("baseline decision-event generation: trajectories.csv missing")
+
+    controlled_ids = {str(v.vehicle_id) for v in scenario.fleet}
+    edge_by_id = {str(e.edge_id): e for e in scenario.edges}
+    candidates: list[tuple[float, str, str]] = []
+    with trajectory_path.open(encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            vid = str(row.get("trip_id", ""))
+            edge_id = str(row.get("edge_id", ""))
+            if vid not in controlled_ids or edge_id not in edge_by_id:
+                continue
+            try:
+                entry = float(row["entry_time_s"])
+                exit_time = float(row["exit_time_s"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if exit_time <= ep_cfg.warmup_s or entry >= ep_cfg.duration_s:
+                continue
+            parent = str(edge_by_id[edge_id].parent_road_id)
+            candidates.append((max(entry, float(ep_cfg.warmup_s)), vid, parent))
+
+    if not candidates:
+        raise RuntimeError("baseline decision-event generation: no controlled traffic candidates")
+
+    # Generate more candidates than the requested event count for
+    # multi-disruption episodes. Some baseline-relevant roads can still fail
+    # the independent reroute-feasibility check, so they are candidates to
+    # discard rather than reasons to contaminate an otherwise useful episode.
+    rng = random.Random(ep_cfg.seed + 911)
+    rng.shuffle(candidates)
+    target_count = int(ep_cfg.event_count)
+    candidate_count = (
+        min(len(candidates), max(target_count * 3, target_count + 2))
+        if target_count > 1
+        else target_count
+    )
+
+    selected: list[tuple[float, str, str]] = []
+    used_parents: set[str] = set()
+    for entry, vid, parent in candidates:
+        if parent in used_parents:
+            continue
+        selected.append((entry, vid, parent))
+        used_parents.add(parent)
+        if len(selected) >= candidate_count:
+            break
+    if len(selected) < candidate_count:
+        for candidate in candidates:
+            if candidate not in selected:
+                selected.append(candidate)
+            if len(selected) >= candidate_count:
+                break
+
+    events: list[DynamicEvent] = []
+    for i, (entry, _vid, parent) in enumerate(selected[:candidate_count]):
+        # Start shortly before/at the observed traversal, while preserving a
+        # useful reveal lead and avoiding the warm-up period.
+        latest_start = max(
+            ep_cfg.warmup_s + 60,
+            ep_cfg.duration_s - ep_cfg.event_duration_s - 60,
+        )
+        start = int(min(max(entry - min(60.0, ep_cfg.reveal_lead_s), ep_cfg.warmup_s + 60), latest_start))
+        end = min(ep_cfg.duration_s, start + ep_cfg.event_duration_s)
+        events.append(DynamicEvent(
+            event_id=f"{episode_id}-EV{i:03d}",
+            event_type=_event_type_for_index(ep_cfg.event_type, i),
+            generation_time_s=0,
+            reveal_time_s=max(0, start - ep_cfg.reveal_lead_s),
+            effect_start_s=start,
+            effect_end_s=end,
+            affected_parent_road_ids=(parent,),
+            severity=rng.uniform(0.65, 1.0),
+        ))
+    return sorted(events, key=lambda e: (e.effect_start_s, e.event_id))
+
+def _decision_relevance_audit(
+    *,
+    scenario: Scenario,
+    route_plan: Any,
+    ep_dir: Path,
+    events: list[DynamicEvent],
+    baseline_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Require declared disruptions to affect controlled traffic in SUMO.
+
+    A route/geometry intersection alone is insufficient: the controlled
+    vehicle must actually traverse an affected edge during the event window.
+    We also require a feasible route when those affected edges are unavailable,
+    providing a conservative check that rerouting is possible.
+    """
+    if not events:
+        return {
+            "required": False,
+            "accepted": True,
+            "event_count": 0,
+            "accepted_event_count": 0,
+            "events": [],
+            "affected_vehicle_count": 0,
+            "affected_vehicle_ids": [],
+            "affected_job_count": 0,
+            "baseline_traversal_confirmed": False,
+            "alternative_route_available": False,
+        }
+
+    # Relevance is a counterfactual property of the baseline: for a closure,
+    # the causal rollout may correctly divert the vehicle and therefore no
+    # longer contain a traversal of the closed edge.  We must not use that
+    # post-intervention trajectory to decide whether the event was relevant.
+    trajectory_path = (baseline_dir / "trajectories.csv") if baseline_dir else (ep_dir / "trajectories.csv")
+    if not trajectory_path.exists():
+        raise RuntimeError("decision relevance gate: baseline trajectories.csv missing")
+    with trajectory_path.open(encoding="utf-8", newline="") as fh:
+        trajectories = list(csv.DictReader(fh))
+
+    edge_by_id = {str(edge.edge_id): edge for edge in scenario.edges}
+    controlled_ids = {str(vehicle.vehicle_id) for vehicle in scenario.fleet}
+    routes_by_vehicle = {str(route.vehicle_id): route for route in route_plan.vehicle_routes}
+    reports: list[dict[str, Any]] = []
+    all_affected_vehicles: set[str] = set()
+    all_affected_jobs: set[tuple[str, str]] = set()
+
+    for event in events:
+        parents = {str(x) for x in event.affected_parent_road_ids}
+        affected_edges = {
+            edge_id for edge_id, edge in edge_by_id.items()
+            if str(edge.parent_road_id) in parents
+        }
+        impacted: set[str] = set()
+        overlap_rows = 0
+        for row in trajectories:
+            vid = str(row.get("trip_id", ""))
+            if vid not in controlled_ids or str(row.get("edge_id", "")) not in affected_edges:
+                continue
+            try:
+                entry = float(row["entry_time_s"])
+                exit_time = float(row["exit_time_s"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if entry < float(event.effect_end_s) and exit_time > float(event.effect_start_s):
+                impacted.add(vid)
+                overlap_rows += 1
+
+        alternative = False
+        alternative_error = ""
+        if impacted:
+            # Check the affected controlled vehicles independently. Requiring
+            # the entire fleet to remain feasible would incorrectly reject an
+            # otherwise useful event merely because an unrelated vehicle also
+            # happens to use the closed road.
+            errors = []
+            for vehicle_id in sorted(impacted):
+                route = routes_by_vehicle.get(vehicle_id)
+                if route is None:
+                    errors.append(f"missing logical route for {vehicle_id}")
+                    continue
+                try:
+                    single_vehicle_plan = RoutePlan.from_routes((route,))
+                    evaluation = RouteEvaluator(
+                        scenario,
+                        closed_edge_ids=affected_edges,
+                    ).evaluate(single_vehicle_plan, planning_time_s=0.0)
+                    if evaluation.feasible:
+                        alternative = True
+                        break
+                    errors.append(
+                        f"{vehicle_id}: "
+                        + ("; ".join(str(x) for x in getattr(evaluation, "errors", ()))
+                           or "route evaluator rejected affected-edge closure")
+                    )
+                except Exception as exc:
+                    errors.append(f"{vehicle_id}: {type(exc).__name__}: {exc}")
+            alternative_error = "; ".join(errors)
+
+        jobs = set()
+        for vid in impacted:
+            route = routes_by_vehicle.get(vid)
+            for customer_id in getattr(route, "customer_ids", ()):
+                jobs.add((vid, str(customer_id)))
+        all_affected_vehicles.update(impacted)
+        all_affected_jobs.update(jobs)
+
+        accepted = bool(impacted and jobs and alternative)
+        reasons = []
+        if not impacted:
+            reasons.append("no controlled vehicle traversed the affected edge during the effect window")
+        if not jobs:
+            reasons.append("no jobs are assigned to the affected controlled vehicle")
+        if not alternative:
+            reasons.append(
+                "no feasible reroute with affected edges unavailable"
+                + (f": {alternative_error}" if alternative_error else "")
+            )
+        reports.append({
+            "event_id": event.event_id,
+            "event_type": event.event_type,
+            "affected_parent_road_ids": sorted(parents),
+            "affected_edge_count": len(affected_edges),
+            "temporal_overlap_rows": overlap_rows,
+            "affected_vehicle_ids": sorted(impacted),
+            "affected_vehicle_count": len(impacted),
+            "affected_job_count": len(jobs),
+            "baseline_traversal_confirmed": bool(impacted),
+            "alternative_route_available": alternative,
+            "accepted": accepted,
+            "rejection_reason": "; ".join(reasons),
+        })
+
+    return {
+        "required": True,
+        "accepted": all(r["accepted"] for r in reports),
+        "event_count": len(events),
+        "accepted_event_count": sum(r["accepted"] for r in reports),
+        "events": reports,
+        "affected_vehicle_count": len(all_affected_vehicles),
+        "affected_vehicle_ids": sorted(all_affected_vehicles),
+        "affected_job_count": len(all_affected_jobs),
+        "baseline_traversal_confirmed": bool(all_affected_vehicles),
+        "alternative_route_available": all(r["alternative_route_available"] for r in reports),
+    }
+
+
+def _run_episode_with_recovery(
+    *,
+    scenario: Scenario,
+    route_plan: Any,
+    output: Path,
+    eid: str,
+    episode_number: int,
+    local_index: int,
+    map_index: int,
+    split: str,
+    seed: int,
+    duration_s: int,
+    failed_attempts: list[dict[str, Any]],
+    route_strategy: str,
+    route_attempt: int,
+) -> tuple[dict[str, Any], DynamicEpisodeConfig, int]:
+    """Delhi-specific episode runner with the decision-relevance gate."""
+    ep_dir = output / "episodes" / eid
+    network_cache_dir = output / "maps" / f"map_{map_index:03d}" / "network"
+    network_cache_dir.mkdir(parents=True, exist_ok=True)
+
+    for attempt in range(EPISODE_RETRIES):
+        ep_cfg = episode_config(local_index, map_index, seed, duration_s, attempt)
+        _safe_remove(ep_dir)
+        ep_dir.mkdir(parents=True, exist_ok=True)
+        ep_start = time.perf_counter()
+        try:
+            if ep_cfg.event_type is None or ep_cfg.event_count == 0:
+                events = []
+                run_sumo_causal_episode(
+                    scenario=scenario,
+                    output_dir=ep_dir,
+                    config=ep_cfg,
+                    episode_id=eid,
+                    split=split,
+                    events=events,
+                    traffic_only=False,
+                    route_plan=route_plan,
+                    step_length_s=2.0,
+                    network_cache_dir=network_cache_dir,
+                )
+            else:
+                # First obtain actual baseline traffic.  Event roads/times are
+                # sampled from this rollout, so the disruption is temporally
+                # coupled to controlled traffic rather than merely to OSM geometry.
+                baseline_dir = ep_dir / ".baseline"
+                _safe_remove(baseline_dir)
+                baseline_dir.mkdir(parents=True, exist_ok=True)
+                baseline_cfg = replace(ep_cfg, event_type=None, event_count=0)
+                run_sumo_causal_episode(
+                    scenario=scenario,
+                    output_dir=baseline_dir,
+                    config=baseline_cfg,
+                    episode_id=f"{eid}-baseline",
+                    split=split,
+                    events=[],
+                    traffic_only=False,
+                    route_plan=route_plan,
+                    step_length_s=2.0,
+                    network_cache_dir=network_cache_dir,
+                )
+                candidate_events = _generate_decision_relevant_events(
+                    scenario=scenario,
+                    ep_cfg=ep_cfg,
+                    episode_id=eid,
+                    baseline_dir=baseline_dir,
+                )
+
+                # Preflight every candidate against the baseline before
+                # spending another SUMO rollout on it. For multi-disruption
+                # episodes we deliberately over-generate candidates and keep
+                # only those that are genuinely decision-relevant *and*
+                # independently reroutable.
+                candidate_relevance = _decision_relevance_audit(
+                    scenario=scenario,
+                    route_plan=route_plan,
+                    ep_dir=ep_dir,
+                    events=candidate_events,
+                    baseline_dir=baseline_dir,
+                )
+                accepted_candidates = [
+                    event
+                    for event, report in zip(
+                        candidate_events, candidate_relevance["events"]
+                    )
+                    if report["accepted"]
+                ]
+                required_event_count = int(ep_cfg.event_count)
+                if len(accepted_candidates) < required_event_count:
+                    raise RuntimeError(
+                        "decision event candidate gate rejected episode: "
+                        f"found {len(accepted_candidates)} feasible relevant events, "
+                        f"required {required_event_count}; "
+                        + json.dumps(candidate_relevance, sort_keys=True)
+                    )
+
+                # Preserve the configured event count in the final episode:
+                # rejected candidate disruptions are dropped, never weakened
+                # or forced into the causal simulation.
+                events = accepted_candidates[:required_event_count]
+                run_sumo_causal_episode(
+                    scenario=scenario,
+                    output_dir=ep_dir,
+                    config=ep_cfg,
+                    episode_id=eid,
+                    split=split,
+                    events=events,
+                    traffic_only=False,
+                    route_plan=route_plan,
+                    step_length_s=2.0,
+                    network_cache_dir=network_cache_dir,
+                )
+            relevance = _decision_relevance_audit(
+                scenario=scenario,
+                route_plan=route_plan,
+                ep_dir=ep_dir,
+                events=events,
+                baseline_dir=(baseline_dir if ep_cfg.event_type is not None and ep_cfg.event_count > 0 else None),
+            )
+            if ep_cfg.event_type is not None and ep_cfg.event_count > 0:
+                _safe_remove(baseline_dir)
+            if not relevance["accepted"]:
+                raise RuntimeError(
+                    "decision relevance gate rejected episode: "
+                    + json.dumps(relevance, sort_keys=True)
+                )
+
+            finalized = _finalize_existing_episode(scenario, ep_dir, eid, split, ep_cfg)
+            audit = audit_episode(ep_dir)
+            if not audit["ok"]:
+                raise RuntimeError(f"causal audit failed for {eid}: {audit}")
+            elapsed = time.perf_counter() - ep_start
+            record = {
+                "episode_id": eid,
+                "split": split,
+                "map_index": map_index,
+                "scenario_id": scenario.scenario_id,
+                "seed": ep_cfg.seed,
+                "retry_attempt": attempt,
+                "route_strategy": route_strategy,
+                "route_strategy_attempt": route_attempt,
+                "regime": ep_cfg.regime,
+                "event_type": ep_cfg.event_type,
+                "event_count": ep_cfg.event_count,
+                "duration_s": ep_cfg.duration_s,
+                "interval_s": ep_cfg.interval_s,
+                "backend": "sumo",
+                "wall_clock_s": elapsed,
+                "episode_dir": str(ep_dir.relative_to(output)),
+                "label_coverage": finalized.label_coverage,
+                "decision_relevance": relevance,
+                "causal_audit": audit,
+            }
+            return record, ep_cfg, attempt
+        except Exception as exc:
+            failed_attempts.append(
+                _attempt_record(
+                    kind="episode_runtime",
+                    index=episode_number,
+                    attempt=attempt,
+                    seed=ep_cfg.seed,
+                    error=exc,
+                )
+            )
+            print(
+                f"  EP {episode_number:04d} attempt {attempt + 1}/{EPISODE_RETRIES} "
+                f"failed ({type(exc).__name__}): {exc}",
+                flush=True,
+            )
+            try:
+                (ep_dir / "retry_failure.txt").write_text(
+                    "".join(traceback.format_exception(exc)), encoding="utf-8"
+                )
+            except Exception:
+                pass
+
+    last_failure = failed_attempts[-1] if failed_attempts else {}
+    raise RuntimeError(
+        f"episode {eid} exhausted {EPISODE_RETRIES} deterministic runtime attempts; "
+        f"last_error={last_failure.get('error_type')}: {last_failure.get('error')}"
+    )
+
 def _process_zone_assignments(
     output: Path,
     *,
@@ -402,9 +835,18 @@ def _process_zone_assignments(
                     failed_attempts=failed_attempts,
                 )
             )
-            if new_fingerprint in map_fingerprints:
+            # A recovery regenerates DEMAND on the same OSM topology. Therefore
+            # the physical map fingerprint is expected to remain identical to
+            # the current map's fingerprint. It is only a real collision when
+            # the regenerated fingerprint belongs to a DIFFERENT base map.
+            existing_fingerprint = map_records.get(map_index, {}).get("map_fingerprint")
+            if (
+                new_fingerprint in map_fingerprints
+                and new_fingerprint != existing_fingerprint
+            ):
                 raise RuntimeError(
-                    f"map fingerprint collision after recovery for map {map_index}"
+                    f"map fingerprint collision after recovery for map {map_index}: "
+                    f"fingerprint already belongs to another base map"
                 )
             map_fingerprints.add(new_fingerprint)
             map_records[map_index] = {
