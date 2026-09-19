@@ -143,6 +143,44 @@ class PPOTrainer:
         )
 
     # ------------------------------------------------------------------
+    # Reproducibility state
+    # ------------------------------------------------------------------
+
+    def training_state_dict(self) -> dict:
+        """
+        Return trainer state required for deterministic checkpoint/resume.
+
+        Includes optimizer state and the trainer's minibatch-shuffling RNG.
+        Model parameters are intentionally owned by the checkpoint manager.
+        """
+        return {
+            "optimizer": self.optimizer.state_dict(),
+            "trainer_rng": self._rng.bit_generator.state,
+            "trainer_config": {
+                "learning_rate": self.trainer_config.learning_rate,
+                "epochs_per_rollout": self.trainer_config.epochs_per_rollout,
+                "minibatch_size": self.trainer_config.minibatch_size,
+                "seed": self.trainer_config.seed,
+            },
+        }
+
+    def load_training_state_dict(self, state: dict) -> None:
+        """Restore optimizer and minibatch-shuffling state."""
+        if not isinstance(state, dict):
+            raise TypeError("trainer state must be a dictionary")
+
+        if "optimizer" not in state or "trainer_rng" not in state:
+            raise ValueError(
+                "trainer checkpoint must contain optimizer and trainer_rng"
+            )
+
+        self.optimizer.load_state_dict(state["optimizer"])
+
+        rng = np.random.default_rng()
+        rng.bit_generator.state = state["trainer_rng"]
+        self._rng = rng
+
+    # ------------------------------------------------------------------
     # Batch iteration
     # ------------------------------------------------------------------
 

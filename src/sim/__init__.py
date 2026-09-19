@@ -17,6 +17,7 @@ from .traci_adaptor import TraciAdapter, SimStepOutput, VehicleStepData
 from .sim_state import SimState, RequestState, VehicleSimState
 from .incidents import IncidentManager, IncidentConfig, STEP6_CLOSURE_CONFIG
 from .sumo_runner import run_episode, EpisodeResult
+from .ppo_sumo_backend import PPOSumoSimulatorBackend
 
 __all__ = [
     "SumoExporter",
@@ -33,4 +34,5 @@ __all__ = [
     "STEP6_CLOSURE_CONFIG",
     "run_episode",
     "EpisodeResult",
+    "PPOSumoSimulatorBackend",
 ]

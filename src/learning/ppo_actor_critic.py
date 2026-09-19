@@ -190,7 +190,13 @@ class PPOActorCritic(nn.Module):
                 "representation contains NaN or infinite values"
             )
 
-        return tensor.float()
+        # Representations are produced by the environment/state pipeline on
+        # CPU (NumPy). The actor-critic owns the device boundary, so every
+        # representation entering the network must be moved to the same
+        # device as the model parameters. This is required for MPS/CUDA as
+        # well as CPU and keeps callers device-agnostic.
+        model_device = next(self.parameters()).device
+        return tensor.to(device=model_device, dtype=torch.float32)
 
     # ------------------------------------------------------------------
     # Forward pass

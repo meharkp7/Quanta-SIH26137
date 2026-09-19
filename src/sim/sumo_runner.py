@@ -57,7 +57,7 @@ class EpisodeResult:
 
 def run_episode(
     scenario: Any,                 # src.contracts.scenario.Scenario
-    route_plan: Any,               # src.contracts.routing.RoutePlan
+    route_plan: Any,               
     output_dir: Path,
     *,
     end_time_s: float = 400.0,

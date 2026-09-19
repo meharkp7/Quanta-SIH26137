@@ -56,3 +56,43 @@ def test_masked_loss_ignores_nan_and_unavailable_targets():
 def test_transformer_rejects_non_divisible_attention_width():
     with pytest.raises(ValueError, match="divisible"):
         CausalGNNTransformer(width=30, heads=4)
+
+
+def test_forecast_loss_uses_log_space_for_traversal_by_default():
+    import numpy as np
+    import torch
+    from src.learning.gnn_transformer import forecast_loss
+
+    class Batch:
+        speed_targets = np.zeros((1, 1, 1), dtype=np.float32)
+        speed_target_mask = np.zeros((1, 1, 1), dtype=bool)
+        traversal_targets = np.array([[[100.0]]], dtype=np.float32)
+        traversal_target_mask = np.ones((1, 1, 1), dtype=bool)
+
+    outputs = {"speed_ratio": torch.zeros(1, 1, 1),
+               "traversal_time_s": torch.tensor([[[50.0]]], requires_grad=True)}
+    losses = forecast_loss(outputs, Batch())
+    expected = torch.nn.functional.huber_loss(
+        torch.log1p(torch.tensor([50.0])),
+        torch.log1p(torch.tensor([100.0])),
+    )
+    assert torch.allclose(losses["traversal"], expected)
+    losses["total"].backward()
+    assert outputs["traversal_time_s"].grad is not None
+
+
+def test_forecast_loss_rejects_zero_task_weights():
+    import numpy as np
+    import torch
+    from src.learning.gnn_transformer import forecast_loss
+
+    class Batch:
+        speed_targets = np.zeros((1, 1, 1), dtype=np.float32)
+        speed_target_mask = np.zeros((1, 1, 1), dtype=bool)
+        traversal_targets = np.zeros((1, 1, 1), dtype=np.float32)
+        traversal_target_mask = np.zeros((1, 1, 1), dtype=bool)
+
+    outputs = {"speed_ratio": torch.zeros(1, 1, 1), "traversal_time_s": torch.ones(1, 1, 1)}
+    import pytest
+    with pytest.raises(ValueError, match="at least one loss weight"):
+        forecast_loss(outputs, Batch(), speed_weight=0.0, traversal_weight=0.0)

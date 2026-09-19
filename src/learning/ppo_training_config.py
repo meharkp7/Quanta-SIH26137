@@ -21,6 +21,11 @@ class PPOTrainingConfig:
     device: str = "cpu"
 
     def __post_init__(self) -> None:
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int):
+            raise TypeError("seed must be an integer")
+        if self.seed < 0:
+            raise ValueError("seed must be non-negative")
+
         if self.total_env_steps <= 0:
             raise ValueError("total_env_steps must be positive")
 

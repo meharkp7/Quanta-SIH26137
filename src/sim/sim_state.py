@@ -129,6 +129,8 @@ class SimState:
         module is loaded before the contracts package is on sys.path; at
         runtime it is always a ``src.contracts.scenario.Scenario``.
         """
+        self._scenario = scenario
+
         self._requests: dict[str, _RequestRecord] = {
             r.request_id: _RequestRecord(
                 request_id=r.request_id,
@@ -152,15 +154,19 @@ class SimState:
         seen = set()
         for route in route_plan.vehicle_routes:
             veh = self._vehicles[route.vehicle_id]
-            load = sum(self._requests[rid].demand for rid in route.customer_order)
+            request_ids = tuple(
+                getattr(route, "customer_ids", ())
+                or getattr(route, "customer_order", ())
+            )
+            load = sum(self._requests[rid].demand for rid in request_ids)
             if load > veh.capacity:
                 raise ValueError(f"Vehicle {route.vehicle_id} exceeds capacity")
-            for rid in route.customer_order:
+            for rid in request_ids:
                 if rid in seen:
                     raise ValueError(f"Duplicate cargo assignment: {rid}")
                 seen.add(rid)
                 self._requests[rid].assigned_vehicle_id = route.vehicle_id
-            veh.onboard_request_ids = list(route.customer_order)
+            veh.onboard_request_ids = list(request_ids)
             veh.remaining_load = load
         if seen != set(self._requests):
             raise ValueError("Every request must have a cargo owner")
@@ -185,6 +191,25 @@ class SimState:
             return
 
         rec.current_edge_id = current_edge_id
+
+        # TraCI reports the edge a vehicle is currently traversing.  The
+        # routing/evaluation layer needs a graph node from which the mutable
+        # continuation begins.  When TraCI does not provide an explicit node,
+        # use the edge's downstream node rather than silently falling back to
+        # the vehicle depot/start node.  This is the first valid decision
+        # point after the vehicle completes its current physical edge.
+        if current_node_id is None and current_edge_id is not None:
+            edge = next(
+                (
+                    candidate
+                    for candidate in self._scenario.edges
+                    if str(candidate.edge_id) == str(current_edge_id)
+                ),
+                None,
+            )
+            if edge is not None:
+                current_node_id = edge.to_node
+
         rec.current_node_id = current_node_id
         rec.distance_remaining_m = distance_remaining_m
 

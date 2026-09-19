@@ -41,6 +41,10 @@ class ResidualCalibration:
             raise ValueError("nominal_coverage must be between zero and one")
         if any(not isfinite(float(x)) or float(x) < 0.0 for x in self.radii):
             raise ValueError("radii must be finite and non-negative")
+        if self.calibration_count and any(int(x) < 0 for x in self.calibration_count):
+            raise ValueError("calibration_count must be non-negative")
+        if not self.policy_version.strip():
+            raise ValueError("policy_version must not be empty")
         if self.calibration_count and len(self.calibration_count) != len(self.radii):
             raise ValueError("calibration_count must match radii")
 
@@ -74,6 +78,8 @@ def fit_residual_calibration(
         raise ValueError("prediction, target, and valid_mask must have equal shapes")
     if prediction.ndim != 3:
         raise ValueError("arrays must have shape [batch, edge, horizon]")
+    if prediction.shape[-1] == 0:
+        raise ValueError("at least one forecast horizon is required")
     if not 0.0 < nominal_coverage < 1.0:
         raise ValueError("nominal_coverage must be between zero and one")
     radii: list[float] = []
@@ -105,6 +111,11 @@ def interval_metrics(
     mask = np.asarray(valid_mask, dtype=bool) & np.isfinite(target)
     if not (lower.shape == upper.shape == target.shape == mask.shape):
         raise ValueError("interval arrays must have equal shapes")
+    finite_bounds = np.isfinite(lower) & np.isfinite(upper)
+    if np.any(mask & ~finite_bounds):
+        raise ValueError("valid intervals must have finite bounds")
+    if np.any(mask & (lower > upper)):
+        raise ValueError("interval lower bounds must not exceed upper bounds")
     count = int(mask.sum())
     if count == 0:
         return {"nominal_coverage": nominal_coverage, "actual_coverage": 0.0, "mean_width": 0.0, "count": 0}

@@ -88,6 +88,7 @@ def compute_gae(
     values: Tensor,
     next_values: Tensor,
     terminated: Tensor,
+    truncated: Tensor | None = None,
     *,
     gamma: float = 0.99,
     gae_lambda: float = 0.95,
@@ -107,8 +108,13 @@ def compute_gae(
         V(s_{t+1}), shape [T]
 
     terminated:
-        True only for genuine terminal states.
-        Truncation/time-limit is therefore allowed to bootstrap.
+        True only for genuine terminal states. This controls whether
+        V(s_{t+1}) is used in the TD target.
+
+    truncated:
+        Optional time-limit/episode-boundary flag. Truncation still permits
+        bootstrapping, but it breaks the recursive GAE chain so advantages
+        cannot leak across an environment reset.
 
     Returns
     -------
@@ -120,8 +126,8 @@ def compute_gae(
 
     Notes
     -----
-    `terminated` is used for the bootstrap boundary. This intentionally does
-    not use `terminated | truncated`.
+    `terminated` controls value bootstrapping, while
+    `terminated | truncated` controls recursive GAE propagation.
     """
 
     if rewards.ndim != 1:
@@ -140,6 +146,13 @@ def compute_gae(
     if terminated.shape != rewards.shape:
         raise ValueError(
             "terminated must have the same shape as rewards"
+        )
+
+    if truncated is None:
+        truncated = torch.zeros_like(terminated, dtype=torch.bool)
+    elif truncated.shape != rewards.shape:
+        raise ValueError(
+            "truncated must have the same shape as rewards"
         )
 
     if not (
@@ -163,6 +176,16 @@ def compute_gae(
         device=rewards.device,
         dtype=torch.bool,
     )
+    truncated = truncated.to(
+        device=rewards.device,
+        dtype=torch.bool,
+    )
+
+    # A transition can never be both a genuine terminal and a truncation.
+    if torch.any(terminated & truncated):
+        raise ValueError(
+            "a transition cannot be both terminated and truncated"
+        )
 
     advantages = torch.zeros_like(rewards)
 
@@ -173,7 +196,13 @@ def compute_gae(
     )
 
     for t in range(rewards.shape[0] - 1, -1, -1):
+        # Bootstrap through truncation, but do not propagate GAE across
+        # an episode reset. This separates the TD bootstrap boundary from
+        # the recursive episode boundary.
         not_terminal = (~terminated[t]).to(rewards.dtype)
+        not_boundary = (~(terminated[t] | truncated[t])).to(
+            rewards.dtype
+        )
 
         delta = (
             rewards[t]
@@ -185,7 +214,7 @@ def compute_gae(
             delta
             + gamma
             * gae_lambda
-            * not_terminal
+            * not_boundary
             * gae
         )
 
