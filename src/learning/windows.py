@@ -40,6 +40,31 @@ class ForecastWindow:
     scenario_id: str = "unknown"
     graph_version: str = "unknown"
 
+    @property
+    def valid_edge_count(self) -> int:
+        """Number of non-padding edges represented by this window."""
+        return len(self.edge_ids)
+
+    def supervision_stats(self) -> dict[str, object]:
+        """Return padding-aware, horizon-wise target supervision statistics."""
+        denominator = self.valid_edge_count
+        horizons = []
+        for index, target_minute in enumerate((5, 10, 15)):
+            speed_count = int(self.speed_target_mask[:, index].sum())
+            traversal_count = int(self.traversal_target_mask[:, index].sum())
+            horizons.append({
+                "horizon_minutes": target_minute,
+                "edge_count": denominator,
+                "speed_valid_count": speed_count,
+                "speed_coverage": float(speed_count / denominator) if denominator else 0.0,
+                "traversal_valid_count": traversal_count,
+                "traversal_coverage": float(traversal_count / denominator) if denominator else 0.0,
+            })
+        return {
+            "edge_count": denominator,
+            "horizons": horizons,
+        }
+
 
 def build_episode_windows(
     episode_dir: Path,

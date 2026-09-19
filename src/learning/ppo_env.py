@@ -53,6 +53,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from time import perf_counter
+from random import Random
 from typing import Any, Callable, Mapping, Sequence
 
 import gymnasium as gym
@@ -920,6 +921,8 @@ class TrafficRoutingPPOEnv(gym.Env):
 
         self._episode_started = False
 
+        self._last_qpso_diagnostics: dict[str, Any] = {}
+
     # ==================================================================
     # Gym reset
     # ==================================================================
@@ -962,6 +965,7 @@ class TrafficRoutingPPOEnv(gym.Env):
         )
 
         self._episode_started = True
+        self._last_qpso_diagnostics = {}
 
         self.simulator.reset(
             self.scenario,
@@ -1030,6 +1034,16 @@ class TrafficRoutingPPOEnv(gym.Env):
         )
 
         wall_start = perf_counter()
+        phase_start = wall_start
+        timing = {
+            "affected_state_seconds": 0.0,
+            "action_mask_seconds": 0.0,
+            "scope_selection_seconds": 0.0,
+            "qpso_seconds": 0.0,
+            "simulator_advance_seconds": 0.0,
+            "reward_seconds": 0.0,
+            "state_commit_seconds": 0.0,
+        }
 
         # --------------------------------------------------------------
         # Current visible affected state
@@ -1038,6 +1052,8 @@ class TrafficRoutingPPOEnv(gym.Env):
         affected_vehicles = self._affected_vehicle_ids()
 
         affected_zones = self._affected_zone_ids()
+        timing["affected_state_seconds"] = perf_counter() - phase_start
+        phase_start = perf_counter()
 
         # --------------------------------------------------------------
         # Feasibility mask
@@ -1047,6 +1063,8 @@ class TrafficRoutingPPOEnv(gym.Env):
             affected_vehicle_ids=affected_vehicles,
             affected_zone_ids=affected_zones,
         )
+        timing["action_mask_seconds"] = perf_counter() - phase_start
+        phase_start = perf_counter()
 
         requested_index = ACTION_TO_INDEX[
             requested_action
@@ -1093,6 +1111,8 @@ class TrafficRoutingPPOEnv(gym.Env):
                 affected_zones
             ),
         )
+        timing["scope_selection_seconds"] = perf_counter() - phase_start
+        phase_start = perf_counter()
 
         # --------------------------------------------------------------
         # QPSO / KEEP
@@ -1105,6 +1125,8 @@ class TrafficRoutingPPOEnv(gym.Env):
         qpso_called = False
         qpso_evaluations = 0
         qpso_elapsed_s = 0.0
+
+        self._last_qpso_diagnostics = {}
 
         executed_action = selection.action
         next_plan = self.current_plan
@@ -1156,6 +1178,9 @@ class TrafficRoutingPPOEnv(gym.Env):
         else:
             override_reason = None
 
+        timing["qpso_seconds"] = float(qpso_elapsed_s)
+        phase_start = perf_counter()
+
         # --------------------------------------------------------------
         # Advance simulator
         # --------------------------------------------------------------
@@ -1171,6 +1196,9 @@ class TrafficRoutingPPOEnv(gym.Env):
             raise TypeError(
                 "simulator.advance() must return a Mapping"
             )
+
+        timing["simulator_advance_seconds"] = perf_counter() - phase_start
+        phase_start = perf_counter()
 
         new_sim_time = float(
             self.simulator.sim_time_s
@@ -1211,6 +1239,8 @@ class TrafficRoutingPPOEnv(gym.Env):
                 ),
             )
         )
+        timing["reward_seconds"] = perf_counter() - phase_start
+        phase_start = perf_counter()
 
         # --------------------------------------------------------------
         # Commit state
@@ -1223,6 +1253,7 @@ class TrafficRoutingPPOEnv(gym.Env):
         self._recent_action_counts[
             executed_action
         ] += 1
+        timing["state_commit_seconds"] = perf_counter() - phase_start
 
         elapsed_s = (
             perf_counter()
@@ -1250,10 +1281,14 @@ class TrafficRoutingPPOEnv(gym.Env):
             != masked_execution_action
         )
 
+        # ScopeDecision defines an override causally: the action that was
+        # requested must differ from the action that was actually executed.
+        # A selector may internally mark an override path even when the final
+        # action remains unchanged (for example, KEEP -> KEEP); that must not
+        # be serialized as an overridden ScopeDecision.
         overridden = (
-            selection.overridden
-            or was_mask_override
-            or was_execution_override
+            requested_action
+            != executed_action
         )
 
         if (
@@ -1278,6 +1313,14 @@ class TrafficRoutingPPOEnv(gym.Env):
                 "retained the validated incumbent."
             )
         else:
+            final_override_reason = None
+
+        # ScopeDecision requires override_reason to be present exactly when
+        # the executed action differs from the requested action.  Internal
+        # selector/repair paths can produce a reason even when the final
+        # action is unchanged (for example KEEP -> KEEP), so do not leak
+        # that internal reason into the causal decision record.
+        if not overridden:
             final_override_reason = None
 
         # --------------------------------------------------------------
@@ -1407,12 +1450,16 @@ class TrafficRoutingPPOEnv(gym.Env):
             "qpso_evaluations": int(
                 qpso_evaluations
             ),
+            "qpso_diagnostics": dict(
+                self._last_qpso_diagnostics
+            ),
             "decision_elapsed_s": float(
                 elapsed_s
             ),
             "qpso_elapsed_s": float(
                 qpso_elapsed_s
             ),
+            "timing": {k: float(v) for k, v in timing.items()},
             "sim_time_s": float(
                 self._sim_time_s
             ),
@@ -1447,6 +1494,87 @@ class TrafficRoutingPPOEnv(gym.Env):
     # Scope solving
     # ==================================================================
 
+    @staticmethod
+    def _build_qpso_initial_population(
+        *,
+        incumbent_keys: Sequence[float],
+        population_size: int,
+        seed: int,
+    ) -> list[list[float]]:
+        """Build a deterministic warm-start population with diversity.
+
+        Particle zero is the exact incumbent. Remaining particles are local
+        perturbations in the encoder's normalized [0, 1] search space. A
+        bounded perturbation keeps the warm start local while ensuring QPSO
+        has non-zero initial coordinate diversity.
+        """
+        if population_size <= 0:
+            raise ValueError(
+                "population_size must be positive"
+            )
+
+        incumbent = [
+            float(value)
+            for value in incumbent_keys
+        ]
+
+        population = [list(incumbent)]
+
+        if population_size == 1:
+            return population
+
+        rng = Random(int(seed))
+
+        # The first n coordinates are assignment preferences. With two
+        # vehicles, the decoder boundary is 0.5; therefore a +/-0.10
+        # perturbation around canonical keys (0.25 / 0.75) can never change
+        # a vehicle assignment. That creates apparent continuous diversity
+        # while still decoding to the same discrete route. Use a bounded
+        # exploratory scale for assignment coordinates and a smaller local
+        # scale for ordering coordinates. The decoder/repair/evaluator remain
+        # authoritative for feasibility.
+        customer_count = len(incumbent) // 2
+        assignment_scale = 0.35
+        order_scale = 0.15
+
+        for particle_index in range(1, population_size):
+            particle: list[float] = []
+
+            for dimension, value in enumerate(incumbent):
+                scale = (
+                    assignment_scale
+                    if dimension < customer_count
+                    else order_scale
+                )
+
+                # Alternate the broad assignment direction across particles
+                # so the deterministic warm start explores both sides of the
+                # discrete assignment boundary instead of relying only on
+                # random chance.
+                if dimension < customer_count:
+                    direction = (
+                        -1.0
+                        if (particle_index + dimension) % 2 == 0
+                        else 1.0
+                    )
+                    offset = direction * rng.uniform(0.05, scale)
+                else:
+                    offset = rng.uniform(-scale, scale)
+
+                particle.append(
+                    min(
+                        1.0,
+                        max(
+                            0.0,
+                            value + offset,
+                        ),
+                    )
+                )
+
+            population.append(particle)
+
+        return population
+
     def _solve_scope(
         self,
         selection: ScopeSelection,
@@ -1475,8 +1603,17 @@ class TrafficRoutingPPOEnv(gym.Env):
             )
         )
 
+        closed_edge_ids = tuple(
+            getattr(
+                self.simulator,
+                "closed_edge_ids",
+                (),
+            )
+        )
+
         evaluator = RouteEvaluator(
             self.scenario,
+            closed_edge_ids=closed_edge_ids,
         )
 
         engine = Step7RouteEngine(
@@ -1522,12 +1659,21 @@ class TrafficRoutingPPOEnv(gym.Env):
             commitments=commitments,
         )
 
-        population = [
-            list(incumbent.keys)
-            for _ in range(
-                self.config.qpso_particles
-            )
-        ]
+        # Keep the incumbent as an exact warm-start particle, but do not
+        # initialize every particle at the same point. Identical particles
+        # collapse QPSO's coordinate/route diversity to zero and can make
+        # the first search updates degenerate around the incumbent. The
+        # remaining particles receive deterministic, bounded local
+        # perturbations; route encoding/repair remains the authority for
+        # feasibility.
+        population = self._build_qpso_initial_population(
+            incumbent_keys=incumbent.keys,
+            population_size=self.config.qpso_particles,
+            seed=(
+                self.config.qpso_seed
+                + self._decision_index
+            ),
+        )
 
         optimizer = AdaptiveQPSO(
             qpso_config,
@@ -1559,6 +1705,36 @@ class TrafficRoutingPPOEnv(gym.Env):
         )
 
         if not repaired_evaluation.feasible:
+            repair_result = candidate.repair_result
+            self._last_qpso_diagnostics = {
+                "stage": "repaired_evaluation",
+                "feasible": False,
+                "violations": [
+                    {
+                        "name": v.name,
+                        "magnitude": float(v.magnitude),
+                        "vehicle_id": v.vehicle_id,
+                        "customer_id": v.customer_id,
+                        "message": v.message,
+                    }
+                    for v in repaired_evaluation.violations
+                ],
+                "errors": list(repaired_evaluation.errors),
+                "unserved_customer_ids": list(repaired_evaluation.unserved_customer_ids),
+                "duplicate_customer_ids": list(repaired_evaluation.duplicate_customer_ids),
+                "unknown_request_ids": list(repaired_evaluation.unknown_request_ids),
+                "unknown_vehicle_ids": list(repaired_evaluation.unknown_vehicle_ids),
+                "repair_failure_reason": (
+                    repair_result.failure_reason
+                    if repair_result is not None
+                    else None
+                ),
+                "repair_unresolved_customer_ids": (
+                    list(repair_result.unresolved_customer_ids)
+                    if repair_result is not None
+                    else []
+                ),
+            }
             return (
                 self.current_plan,
                 evaluations,
@@ -1578,10 +1754,62 @@ class TrafficRoutingPPOEnv(gym.Env):
         )
 
         if not final_evaluation.feasible:
+            self._last_qpso_diagnostics = {
+                "stage": "final_evaluation",
+                "feasible": False,
+                "violations": [
+                    {
+                        "name": v.name,
+                        "magnitude": float(v.magnitude),
+                        "vehicle_id": v.vehicle_id,
+                        "customer_id": v.customer_id,
+                        "message": v.message,
+                    }
+                    for v in final_evaluation.violations
+                ],
+                "errors": list(final_evaluation.errors),
+                "unserved_customer_ids": list(final_evaluation.unserved_customer_ids),
+                "duplicate_customer_ids": list(final_evaluation.duplicate_customer_ids),
+                "unknown_request_ids": list(final_evaluation.unknown_request_ids),
+                "unknown_vehicle_ids": list(final_evaluation.unknown_vehicle_ids),
+            }
             return (
                 self.current_plan,
                 evaluations,
             )
+
+        # The environment's current_plan is authoritative only after the
+        # candidate has been accepted by the live simulator.  Without this
+        # handoff, QPSO would optimize a plan that SUMO never executes.
+        apply_route_plan = getattr(
+            self.simulator,
+            "apply_route_plan",
+            None,
+        )
+
+        if apply_route_plan is not None:
+            try:
+                applied = bool(
+                    apply_route_plan(candidate_plan)
+                )
+            except Exception:
+                logger = __import__("logging").getLogger(__name__)
+                logger.exception(
+                    "Live route-plan application failed; "
+                    "retaining incumbent route"
+                )
+                applied = False
+
+            if not applied:
+                self._last_qpso_diagnostics = {
+                    "stage": "live_apply",
+                    "feasible": True,
+                    "apply_route_plan": False,
+                }
+                return (
+                    self.current_plan,
+                    evaluations,
+                )
 
         return (
             candidate_plan,

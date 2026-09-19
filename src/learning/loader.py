@@ -8,6 +8,7 @@ from src.contracts.scenario import Scenario
 from src.learning.scaling import FeatureScaler
 from src.learning.schema import FEATURE_NAMES, HISTORY_MINUTES
 from src.learning.windows import ForecastWindow, assert_window_causal, build_episode_windows
+from src.learning.evaluation import validate_manifest_splits
 
 @dataclass(frozen=True)
 class ForecastBatch:
@@ -96,6 +97,7 @@ def load_pilot_windows(pilot_dir: Path, scenario: Scenario | None = None):
     root = Path(pilot_dir)
     split = json.loads((root / "corpus_manifest.json").read_text(encoding="utf-8"))
     names = ("train", "validation", "test")
+    validate_manifest_splits(split)
     all_ids = [eid for name in names for eid in split[name]]
     if len(all_ids) != len(set(all_ids)):
         raise ValueError("Episode leakage across splits")

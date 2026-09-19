@@ -87,6 +87,14 @@ class ContinuousRouteEncoder:
 
         self._customer_set = set(self._customer_ids)
         self._vehicle_set = set(self._vehicle_ids)
+
+        # Per-repair-call memoization. A candidate RoutePlan can be generated
+        # more than once while exploring the bounded repair neighborhood.
+        # Cache scope is intentionally limited to one repair call so no
+        # evaluation can survive a planning/network-state transition.
+        self._evaluation_cache: dict[tuple[Any, ...], RoutePlanEvaluation] = {}
+        self._evaluation_cache_hits = 0
+        self._evaluation_calls = 0
         self._customer_index = {cid: i for i, cid in enumerate(self._customer_ids)}
 
     @property
@@ -370,6 +378,8 @@ class BoundedRepairResult:
     deadline_reached: bool
     unresolved_customer_ids: tuple[CustomerId, ...]
     failure_reason: str | None
+    evaluation_calls: int
+    evaluation_cache_hits: int
 
 
 class BoundedRouteRepairer:
@@ -384,6 +394,14 @@ class BoundedRouteRepairer:
         self._vehicle_ids = tuple(v.vehicle_id for v in scenario.fleet)
         self._vehicle_set = set(self._vehicle_ids)
 
+        # Per-repair-call memoization. A candidate RoutePlan can be generated
+        # more than once while exploring the bounded repair neighborhood.
+        # Cache scope is intentionally limited to one repair call so no
+        # evaluation can survive a planning/network-state transition.
+        self._evaluation_cache: dict[tuple[Any, ...], RoutePlanEvaluation] = {}
+        self._evaluation_cache_hits = 0
+        self._evaluation_calls = 0
+
     def repair(
         self,
         route_plan: RoutePlan,
@@ -392,7 +410,12 @@ class BoundedRouteRepairer:
         planning_time_s: float = 0.0,
     ) -> BoundedRepairResult:
         started = monotonic()
-        original = self.evaluator.evaluate(route_plan, commitments=commitments, planning_time_s=planning_time_s)
+        self._evaluation_cache.clear()
+        self._evaluation_cache_hits = 0
+        self._evaluation_calls = 0
+        original = self._evaluate_cached(
+            route_plan, commitments=commitments, planning_time_s=planning_time_s
+        )
         current = route_plan
         current_eval = original
         actions: list[RepairAction] = []
@@ -433,7 +456,9 @@ class BoundedRouteRepairer:
                             break
                         attempts += 1
                         candidate = self._move(current, source_vehicle_id, customer_id, destination_vehicle_id, position)
-                        evaluation = self.evaluator.evaluate(candidate, commitments=commitments, planning_time_s=planning_time_s)
+                        evaluation = self._evaluate_cached(
+                            candidate, commitments=commitments, planning_time_s=planning_time_s
+                        )
                         score = self._score(evaluation)
                         action = RepairAction(customer_id, source_vehicle_id, destination_vehicle_id, source_position, position, reason)
                         rank = (0.0 if evaluation.feasible else 1.0, score[0], score[1], str(destination_vehicle_id), str(customer_id), position)
@@ -463,6 +488,60 @@ class BoundedRouteRepairer:
         unresolved = self._unresolved(current_eval, locked)
         failure = None if current_eval.feasible else self._failure_reason(current_eval, attempts, attempt_limit, deadline)
         return self._result(original, current, current_eval, actions, attempts, moves, started, attempt_limit, deadline, unresolved, failure)
+
+    def _evaluate_cached(
+        self,
+        route_plan: RoutePlan,
+        *,
+        commitments: CommitmentSnapshot | None,
+        planning_time_s: float,
+    ) -> RoutePlanEvaluation:
+        """Evaluate a candidate once within the lifetime of one repair call.
+
+        Repair exploration is deterministic and evaluator inputs are immutable
+        for a single call, so memoizing by route/commitment/time is safe. The
+        cache is cleared at the beginning of every :meth:`repair` call.
+        """
+        key = (
+            tuple(
+                (route.vehicle_id, tuple(route.customer_ids))
+                for route in route_plan.vehicle_routes
+            ),
+            self._commitment_cache_key(commitments),
+            float(planning_time_s),
+        )
+        cached = self._evaluation_cache.get(key)
+        if cached is not None:
+            self._evaluation_cache_hits += 1
+            return cached
+
+        evaluation = self.evaluator.evaluate(
+            route_plan,
+            commitments=commitments,
+            planning_time_s=planning_time_s,
+        )
+        self._evaluation_calls += 1
+        self._evaluation_cache[key] = evaluation
+        return evaluation
+
+    @staticmethod
+    def _commitment_cache_key(
+        commitments: CommitmentSnapshot | None,
+    ) -> tuple[Any, ...] | None:
+        if commitments is None:
+            return None
+        return tuple(
+            (
+                commitment.vehicle_id,
+                commitment.current_node_id,
+                float(commitment.current_time_s),
+                float(commitment.current_load_units),
+                tuple(commitment.onboard_request_ids),
+                tuple(commitment.committed_customer_ids),
+                tuple(commitment.frozen_prefix_edge_ids),
+            )
+            for commitment in commitments.vehicles
+        )
 
     def _success(self, evaluation: RoutePlanEvaluation) -> bool:
         return evaluation.feasible and (evaluation.all_requests_served if self.config.require_all_requests_served else True)
@@ -570,8 +649,7 @@ class BoundedRouteRepairer:
             return "no bounded mutation reduced the remaining evaluator violations"
         return "candidate remains infeasible"
 
-    @staticmethod
-    def _result(original, plan, evaluation, actions, attempts, moves, started, attempt_limit, deadline, unresolved, failure=None):
+    def _result(self, original, plan, evaluation, actions, attempts, moves, started, attempt_limit, deadline, unresolved, failure=None):
         return BoundedRepairResult(
             original_route_plan=original.route_plan,
             repaired_route_plan=plan,
@@ -587,6 +665,8 @@ class BoundedRouteRepairer:
             deadline_reached=deadline,
             unresolved_customer_ids=tuple(unresolved),
             failure_reason=failure,
+            evaluation_calls=self._evaluation_calls,
+            evaluation_cache_hits=self._evaluation_cache_hits,
         )
 
 @dataclass(frozen=True)

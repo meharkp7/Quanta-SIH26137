@@ -1,0 +1,78 @@
+[
+  {
+    "name": "connaught_place",
+    "graphml": "osm_extracts/connaught_place.graphml"
+  },
+  {
+    "name": "chandni_chowk",
+    "graphml": "osm_extracts/chandni_chowk.graphml"
+  },
+  {
+    "name": "karol_bagh",
+    "graphml": "osm_extracts/karol_bagh.graphml"
+  },
+  {
+    "name": "dwarka_sector12",
+    "graphml": "osm_extracts/dwarka_sector12.graphml"
+  },
+  {
+    "name": "nehru_place",
+    "graphml": "osm_extracts/nehru_place.graphml"
+  },
+  {
+    "name": "rohini",
+    "graphml": "osm_extracts/rohini.graphml"
+  },
+  {
+    "name": "saket",
+    "graphml": "osm_extracts/saket.graphml"
+  },
+  {
+    "name": "vasant_kunj",
+    "graphml": "osm_extracts/vasant_kunj.graphml"
+  },
+  {
+    "name": "lajpat_nagar",
+    "graphml": "osm_extracts/lajpat_nagar.graphml"
+  },
+  {
+    "name": "janakpuri",
+    "graphml": "osm_extracts/janakpuri.graphml"
+  },
+  {
+    "name": "rajouri_garden",
+    "graphml": "osm_extracts/rajouri_garden.graphml"
+  },
+  {
+    "name": "mayur_vihar",
+    "graphml": "osm_extracts/mayur_vihar.graphml"
+  },
+  {
+    "name": "hauz_khas",
+    "graphml": "osm_extracts/hauz_khas.graphml"
+  },
+  {
+    "name": "okhla",
+    "graphml": "osm_extracts/okhla.graphml"
+  },
+  {
+    "name": "preet_vihar",
+    "graphml": "osm_extracts/preet_vihar.graphml"
+  },
+  {
+    "name": "laxmi_nagar",
+    "graphml": "osm_extracts/laxmi_nagar.graphml"
+  },
+  {
+    "name": "pitampura",
+    "graphml": "osm_extracts/pitampura.graphml"
+  },
+  {
+    "name": "punjabi_bagh",
+    "graphml": "osm_extracts/punjabi_bagh.graphml"
+  },
+  {
+    "name": "model_town",
+    "graphml": "osm_extracts/model_town.graphml"
+  }
+]

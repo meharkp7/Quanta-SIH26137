@@ -278,8 +278,8 @@ class PPOTrainingLoop:
             bootstrap_value=resolved_bootstrap,
         )
 
-        # Successful PPO update consumes the on-policy rollout.
-        self.rollout_buffer.clear()
+        # PPOTrainer owns rollout-buffer consumption after a successful
+        # optimization step. The loop only clears collector-local state.
         self.collector.clear()
 
         return PPOTrainingIteration(

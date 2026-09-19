@@ -39,7 +39,9 @@ Design constraints that shaped this module:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import heapq
 import random
+from math import inf
 from typing import Iterable
 
 from src.contracts.core_types import NodeKind
@@ -189,6 +191,182 @@ def _choose_depot(
     return best_node, best_scc
 
 
+def _sumo_compatible_path(
+    network: OSMNetwork,
+    start_node: str,
+    end_node: str,
+    *,
+    previous_edge_id: str | None = None,
+) -> tuple[list[str], float]:
+    """Return a shortest path that respects SUMO's no-immediate-U-turn rule.
+
+    The state contains the previous edge's origin node.  This is deliberately
+    equivalent to the physical feasibility rule used by the SUMO route builder:
+    an edge B->A is forbidden immediately after A->B.  The special case where
+    reversing is the only outgoing movement is treated as a genuine dead-end,
+    matching the route builder's SUMO-export behaviour.
+    """
+    if start_node == end_node:
+        return [], 0.0
+
+    edges = {
+        str(edge.edge_id): edge
+        for edge in network.edges
+        if edge.open_by_default
+    }
+    outgoing: dict[str, list] = {}
+    for edge in edges.values():
+        outgoing.setdefault(str(edge.from_node), []).append(edge)
+    for values in outgoing.values():
+        values.sort(key=lambda edge: str(edge.edge_id))
+
+    initial_prev_from: str | None = None
+    if previous_edge_id is not None:
+        previous = edges.get(str(previous_edge_id))
+        if previous is not None:
+            initial_prev_from = str(previous.from_node)
+
+    start_state = (str(start_node), initial_prev_from)
+    distances = {start_state: 0.0}
+    previous_state: dict[
+        tuple[str, str | None],
+        tuple[tuple[str, str | None], str],
+    ] = {}
+    queue = [(0.0, str(start_node), "", str(start_node), initial_prev_from)]
+
+    goal_state: tuple[str, str | None] | None = None
+
+    while queue:
+        cost, _, _, node, prev_from = heapq.heappop(queue)
+        state = (node, prev_from)
+        if cost > distances.get(state, inf):
+            continue
+        if node == str(end_node):
+            goal_state = state
+            break
+
+        choices = outgoing.get(node, ())
+        legal = [
+            edge
+            for edge in choices
+            if prev_from is None or str(edge.to_node) != prev_from
+        ]
+
+        # At a genuine cul-de-sac, SUMO can only leave by reversing.
+        if not legal and prev_from is not None:
+            legal = list(choices)
+
+        for edge in legal:
+            next_state = (str(edge.to_node), str(edge.from_node))
+            next_cost = cost + float(edge.free_flow_time_s)
+            if next_cost < distances.get(next_state, inf):
+                distances[next_state] = next_cost
+                previous_state[next_state] = (state, str(edge.edge_id))
+                heapq.heappush(
+                    queue,
+                    (
+                        next_cost,
+                        str(edge.to_node),
+                        str(edge.edge_id),
+                        str(edge.to_node),
+                        str(edge.from_node),
+                    ),
+                )
+
+    if goal_state is None:
+        raise PathNotFoundError(
+            f"No SUMO-compatible no-U-turn path exists from "
+            f"{start_node!r} to {end_node!r}"
+        )
+
+    edge_ids: list[str] = []
+    state = goal_state
+    while state != start_state:
+        prior, edge_id = previous_state[state]
+        edge_ids.append(edge_id)
+        state = prior
+    edge_ids.reverse()
+    return edge_ids, distances[goal_state]
+
+
+def _find_feasible_customer_order(
+    network: OSMNetwork,
+    depot_node_id: str,
+    customer_node_ids: tuple[str, ...],
+    *,
+    rng: random.Random,
+    max_attempts: int = 12,
+) -> tuple[str, ...] | None:
+    """Find a complete depot->customers->depot SUMO-compatible chain.
+
+    SCC membership guarantees directed reachability, but it does not encode
+    the turn-state carried between consecutive physical legs.  This preflight
+    therefore validates the actual stateful no-U-turn constraint before a
+    scenario is emitted.  A failed customer realization is rejected and can
+    be deterministically resampled by the caller.
+    """
+    if not customer_node_ids:
+        return ()
+
+    customers = list(customer_node_ids)
+
+    for _ in range(max_attempts):
+        remaining = set(customers)
+        order: list[str] = []
+        current = str(depot_node_id)
+        previous_edge_id: str | None = None
+
+        while remaining:
+            candidates = list(remaining)
+            rng.shuffle(candidates)
+
+            feasible: list[tuple[float, str, list[str]]] = []
+            for candidate in candidates:
+                try:
+                    path, travel_time = _sumo_compatible_path(
+                        network,
+                        current,
+                        candidate,
+                        previous_edge_id=previous_edge_id,
+                    )
+                except PathNotFoundError:
+                    continue
+                feasible.append((travel_time, candidate, path))
+
+                # Avoid O(n) shortest-path evaluations once we have a clearly
+                # feasible continuation. Sorting a small set gives stable,
+                # route-efficient reference chains without exhaustive search.
+                if len(feasible) >= min(4, len(candidates)):
+                    break
+
+            if not feasible:
+                break
+
+            _, selected, path = min(
+                feasible,
+                key=lambda item: (item[0], item[1]),
+            )
+            order.append(selected)
+            remaining.remove(selected)
+            current = selected
+            if path:
+                previous_edge_id = path[-1]
+
+        if not remaining:
+            try:
+                _sumo_compatible_path(
+                    network,
+                    current,
+                    str(depot_node_id),
+                    previous_edge_id=previous_edge_id,
+                )
+            except PathNotFoundError:
+                continue
+            return tuple(order)
+
+    return None
+
+
 def _reference_schedule(
     path_builder: DirectedPathBuilder,
     depot_node_id: str,
@@ -196,6 +374,7 @@ def _reference_schedule(
     *,
     start_time_s: float,
     service_duration_s: float,
+    customer_order: tuple[str, ...] | None = None,
 ) -> dict[str, float]:
     """Nearest-neighbour arrival-time schedule using real shortest paths.
 
@@ -210,33 +389,55 @@ def _reference_schedule(
     arrival_at_depot = start_time_s
     current = depot_node_id
     current_time = start_time_s
-    remaining = list(customer_node_ids)
+    remaining = list(customer_order or customer_node_ids)
     schedule: dict[str, float] = {}
 
-    while remaining:
-        try:
-            best_node = min(
-                remaining,
-                key=lambda node_id: path_builder.shortest_path(
-                    current, node_id, departure_time_s=current_time
-                ).travel_time_s,
-            )
-        except PathNotFoundError as exc:
+    if customer_order is not None:
+        if set(customer_order) != set(customer_node_ids):
             raise OSMDemandGenerationError(
-                "No directed path exists between two candidate nodes while "
-                "building the reference schedule; this should be impossible "
-                "for candidates drawn from the depot's strongly connected "
-                "component. If depot_node_id was overridden explicitly, "
-                "verify it has a non-trivial SCC."
-            ) from exc
+                "customer_order must contain exactly the generated customer nodes"
+            )
+        for best_node in customer_order:
+            try:
+                leg = path_builder.shortest_path(
+                    current, best_node, departure_time_s=current_time
+                )
+            except PathNotFoundError as exc:
+                raise OSMDemandGenerationError(
+                    f"Reference schedule path missing from {current!r} "
+                    f"to {best_node!r}"
+                ) from exc
+            arrival = current_time + leg.travel_time_s
+            schedule[best_node] = arrival
+            current = best_node
+            current_time = arrival + service_duration_s
+    else:
+        while remaining:
+            try:
+                best_node = min(
+                    remaining,
+                    key=lambda node_id: path_builder.shortest_path(
+                        current, node_id, departure_time_s=current_time
+                    ).travel_time_s,
+                )
+            except PathNotFoundError as exc:
+                raise OSMDemandGenerationError(
+                    "No directed path exists between two candidate nodes while "
+                    "building the reference schedule; this should be impossible "
+                    "for candidates drawn from the depot's strongly connected "
+                    "component. If depot_node_id was overridden explicitly, "
+                    "verify it has a non-trivial SCC."
+                ) from exc
 
-        leg = path_builder.shortest_path(current, best_node, departure_time_s=current_time)
-        arrival = current_time + leg.travel_time_s
-        schedule[best_node] = arrival
+            leg = path_builder.shortest_path(
+                current, best_node, departure_time_s=current_time
+            )
+            arrival = current_time + leg.travel_time_s
+            schedule[best_node] = arrival
 
-        current = best_node
-        current_time = arrival + service_duration_s
-        remaining.remove(best_node)
+            current = best_node
+            current_time = arrival + service_duration_s
+            remaining.remove(best_node)
 
     del arrival_at_depot  # documents intent; depot return is not scheduled here
     return schedule
@@ -278,15 +479,47 @@ def generate_osm_scenario(
     unreachable_candidates_skipped = len(all_node_ids) - 1 - len(candidate_pool)
 
     rng = random.Random(config.seed)
-    customer_node_ids = tuple(sorted(rng.sample(candidate_pool, config.customer_count)))
-
     path_builder = DirectedPathBuilder(network.edges)
+
+    # SCC membership proves directed reachability, but the SUMO route builder
+    # carries the previous physical edge between legs and forbids immediate
+    # U-turns.  Generate only customer realizations for which at least one
+    # complete depot->customers->depot chain is physically SUMO-compatible.
+    customer_node_ids: tuple[str, ...] | None = None
+    customer_order: tuple[str, ...] | None = None
+    max_realization_attempts = max(24, min(96, config.customer_count * 2))
+
+    for _attempt in range(max_realization_attempts):
+        sampled = tuple(
+            sorted(rng.sample(candidate_pool, config.customer_count))
+        )
+        feasible_order = _find_feasible_customer_order(
+            network,
+            depot_node_id,
+            sampled,
+            rng=rng,
+        )
+        if feasible_order is not None:
+            customer_node_ids = sampled
+            customer_order = feasible_order
+            break
+
+    if customer_node_ids is None or customer_order is None:
+        raise OSMDemandGenerationError(
+            "Could not construct a SUMO-compatible customer realization after "
+            f"{max_realization_attempts} deterministic attempts. The depot SCC "
+            f"contains {len(candidate_pool)} candidate nodes, but the sampled "
+            "customer sets could not form a complete no-U-turn route chain. "
+            "Try a different seed, smaller customer_count, or a larger OSM region."
+        )
+
     schedule = _reference_schedule(
         path_builder,
         depot_node_id,
         customer_node_ids,
         start_time_s=config.depot_start_time_s,
         service_duration_s=config.service_duration_s,
+        customer_order=customer_order,
     )
 
     demands = {
@@ -384,6 +617,8 @@ def generate_osm_scenario(
             "osm_depot_node_id": depot_node_id,
             "osm_depot_scc_size": str(len(depot_scc)),
             "osm_unreachable_candidates_skipped": str(unreachable_candidates_skipped),
+            "osm_sumo_route_preflight": "depot-customers-depot-no-immediate-u-turn",
+            "osm_reference_customer_order": ",".join(customer_order),
             "osm_demand_generator": generator_version,
         },
     )

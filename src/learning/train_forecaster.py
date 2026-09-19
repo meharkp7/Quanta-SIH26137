@@ -83,6 +83,16 @@ def _forward_batch(model, batch, scenarios, device):
     return outputs
 
 
+def _label_coverage(batch: ForecastBatch, mask: np.ndarray) -> float:
+    """Return valid-label coverage over real (non-padding) edge cells."""
+    from src.learning.evaluation import padding_aware_label_coverage
+
+    mask_array = np.asarray(mask, dtype=bool)
+    if mask_array.ndim == 2:
+        mask_array = mask_array[..., None]
+    return padding_aware_label_coverage(mask_array, batch.edge_padding_mask)
+
+
 def _iter_batches(dataset, batch_size, *, shuffle=False, rng=None):
     windows = list(dataset.windows)
     indices = np.arange(len(windows))
@@ -98,6 +108,22 @@ def _iter_batches(dataset, batch_size, *, shuffle=False, rng=None):
             for i in indices[start:start + batch_size]
         ]
         yield _batch_from_windows(selected)
+
+
+def _supervision_report(dataset):
+    """Aggregate padding-aware supervision coverage across windows."""
+    total_edges = sum(len(window.edge_ids) for window in dataset.windows)
+    report = {"windows": len(dataset.windows), "edge_instances": total_edges, "horizons": {}}
+    for index, horizon in enumerate((5, 10, 15)):
+        speed_valid = sum(int(window.speed_target_mask[:, index].sum()) for window in dataset.windows)
+        traversal_valid = sum(int(window.traversal_target_mask[:, index].sum()) for window in dataset.windows)
+        report["horizons"][str(horizon)] = {
+            "speed_valid_count": speed_valid,
+            "speed_coverage": float(speed_valid / total_edges) if total_edges else 0.0,
+            "traversal_valid_count": traversal_valid,
+            "traversal_coverage": float(traversal_valid / total_edges) if total_edges else 0.0,
+        }
+    return report
 
 
 def _predict_dataset(
@@ -150,10 +176,10 @@ def _predict_dataset(
             masks[:, :, horizon],
             prediction[:, :, horizon],
         )
-        total = int(masks[:, :, horizon].sum())
+        total_edges = sum(len(window.edge_ids) for window in dataset.windows)
         metric["label_coverage"] = (
-            float(metric["count"] / total)
-            if total
+            float(metric["count"] / total_edges)
+            if total_edges
             else 0.0
         )
         metrics[str((horizon + 1) * 5)] = metric
@@ -206,10 +232,10 @@ def _group_metrics(batch, prediction, selected):
             prediction[selected, :, horizon],
         )
 
-        total = int(mask.sum())
+        total_edges = int((~batch.edge_padding_mask[selected]).sum())
         metric["label_coverage"] = (
-            float(metric["count"] / total)
-            if total
+            float(metric["count"] / total_edges)
+            if total_edges
             else 0.0
         )
         result[str((horizon + 1) * 5)] = metric
@@ -377,6 +403,8 @@ def train_forecaster(
     validation_windows = len(datasets["validation"])
     test_windows = len(datasets["test"])
 
+    supervision = {name: _supervision_report(dataset) for name, dataset in datasets.items()}
+
     print(
         "Windows loaded: "
         f"train={train_windows}, "
@@ -480,6 +508,10 @@ def train_forecaster(
             "train_speed_loss": running_speed / max(count, 1),
             "train_traversal_loss": running_traversal / max(count, 1),
             "validation_speed_mae": val_mae,
+            "validation_speed_coverage": {
+                horizon: val_metrics[horizon].get("label_coverage", 0.0)
+                for horizon in val_metrics
+            },
         }
         history.append(row)
 
@@ -658,6 +690,13 @@ def train_forecaster(
         "validation_windows": validation_windows,
         "test_windows": test_windows,
         "batch_size": batch_size,
+        "loss": {
+            "speed_weight": 1.0,
+            "traversal_weight": 1.0,
+            "traversal_scale_s": 60.0,
+            "rationale": "Normalize traversal-time residuals to minute scale before multi-task aggregation.",
+        },
+        "supervision": supervision,
     }
 
     (output_dir / "manifest.json").write_text(

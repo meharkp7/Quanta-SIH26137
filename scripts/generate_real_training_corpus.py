@@ -29,7 +29,7 @@ import time
 import traceback
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -497,6 +497,7 @@ def _run_episode_with_recovery(
     failed_attempts: list[dict[str, Any]],
     route_strategy: str,
     route_attempt: int,
+    event_generator: Callable[..., list] | None = None,
 ) -> tuple[dict[str, Any], DynamicEpisodeConfig, int]:
     ep_dir = output / "episodes" / eid
     network_cache_dir = output / "maps" / f"map_{map_index:03d}" / "network"
@@ -517,7 +518,16 @@ def _run_episode_with_recovery(
                 config=ep_cfg,
                 episode_id=eid,
                 split=split,
-                events=_generate_events(scenario, ep_cfg, eid),
+                events=(
+                    event_generator(
+                        scenario=scenario,
+                        route_plan=route_plan,
+                        config=ep_cfg,
+                        episode_id=eid,
+                    )
+                    if event_generator is not None
+                    else _generate_events(scenario, ep_cfg, eid)
+                ),
                 traffic_only=False,
                 route_plan=route_plan,
                 step_length_s=2.0,

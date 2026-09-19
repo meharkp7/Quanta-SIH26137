@@ -23,6 +23,42 @@ from src.learning.loader import ForecastBatch
 
 
 @dataclass(frozen=True)
+class ForecastLossConfig:
+    """Explicit multi-task loss policy for the forecaster.
+
+    Traversal time is evaluated in log1p space by default because it is
+    expressed in seconds while speed_ratio is dimensionless.  The
+    ``traversal_scale_s`` field is retained as a backwards-compatible
+    configuration knob for callers that want normalized raw-second loss.
+    """
+
+    speed_weight: float = 1.0
+    traversal_weight: float = 1.0
+    speed_delta: float = 1.0
+    traversal_delta: float = 1.0
+    traversal_log_space: bool = True
+    traversal_scale_s: float | None = None
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("speed_weight", self.speed_weight),
+            ("traversal_weight", self.traversal_weight),
+            ("speed_delta", self.speed_delta),
+            ("traversal_delta", self.traversal_delta),
+        ):
+            if not np.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        if self.speed_weight == 0.0 and self.traversal_weight == 0.0:
+            raise ValueError("at least one loss weight must be positive")
+        if self.speed_delta == 0.0 or self.traversal_delta == 0.0:
+            raise ValueError("Huber deltas must be positive")
+        if self.traversal_scale_s is not None and (
+            not np.isfinite(self.traversal_scale_s) or self.traversal_scale_s <= 0.0
+        ):
+            raise ValueError("traversal_scale_s must be finite and positive")
+
+
+@dataclass(frozen=True)
 class GraphBatch:
     """Directed road graph aligned to the batch edge order.
 
@@ -469,41 +505,69 @@ def forecast_loss(
     batch: ForecastBatch,
     *,
     device=None,
+    config: ForecastLossConfig | None = None,
+    loss_config: ForecastLossConfig | None = None,
+    traversal_scale_s: float | None = None,
+    speed_weight: float | None = None,
+    traversal_weight: float | None = None,
 ) -> dict[str, Tensor]:
-    speed_target = torch.as_tensor(
-        batch.speed_targets,
-        dtype=torch.float32,
-        device=device,
-    )
-    speed_mask = torch.as_tensor(
-        batch.speed_target_mask,
-        dtype=torch.bool,
-        device=device,
-    )
-    traversal_target = torch.as_tensor(
-        batch.traversal_targets,
-        dtype=torch.float32,
-        device=device,
-    )
-    traversal_mask = torch.as_tensor(
-        batch.traversal_target_mask,
-        dtype=torch.bool,
-        device=device,
-    )
+    """Compute padding/mask-aware multi-task forecasting loss.
+
+    ``loss_config`` is accepted as the historical/public spelling; ``config``
+    is its preferred spelling.  Traversal is optimized in log1p space by
+    default so seconds do not numerically dominate speed-ratio loss.
+    """
+    if config is not None and loss_config is not None:
+        raise ValueError("pass either config or loss_config, not both")
+    config = loss_config if loss_config is not None else config
+    if config is not None and any(
+        value is not None
+        for value in (traversal_scale_s, speed_weight, traversal_weight)
+    ):
+        raise ValueError(
+            "pass either a loss config or individual loss parameters, not both"
+        )
+    if config is None:
+        # Preserve the historical explicit ``traversal_scale_s`` API: callers
+        # opting into a numeric scale receive normalized raw-second Huber loss.
+        # The no-argument default remains log1p-space, which prevents traversal
+        # seconds from dominating the dimensionless speed-ratio objective.
+        config = ForecastLossConfig(
+            traversal_scale_s=traversal_scale_s,
+            speed_weight=1.0 if speed_weight is None else speed_weight,
+            traversal_weight=(
+                1.0 if traversal_weight is None else traversal_weight
+            ),
+            traversal_log_space=traversal_scale_s is None,
+        )
+
+    speed_target = torch.as_tensor(batch.speed_targets, dtype=torch.float32, device=device)
+    speed_mask = torch.as_tensor(batch.speed_target_mask, dtype=torch.bool, device=device)
+    traversal_target = torch.as_tensor(batch.traversal_targets, dtype=torch.float32, device=device)
+    traversal_mask = torch.as_tensor(batch.traversal_target_mask, dtype=torch.bool, device=device)
 
     speed = masked_huber(
-        outputs["speed_ratio"],
-        speed_target,
-        speed_mask,
-    )
-    traversal = masked_huber(
-        outputs["traversal_time_s"],
-        traversal_target,
-        traversal_mask,
+        outputs["speed_ratio"], speed_target, speed_mask, delta=config.speed_delta
     )
 
+    if config.traversal_log_space:
+        traversal_prediction = torch.log1p(outputs["traversal_time_s"].clamp_min(0.0))
+        traversal_target_for_loss = torch.log1p(traversal_target.clamp_min(0.0))
+    else:
+        scale = 60.0 if config.traversal_scale_s is None else config.traversal_scale_s
+        traversal_prediction = outputs["traversal_time_s"] / scale
+        traversal_target_for_loss = traversal_target / scale
+
+    traversal = masked_huber(
+        traversal_prediction, traversal_target_for_loss, traversal_mask, delta=config.traversal_delta
+    )
+    weighted_speed = config.speed_weight * speed
+    weighted_traversal = config.traversal_weight * traversal
     return {
         "speed": speed,
         "traversal": traversal,
-        "total": speed + traversal,
+        "weighted_speed": weighted_speed,
+        "weighted_traversal": weighted_traversal,
+        "total": weighted_speed + weighted_traversal,
     }
+

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "okhla",
+    "graphml": "osm_extracts/okhla.graphml"
+  },
+  {
+    "name": "connaught_place",
+    "graphml": "osm_extracts/connaught_place.graphml"
+  },
+  {
+    "name": "chandni_chowk",
+    "graphml": "osm_extracts/chandni_chowk.graphml"
+  },
+  {
+    "name": "karol_bagh",
+    "graphml": "osm_extracts/karol_bagh.graphml"
+  },
+  {
+    "name": "nehru_place",
+    "graphml": "osm_extracts/nehru_place.graphml"
+  }
+]

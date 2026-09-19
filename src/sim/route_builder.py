@@ -53,6 +53,8 @@ class RouteBuilder:
         background_max_departure_gap_s: float = 6.0,
         background_min_walk_hops: int = 8,
         background_max_walk_hops: int = 30,
+        planning_time_s: float = 0.0,
+        commitments=None,
     ) -> None:
         self.scenario = scenario
         self.route_plan = route_plan
@@ -60,6 +62,23 @@ class RouteBuilder:
             "edge_mapping",
             {},
         )
+
+        # A logical route plan resolved at episode start (planning_time_s=0,
+        # no commitments) is correctly evaluated "from the depot, nothing
+        # delivered yet". But `apply_route_plan()` resolves CANDIDATE plans
+        # mid-episode, after some customers on the incumbent route may
+        # already be delivered. Re-evaluating with planning_time_s=0 and no
+        # commitments there re-derives capacity/timing as if starting fresh
+        # from the depot with the full original customer list still
+        # onboard -- silently double-counting already-completed
+        # deliveries against vehicle capacity. This was confirmed to
+        # produce spurious "exceeds capacity" rejections for
+        # otherwise-valid mid-episode candidates. Callers resolving a
+        # mid-episode candidate MUST pass the real current sim time and
+        # commitments; the defaults here are only correct for a
+        # fresh-episode build.
+        self._planning_time_s = float(planning_time_s)
+        self._commitments = commitments
 
         if background_duration_s < 0:
             raise ValueError(
@@ -174,7 +193,8 @@ class RouteBuilder:
         evaluator = RouteEvaluator(self.scenario)
         evaluation = evaluator.evaluate(
             self.route_plan,
-            planning_time_s=0.0,
+            commitments=self._commitments,
+            planning_time_s=self._planning_time_s,
         )
 
         if not evaluation.feasible:
