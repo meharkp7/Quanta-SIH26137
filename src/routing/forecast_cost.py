@@ -121,6 +121,38 @@ class ForecastAwareTravelTime:
         return free_flow / max(self.policy.min_speed_ratio, ratio)
 
 
+def check_fifo(
+    provider: ForecastAwareTravelTime,
+    edge: RoadEdge,
+    earlier_departure_s: float,
+    later_departure_s: float,
+    *,
+    tolerance_s: float = 1e-9,
+) -> dict[str, float | bool]:
+    """Verify the FIFO property for one edge across two departures.
+
+    FIFO (no overtaking): departing later cannot mean arriving earlier,
+    i.e. ``t0 + tau(t0) <= t1 + tau(t1)`` for ``t0 <= t1``.  This is what
+    keeps time-dependent Dijkstra in ``DirectedPathBuilder`` and the
+    sequential ``RouteEvaluator`` traversal evaluation sound: arrival
+    functions are non-decreasing in departure time.
+    """
+    t0 = float(earlier_departure_s)
+    t1 = float(later_departure_s)
+    if t1 < t0:
+        raise ValueError("later_departure_s must be >= earlier_departure_s")
+    arrival_0 = t0 + float(provider(edge, t0))
+    arrival_1 = t1 + float(provider(edge, t1))
+    holds = arrival_0 <= arrival_1 + float(tolerance_s)
+    return {
+        "earlier_departure_s": t0,
+        "later_departure_s": t1,
+        "earlier_arrival_s": arrival_0,
+        "later_arrival_s": arrival_1,
+        "fifo_holds": holds,
+    }
+
+
 def forecast_cost_view(
     scenario: Scenario,
     forecast: Forecast,
