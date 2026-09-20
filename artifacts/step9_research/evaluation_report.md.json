@@ -1,0 +1,110 @@
+{
+  "certified_optimum": 1575.0,
+  "certified_optimum_source": "exact MILP reference (certified_optimum=true)",
+  "evidence": [
+    "/Users/meharkapoor7/Quanta-SIH26137/artifacts/step9_research/qpso_vs_alns_5job.json"
+  ],
+  "gaps": {
+    "/Users/meharkapoor7/Quanta-SIH26137/artifacts/step9_research/qpso_vs_alns_5job.json": [
+      {
+        "best_feasible": 1575.0,
+        "feasible": true,
+        "gap": 0.0,
+        "matches_reference": true,
+        "method": "qpso",
+        "seed": 1
+      },
+      {
+        "best_feasible": 1575.0,
+        "feasible": true,
+        "gap": 0.0,
+        "matches_reference": true,
+        "method": "qpso",
+        "seed": 2
+      },
+      {
+        "best_feasible": 1575.0,
+        "feasible": true,
+        "gap": 0.0,
+        "matches_reference": true,
+        "method": "qpso",
+        "seed": 3
+      },
+      {
+        "best_feasible": 1575.0,
+        "feasible": true,
+        "gap": 0.0,
+        "matches_reference": true,
+        "method": "alns",
+        "seed": 1
+      },
+      {
+        "best_feasible": 1575.0,
+        "feasible": true,
+        "gap": 0.0,
+        "matches_reference": true,
+        "method": "alns",
+        "seed": 2
+      },
+      {
+        "best_feasible": 1575.0,
+        "feasible": true,
+        "gap": 0.0,
+        "matches_reference": true,
+        "method": "alns",
+        "seed": 3
+      }
+    ]
+  },
+  "headline": {
+    "n_evidence_files": 1,
+    "n_validator_agree": 6,
+    "n_validator_checks": 6,
+    "n_zero_gap_matches": 6,
+    "verdict": "all stored validator verdicts agree and all feasible runs match the certified reference"
+  },
+  "paired_tables": {
+    "/Users/meharkapoor7/Quanta-SIH26137/artifacts/step9_research/qpso_vs_alns_5job.json": [
+      {
+        "alns_agree": true,
+        "alns_best_feasible": 1575.0,
+        "alns_evals": 2000,
+        "alns_gap": 0.0,
+        "alns_wall_s": 0.1578432909991534,
+        "qpso_agree": true,
+        "qpso_best_feasible": 1575.0,
+        "qpso_evals": 2000,
+        "qpso_gap": 0.0,
+        "qpso_wall_s": 2.617717041001015,
+        "seed": 1
+      },
+      {
+        "alns_agree": true,
+        "alns_best_feasible": 1575.0,
+        "alns_evals": 2000,
+        "alns_gap": 0.0,
+        "alns_wall_s": 0.15823637500034238,
+        "qpso_agree": true,
+        "qpso_best_feasible": 1575.0,
+        "qpso_evals": 2000,
+        "qpso_gap": 0.0,
+        "qpso_wall_s": 2.940077334000307,
+        "seed": 2
+      },
+      {
+        "alns_agree": true,
+        "alns_best_feasible": 1575.0,
+        "alns_evals": 2000,
+        "alns_gap": 0.0,
+        "alns_wall_s": 0.1651011659996584,
+        "qpso_agree": true,
+        "qpso_best_feasible": 1575.0,
+        "qpso_evals": 2000,
+        "qpso_gap": 0.0,
+        "qpso_wall_s": 4.508503916000336,
+        "seed": 3
+      }
+    ]
+  },
+  "terminology": "Heuristic entries report best_feasible_objective and gap vs the certified reference. A zero gap means 'matches best-known reference', never 'optimal' \u2014 only the exact MILP path may claim a certified optimum."
+}
