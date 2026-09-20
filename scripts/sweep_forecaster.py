@@ -55,7 +55,7 @@ def run_sweep(
         name = config_name(index, config)
         out = output_base / name
         print(f"[{index + 1}/{len(configs)}] {name}", flush=True)
-        manifest = train_forecaster(
+        train_forecaster(
             corpus_dir,
             out,
             epochs=epochs,
@@ -63,27 +63,22 @@ def run_sweep(
             device=device,
             batch_size=batch_size,
             patience=0,  # fixed screening budget; selection by best val MAE
+            final_eval=False,  # skip expensive full-corpus eval in screening
             **config,
         )
-        val_maes = [
-            m["mae"]
-            for m in manifest["metrics"]["validation"].values()
-            if m["mae"] is not None
-        ]
-        test_maes = [
-            m["mae"]
-            for m in manifest["metrics"]["test"].values()
-            if m["mae"] is not None
-        ]
+        curve = json.loads((out / "training_curve.json").read_text())
+        best_val = min(
+            row["validation_speed_mae"]
+            for row in curve
+            if row["validation_speed_mae"] is not None
+            and row["validation_speed_mae"] != float("inf")
+        )
         rows.append(
             {
                 "name": name,
                 "config": config,
-                "best_validation_mae": manifest["early_stopping"][
-                    "best_validation_mae"
-                ],
-                "mean_validation_mae": float(sum(val_maes) / len(val_maes)),
-                "mean_test_mae": float(sum(test_maes) / len(test_maes)),
+                "best_validation_mae": float(best_val),
+                "mean_test_mae": None,  # test untouched during screening
             }
         )
     rows.sort(key=lambda r: r["best_validation_mae"])
@@ -91,7 +86,7 @@ def run_sweep(
         "screening_epochs": epochs,
         "seed": seed,
         "device": device,
-        "selection_split": "validation (test reported read-only)",
+        "selection_split": "validation curve best (test untouched in screening)",
         "ranking": rows,
         "winner": rows[0]["name"] if rows else None,
     }

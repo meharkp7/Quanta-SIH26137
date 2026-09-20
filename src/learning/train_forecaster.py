@@ -412,6 +412,7 @@ def train_forecaster(
     patience: int = 25,
     min_delta: float = 1e-4,
     grad_clip: float = 1.0,
+    final_eval: bool = True,
 ) -> dict:
     """Train on Step-13 windows and write a reproducible artifact manifest.
 
@@ -661,6 +662,50 @@ def train_forecaster(
         model.state_dict(),
         output_dir / "weights.pt",
     )
+
+    (output_dir / "training_curve.json").write_text(
+        json.dumps(history, indent=2),
+        encoding="utf-8",
+    )
+
+    if not final_eval:
+        # Screening mode: skip the expensive full-corpus eval/baselines/
+        # calibration. Selection reads best val MAE from training_curve.json.
+        manifest = {
+            "artifact": "forecaster_v1_screening",
+            "architecture": model.config,
+            "seed": seed,
+            "device": str(device_obj),
+            "hyperparameters": {
+                "epochs_requested": epochs,
+                "epochs_run": len(history),
+                "lr": lr,
+                "weight_decay": weight_decay,
+                "dropout": dropout,
+                "heads": heads,
+                "layers": layers,
+                "scheduler": scheduler,
+                "grad_clip": grad_clip,
+                "batch_size": batch_size,
+            },
+            "early_stopping": {
+                "enabled": bool(patience),
+                "patience": patience,
+                "min_delta": min_delta,
+                "stopped_early": stopped_early,
+                "best_epoch": best_epoch,
+                "best_validation_mae": best,
+            },
+            "train_windows": train_windows,
+            "validation_windows": validation_windows,
+            "test_windows": test_windows,
+        }
+        (output_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2),
+            encoding="utf-8",
+        )
+        return manifest
+
     metrics = {}
     breakdowns = {}
 
@@ -889,6 +934,11 @@ def main() -> int:
     parser.add_argument("--min-delta", type=float, default=1e-4)
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument(
+        "--no-final-eval",
+        action="store_true",
+        help="Screening mode: skip full-corpus eval/baselines/calibration.",
+    )
+    parser.add_argument(
         "--device",
         type=str,
         default="mps" if torch.backends.mps.is_available() else "cpu",
@@ -915,6 +965,7 @@ def main() -> int:
                 patience=args.patience,
                 min_delta=args.min_delta,
                 grad_clip=args.grad_clip,
+                final_eval=not args.no_final_eval,
             ),
             indent=2,
         )

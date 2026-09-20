@@ -241,6 +241,10 @@ def test_fifo_helper_detects_steep_recovery_violation():
 # 5. Pilot interval coverage recomputed from artifacts
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(
+    reason="pilot artifacts deleted in v2 data reset (c6fa2e10); "
+    "re-enable against artifacts/forecaster_v2 once v2 training lands"
+)
 def test_pilot_interval_coverage_recomputed_from_artifacts():
     stored = json.loads(PILOT_UNCERTAINTY.read_text(encoding="utf-8"))
     radii = stored["radii"]
