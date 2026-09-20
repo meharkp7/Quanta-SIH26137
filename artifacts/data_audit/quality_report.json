@@ -1,0 +1,1029 @@
+{
+  "corpus": "corpus_delhi",
+  "seed": 0,
+  "n_episodes_manifest": 250,
+  "sample_ids": [
+    "ep-0025",
+    "ep-0049",
+    "ep-0077",
+    "ep-0053",
+    "ep-0117",
+    "ep-0133",
+    "ep-0182",
+    "ep-0176",
+    "ep-0170",
+    "ep-0231",
+    "ep-0223",
+    "ep-0238"
+  ],
+  "window_ep_ids": [
+    "ep-0025",
+    "ep-0182",
+    "ep-0231"
+  ],
+  "manifest": {
+    "per_split": {
+      "train": {
+        "episodes": 150,
+        "speed_coverage_mean": 0.034671615885394094,
+        "speed_coverage_min": 0.010653654569482566,
+        "speed_coverage_max": 0.06911089764115701,
+        "trav_coverage_mean": 0.031080457871394754,
+        "trav_coverage_min": 0.00881027413506828,
+        "trav_coverage_max": 0.06080335859394457,
+        "speed_valid_total": 476963,
+        "trav_valid_total": 429500
+      },
+      "validation": {
+        "episodes": 50,
+        "speed_coverage_mean": 0.05658660215425378,
+        "speed_coverage_min": 0.024556957164525852,
+        "speed_coverage_max": 0.06842923794712286,
+        "trav_coverage_mean": 0.04895109728702265,
+        "trav_coverage_min": 0.020332930130752838,
+        "trav_coverage_max": 0.05865637540080257,
+        "speed_valid_total": 147360,
+        "trav_valid_total": 127476
+      },
+      "test": {
+        "episodes": 50,
+        "speed_coverage_mean": 0.051184942546664586,
+        "speed_coverage_min": 0.026308948162013207,
+        "speed_coverage_max": 0.06617099083173018,
+        "trav_coverage_mean": 0.045225740480770896,
+        "trav_coverage_min": 0.021941454791244215,
+        "trav_coverage_max": 0.05899582315118113,
+        "speed_valid_total": 147666,
+        "trav_valid_total": 130474
+      }
+    },
+    "regime_balance": {
+      "train": {
+        "normal": 38,
+        "morning_peak": 36,
+        "evening_peak": 40,
+        "corridor_surge": 36
+      },
+      "validation": {
+        "corridor_surge": 12,
+        "normal": 14,
+        "morning_peak": 12,
+        "evening_peak": 12
+      },
+      "test": {
+        "normal": 13,
+        "morning_peak": 13,
+        "evening_peak": 12,
+        "corridor_surge": 12
+      }
+    },
+    "event_balance": {
+      "train": {
+        "None": 41,
+        "multi_disruption": 34,
+        "closure": 37,
+        "incident": 38
+      },
+      "validation": {
+        "multi_disruption": 12,
+        "closure": 13,
+        "incident": 12,
+        "None": 13
+      },
+      "test": {
+        "None": 13,
+        "multi_disruption": 13,
+        "closure": 12,
+        "incident": 12
+      }
+    },
+    "per_map": {
+      "connaught_place-map000": {
+        "split": "train",
+        "zone": "connaught_place",
+        "edges": 4778,
+        "nodes": 2033,
+        "episodes": 50,
+        "speed_valid_per_edge_per_ep": 0.6955964838844705
+      },
+      "chandni_chowk-map001": {
+        "split": "train",
+        "zone": "chandni_chowk",
+        "edges": 2082,
+        "nodes": 846,
+        "episodes": 50,
+        "speed_valid_per_edge_per_ep": 1.5757540826128722
+      },
+      "karol_bagh-map002": {
+        "split": "train",
+        "zone": "karol_bagh",
+        "edges": 5465,
+        "nodes": 2064,
+        "episodes": 50,
+        "speed_valid_per_edge_per_ep": 0.5370503202195791
+      },
+      "dwarka_sector12-map003": {
+        "split": "validation",
+        "zone": "dwarka_sector12",
+        "edges": 1929,
+        "nodes": 841,
+        "episodes": 50,
+        "speed_valid_per_edge_per_ep": 1.5278382581648522
+      },
+      "nehru_place-map004": {
+        "split": "test",
+        "zone": "nehru_place",
+        "edges": 2137,
+        "nodes": 843,
+        "episodes": 50,
+        "speed_valid_per_edge_per_ep": 1.381993448759944
+      }
+    },
+    "disjointness": {
+      "episode_overlap_train_val": 0,
+      "episode_overlap_train_test": 0,
+      "episode_overlap_val_test": 0,
+      "map_disjoint_flag": true,
+      "fingerprints_unique": true,
+      "scenarios_single_split": true,
+      "scenario_to_split": {
+        "connaught_place-map000": [
+          "train"
+        ],
+        "chandni_chowk-map001": [
+          "train"
+        ],
+        "karol_bagh-map002": [
+          "train"
+        ],
+        "dwarka_sector12-map003": [
+          "validation"
+        ],
+        "nehru_place-map004": [
+          "test"
+        ]
+      }
+    }
+  },
+  "episodes": [
+    {
+      "episode_id": "ep-0025",
+      "split": "train",
+      "n_labels": 258012,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 43002,
+          "valid": 1244,
+          "coverage": 0.028928887028510302
+        },
+        "300s/realized_traversal": {
+          "total": 43002,
+          "valid": 1150,
+          "coverage": 0.026742942188735408
+        },
+        "600s/speed_proxy": {
+          "total": 43002,
+          "valid": 1311,
+          "coverage": 0.030486954095158364
+        },
+        "600s/realized_traversal": {
+          "total": 43002,
+          "valid": 1218,
+          "coverage": 0.0283242639877215
+        },
+        "900s/speed_proxy": {
+          "total": 43002,
+          "valid": 1340,
+          "coverage": 0.031161341332961258
+        },
+        "900s/realized_traversal": {
+          "total": 43002,
+          "valid": 1077,
+          "coverage": 0.02504534672805916
+        }
+      },
+      "missing_fraction": 0.9682712431979907,
+      "obs_age_p50": 750.0,
+      "obs_age_p99": 2340.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 0.0,
+      "speed_ratio_n": 6064,
+      "speed_ratio_p1": 0.14457328768788452,
+      "speed_ratio_p50": 0.8764514249993005,
+      "speed_ratio_p99": 1.032282575999174,
+      "speed_ratio_p999": 1.1170893599991063,
+      "speed_ratio_max": 1.1170893599991065,
+      "speed_ratio_frac_gt1": 0.18337730870712401,
+      "speed_ratio_frac_eq0": 0.005771767810026385,
+      "trav_n": 3445,
+      "trav_p50": 4.0,
+      "trav_p99": 46.0,
+      "trav_max": 218.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0049",
+      "split": "train",
+      "n_labels": 258012,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 43002,
+          "valid": 1127,
+          "coverage": 0.0262080833449607
+        },
+        "300s/realized_traversal": {
+          "total": 43002,
+          "valid": 1057,
+          "coverage": 0.024580252081298545
+        },
+        "600s/speed_proxy": {
+          "total": 43002,
+          "valid": 1296,
+          "coverage": 0.0301381331100879
+        },
+        "600s/realized_traversal": {
+          "total": 43002,
+          "valid": 1188,
+          "coverage": 0.02762662201758058
+        },
+        "900s/speed_proxy": {
+          "total": 43002,
+          "valid": 1254,
+          "coverage": 0.02916143435189061
+        },
+        "900s/realized_traversal": {
+          "total": 43002,
+          "valid": 1002,
+          "coverage": 0.02330124180270685
+        }
+      },
+      "missing_fraction": 0.9699037254081205,
+      "obs_age_p50": 780.0,
+      "obs_age_p99": 2400.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 0.0,
+      "speed_ratio_n": 5752,
+      "speed_ratio_p1": 0.1564019999998749,
+      "speed_ratio_p50": 0.8742599999992988,
+      "speed_ratio_p99": 1.00008,
+      "speed_ratio_p999": 1.0727858159991417,
+      "speed_ratio_max": 1.073135625,
+      "speed_ratio_frac_gt1": 0.16602920723226705,
+      "speed_ratio_frac_eq0": 0.005910987482614743,
+      "trav_n": 3247,
+      "trav_p50": 4.0,
+      "trav_p99": 38.0,
+      "trav_max": 200.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0077",
+      "split": "train",
+      "n_labels": 112428,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 18738,
+          "valid": 1129,
+          "coverage": 0.06025189454584267
+        },
+        "300s/realized_traversal": {
+          "total": 18738,
+          "valid": 912,
+          "coverage": 0.04867114953570285
+        },
+        "600s/speed_proxy": {
+          "total": 18738,
+          "valid": 460,
+          "coverage": 0.024549044721955383
+        },
+        "600s/realized_traversal": {
+          "total": 18738,
+          "valid": 295,
+          "coverage": 0.01574340911516704
+        },
+        "900s/speed_proxy": {
+          "total": 18738,
+          "valid": 204,
+          "coverage": 0.010886967659301952
+        },
+        "900s/realized_traversal": {
+          "total": 18738,
+          "valid": 163,
+          "coverage": 0.008698900629736364
+        }
+      },
+      "missing_fraction": 0.9495076849183477,
+      "obs_age_p50": 580.0,
+      "obs_age_p99": 2340.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 0.00012007684918347742,
+      "speed_ratio_n": 4205,
+      "speed_ratio_p1": 0.1431766491427426,
+      "speed_ratio_p50": 0.8526669119993177,
+      "speed_ratio_p99": 1.017481391999186,
+      "speed_ratio_p999": 1.0866869279991307,
+      "speed_ratio_max": 1.0866869279991307,
+      "speed_ratio_frac_gt1": 0.1619500594530321,
+      "speed_ratio_frac_eq0": 0.008323424494649227,
+      "trav_n": 1370,
+      "trav_p50": 6.0,
+      "trav_p99": 64.0,
+      "trav_max": 78.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0053",
+      "split": "train",
+      "n_labels": 112428,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 18738,
+          "valid": 952,
+          "coverage": 0.050805849076742446
+        },
+        "300s/realized_traversal": {
+          "total": 18738,
+          "valid": 1002,
+          "coverage": 0.05347422350304195
+        },
+        "600s/speed_proxy": {
+          "total": 18738,
+          "valid": 1190,
+          "coverage": 0.06350731134592806
+        },
+        "600s/realized_traversal": {
+          "total": 18738,
+          "valid": 1091,
+          "coverage": 0.058223929981855056
+        },
+        "900s/speed_proxy": {
+          "total": 18738,
+          "valid": 1098,
+          "coverage": 0.05859750240153699
+        },
+        "900s/realized_traversal": {
+          "total": 18738,
+          "valid": 881,
+          "coverage": 0.047016757391397164
+        }
+      },
+      "missing_fraction": 0.9512367915465898,
+      "obs_age_p50": 628.0,
+      "obs_age_p99": 2340.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 0.0008405379442843419,
+      "speed_ratio_n": 4061,
+      "speed_ratio_p1": 0.12805868159989753,
+      "speed_ratio_p50": 0.866303051999307,
+      "speed_ratio_p99": 1.00008,
+      "speed_ratio_p999": 1.0768861439991384,
+      "speed_ratio_max": 1.0768861439991384,
+      "speed_ratio_frac_gt1": 0.16129032258064516,
+      "speed_ratio_frac_eq0": 0.008372322088155627,
+      "trav_n": 2974,
+      "trav_p50": 6.0,
+      "trav_p99": 34.0,
+      "trav_max": 70.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0117",
+      "split": "train",
+      "n_labels": 295110,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 49185,
+          "valid": 681,
+          "coverage": 0.013845684659957305
+        },
+        "300s/realized_traversal": {
+          "total": 49185,
+          "valid": 754,
+          "coverage": 0.015329876995018806
+        },
+        "600s/speed_proxy": {
+          "total": 49185,
+          "valid": 1158,
+          "coverage": 0.023543763342482465
+        },
+        "600s/realized_traversal": {
+          "total": 49185,
+          "valid": 1101,
+          "coverage": 0.022384873437023483
+        },
+        "900s/speed_proxy": {
+          "total": 49185,
+          "valid": 1199,
+          "coverage": 0.024377350818338923
+        },
+        "900s/realized_traversal": {
+          "total": 49185,
+          "valid": 985,
+          "coverage": 0.020026430822405204
+        }
+      },
+      "missing_fraction": 0.9808874656907594,
+      "obs_age_p50": 916.0,
+      "obs_age_p99": 2400.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 3.659652333028362e-05,
+      "speed_ratio_n": 4178,
+      "speed_ratio_p1": 0.19724747687984195,
+      "speed_ratio_p50": 0.8290731599993367,
+      "speed_ratio_p99": 1.1088029357991094,
+      "speed_ratio_p999": 1.158792695999073,
+      "speed_ratio_max": 1.158792695999073,
+      "speed_ratio_frac_gt1": 0.15294399234083295,
+      "speed_ratio_frac_eq0": 0.007659167065581618,
+      "trav_n": 2840,
+      "trav_p50": 4.0,
+      "trav_p99": 22.0,
+      "trav_max": 120.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0133",
+      "split": "train",
+      "n_labels": 295110,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 49185,
+          "valid": 898,
+          "coverage": 0.018257598861441498
+        },
+        "300s/realized_traversal": {
+          "total": 49185,
+          "valid": 949,
+          "coverage": 0.01929450035579953
+        },
+        "600s/speed_proxy": {
+          "total": 49185,
+          "valid": 1114,
+          "coverage": 0.022649181661075532
+        },
+        "600s/realized_traversal": {
+          "total": 49185,
+          "valid": 1053,
+          "coverage": 0.02140896614821592
+        },
+        "900s/speed_proxy": {
+          "total": 49185,
+          "valid": 1090,
+          "coverage": 0.02216122801667175
+        },
+        "900s/realized_traversal": {
+          "total": 49185,
+          "valid": 918,
+          "coverage": 0.018664226898444648
+        }
+      },
+      "missing_fraction": 0.9812854528819762,
+      "obs_age_p50": 926.0,
+      "obs_age_p99": 2400.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 3.659652333028362e-05,
+      "speed_ratio_n": 4091,
+      "speed_ratio_p1": 0.18316979999985342,
+      "speed_ratio_p50": 0.8296165439993358,
+      "speed_ratio_p99": 1.0171813679991861,
+      "speed_ratio_p999": 1.1710936799990632,
+      "speed_ratio_max": 1.1710936799990632,
+      "speed_ratio_frac_gt1": 0.15864091909068687,
+      "speed_ratio_frac_eq0": 0.007333170373991689,
+      "trav_n": 2920,
+      "trav_p50": 4.0,
+      "trav_p99": 25.61999999999989,
+      "trav_max": 118.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0182",
+      "split": "validation",
+      "n_labels": 104166,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 17361,
+          "valid": 1082,
+          "coverage": 0.062323598871032775
+        },
+        "300s/realized_traversal": {
+          "total": 17361,
+          "valid": 967,
+          "coverage": 0.055699556477161453
+        },
+        "600s/speed_proxy": {
+          "total": 17361,
+          "valid": 1122,
+          "coverage": 0.06462761361672714
+        },
+        "600s/realized_traversal": {
+          "total": 17361,
+          "valid": 999,
+          "coverage": 0.05754276827371695
+        },
+        "900s/speed_proxy": {
+          "total": 17361,
+          "valid": 1101,
+          "coverage": 0.0634180058752376
+        },
+        "900s/realized_traversal": {
+          "total": 17361,
+          "valid": 854,
+          "coverage": 0.049190714820574855
+        }
+      },
+      "missing_fraction": 0.935717988595127,
+      "obs_age_p50": 506.0,
+      "obs_age_p99": 2280.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 0.0,
+      "speed_ratio_n": 4960,
+      "speed_ratio_p1": 0.019052350895125462,
+      "speed_ratio_p50": 0.8695695599993044,
+      "speed_ratio_p99": 1.0000799999992,
+      "speed_ratio_p999": 1.0577846159991537,
+      "speed_ratio_max": 1.08235224,
+      "speed_ratio_frac_gt1": 0.1532258064516129,
+      "speed_ratio_frac_eq0": 0.00967741935483871,
+      "trav_n": 2820,
+      "trav_p50": 6.0,
+      "trav_p99": 42.0,
+      "trav_max": 180.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0176",
+      "split": "validation",
+      "n_labels": 104166,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 17361,
+          "valid": 880,
+          "coverage": 0.050688324405276194
+        },
+        "300s/realized_traversal": {
+          "total": 17361,
+          "valid": 889,
+          "coverage": 0.05120672772305743
+        },
+        "600s/speed_proxy": {
+          "total": 17361,
+          "valid": 1111,
+          "coverage": 0.0639940095616612
+        },
+        "600s/realized_traversal": {
+          "total": 17361,
+          "valid": 981,
+          "coverage": 0.05650596163815448
+        },
+        "900s/speed_proxy": {
+          "total": 17361,
+          "valid": 1122,
+          "coverage": 0.06462761361672714
+        },
+        "900s/realized_traversal": {
+          "total": 17361,
+          "valid": 864,
+          "coverage": 0.049766718506998445
+        }
+      },
+      "missing_fraction": 0.9406168999481597,
+      "obs_age_p50": 546.0,
+      "obs_age_p99": 2340.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 5.184033177812338e-05,
+      "speed_ratio_n": 4582,
+      "speed_ratio_p1": 0.02141883069051998,
+      "speed_ratio_p50": 0.8636690879993091,
+      "speed_ratio_p99": 1.0472837759991622,
+      "speed_ratio_p999": 1.143295559663615,
+      "speed_ratio_max": 1.16229297599907,
+      "speed_ratio_frac_gt1": 0.17001309471846354,
+      "speed_ratio_frac_eq0": 0.009166302924487123,
+      "trav_n": 2734,
+      "trav_p50": 6.0,
+      "trav_p99": 44.0,
+      "trav_max": 196.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0170",
+      "split": "validation",
+      "n_labels": 104166,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 17361,
+          "valid": 1088,
+          "coverage": 0.06266920108288693
+        },
+        "300s/realized_traversal": {
+          "total": 17361,
+          "valid": 1011,
+          "coverage": 0.058233972697425265
+        },
+        "600s/speed_proxy": {
+          "total": 17361,
+          "valid": 1140,
+          "coverage": 0.06566442025228962
+        },
+        "600s/realized_traversal": {
+          "total": 17361,
+          "valid": 1013,
+          "coverage": 0.05834917343470998
+        },
+        "900s/speed_proxy": {
+          "total": 17361,
+          "valid": 1123,
+          "coverage": 0.0646852139853695
+        },
+        "900s/realized_traversal": {
+          "total": 17361,
+          "valid": 848,
+          "coverage": 0.048845112608720695
+        }
+      },
+      "missing_fraction": 0.9325168481078279,
+      "obs_age_p50": 492.0,
+      "obs_age_p99": 2280.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 0.0,
+      "speed_ratio_n": 5207,
+      "speed_ratio_p1": 0.02384333217389399,
+      "speed_ratio_p50": 0.8711696879993032,
+      "speed_ratio_p99": 1.0282822559991773,
+      "speed_ratio_p999": 1.118600231557689,
+      "speed_ratio_max": 1.2383549999999999,
+      "speed_ratio_frac_gt1": 0.2026118686383714,
+      "speed_ratio_frac_eq0": 0.009602458229306703,
+      "trav_n": 2872,
+      "trav_p50": 6.0,
+      "trav_p99": 42.0,
+      "trav_max": 192.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0231",
+      "split": "test",
+      "n_labels": 115398,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 19233,
+          "valid": 1182,
+          "coverage": 0.06145687100296365
+        },
+        "300s/realized_traversal": {
+          "total": 19233,
+          "valid": 1082,
+          "coverage": 0.05625747413300057
+        },
+        "600s/speed_proxy": {
+          "total": 19233,
+          "valid": 679,
+          "coverage": 0.03530390474704934
+        },
+        "600s/realized_traversal": {
+          "total": 19233,
+          "valid": 507,
+          "coverage": 0.026360942130712838
+        },
+        "900s/speed_proxy": {
+          "total": 19233,
+          "valid": 216,
+          "coverage": 0.011230697239120261
+        },
+        "900s/realized_traversal": {
+          "total": 19233,
+          "valid": 146,
+          "coverage": 0.007591119430146103
+        }
+      },
+      "missing_fraction": 0.9490992044922789,
+      "obs_age_p50": 564.0,
+      "obs_age_p99": 2340.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 9.358914365933551e-05,
+      "speed_ratio_n": 4351,
+      "speed_ratio_p1": 0.05688372115380064,
+      "speed_ratio_p50": 0.8518681439993185,
+      "speed_ratio_p99": 1.081043153999135,
+      "speed_ratio_p999": 1.2141971279990287,
+      "speed_ratio_max": 1.2141971279990287,
+      "speed_ratio_frac_gt1": 0.1544472535049414,
+      "speed_ratio_frac_eq0": 0.009193288899103653,
+      "trav_n": 1735,
+      "trav_p50": 4.0,
+      "trav_p99": 41.320000000000164,
+      "trav_max": 562.0,
+      "incident_window_fraction_of_valid": 0.0005246589716684155,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0223",
+      "split": "test",
+      "n_labels": 115398,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 19233,
+          "valid": 1237,
+          "coverage": 0.06431653928144335
+        },
+        "300s/realized_traversal": {
+          "total": 19233,
+          "valid": 1094,
+          "coverage": 0.056881401757396144
+        },
+        "600s/speed_proxy": {
+          "total": 19233,
+          "valid": 721,
+          "coverage": 0.037487651432433836
+        },
+        "600s/realized_traversal": {
+          "total": 19233,
+          "valid": 552,
+          "coverage": 0.028700670722196224
+        },
+        "900s/speed_proxy": {
+          "total": 19233,
+          "valid": 231,
+          "coverage": 0.012010606769614724
+        },
+        "900s/realized_traversal": {
+          "total": 19233,
+          "valid": 154,
+          "coverage": 0.00800707117974315
+        }
+      },
+      "missing_fraction": 0.9491576977070659,
+      "obs_age_p50": 556.0,
+      "obs_age_p99": 2340.0,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 9.358914365933551e-05,
+      "speed_ratio_n": 4346,
+      "speed_ratio_p1": 0.02749562608693456,
+      "speed_ratio_p50": 0.8500605839993198,
+      "speed_ratio_p99": 1.0401832079991677,
+      "speed_ratio_p999": 1.1774941919990582,
+      "speed_ratio_max": 1.1774941919990582,
+      "speed_ratio_frac_gt1": 0.17510354348826507,
+      "speed_ratio_frac_eq0": 0.009433962264150943,
+      "trav_n": 1800,
+      "trav_p50": 6.0,
+      "trav_p99": 46.0,
+      "trav_max": 284.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    },
+    {
+      "episode_id": "ep-0238",
+      "split": "test",
+      "n_labels": 115398,
+      "coverage_by_horizon_kind": {
+        "300s/speed_proxy": {
+          "total": 19233,
+          "valid": 1100,
+          "coverage": 0.05719336556959393
+        },
+        "300s/realized_traversal": {
+          "total": 19233,
+          "valid": 898,
+          "coverage": 0.046690583892268496
+        },
+        "600s/speed_proxy": {
+          "total": 19233,
+          "valid": 502,
+          "coverage": 0.026100972287214683
+        },
+        "600s/realized_traversal": {
+          "total": 19233,
+          "valid": 418,
+          "coverage": 0.02173347891644569
+        },
+        "900s/speed_proxy": {
+          "total": 19233,
+          "valid": 642,
+          "coverage": 0.033380127905163
+        },
+        "900s/realized_traversal": {
+          "total": 19233,
+          "valid": 575,
+          "coverage": 0.029896532002287736
+        }
+      },
+      "missing_fraction": 0.9438114178755265,
+      "obs_age_p50": 546.0,
+      "obs_age_p99": 2309.2600000000384,
+      "obs_age_max": 2400.0,
+      "known_closed_fraction": 0.00028076743097800656,
+      "speed_ratio_n": 4803,
+      "speed_ratio_p1": 0.07404111044993769,
+      "speed_ratio_p50": 0.8529567359993169,
+      "speed_ratio_p99": 1.0825668,
+      "speed_ratio_p999": 1.2114969119990309,
+      "speed_ratio_max": 1.2114969119990309,
+      "speed_ratio_frac_gt1": 0.15136373100145742,
+      "speed_ratio_frac_eq0": 0.009160941078492609,
+      "trav_n": 1891,
+      "trav_p50": 4.0,
+      "trav_p99": 38.0,
+      "trav_max": 570.0,
+      "incident_window_fraction_of_valid": 0.0,
+      "avail_before_target_violations": 0
+    }
+  ],
+  "windows": {
+    "episodes": {
+      "ep-0025": {
+        "n_windows": 9,
+        "assert_failures": 0,
+        "window_coverage": {
+          "5min": {
+            "speed": 0.028928887028510302,
+            "traversal": 0.026742942188735408
+          },
+          "10min": {
+            "speed": 0.030486954095158367,
+            "traversal": 0.0283242639877215
+          },
+          "15min": {
+            "speed": 0.03116134133296126,
+            "traversal": 0.02504534672805916
+          }
+        }
+      },
+      "ep-0182": {
+        "n_windows": 9,
+        "assert_failures": 0,
+        "window_coverage": {
+          "5min": {
+            "speed": 0.06232359887103277,
+            "traversal": 0.055699556477161453
+          },
+          "10min": {
+            "speed": 0.06462761361672714,
+            "traversal": 0.05754276827371696
+          },
+          "15min": {
+            "speed": 0.0634180058752376,
+            "traversal": 0.049190714820574855
+          }
+        }
+      },
+      "ep-0231": {
+        "n_windows": 9,
+        "assert_failures": 0,
+        "window_coverage": {
+          "5min": {
+            "speed": 0.06145687100296366,
+            "traversal": 0.056257474133000564
+          },
+          "10min": {
+            "speed": 0.03530390474704934,
+            "traversal": 0.026360942130712835
+          },
+          "15min": {
+            "speed": 0.011230697239120263,
+            "traversal": 0.007591119430146103
+          }
+        }
+      }
+    },
+    "assert_failures": 0,
+    "windows_total": 27
+  },
+  "scaler": {
+    "scaler_means": [
+      0.8076194524765015,
+      0.0011346641695126891,
+      0.011719326488673687,
+      11.93740177154541,
+      0.963627278804779,
+      0.0
+    ],
+    "scaler_stds": [
+      0.19835565984249115,
+      0.0011219916632398963,
+      0.10293936729431152,
+      6.017214775085449,
+      0.18721574544906616,
+      1.0
+    ],
+    "clips_applied": false,
+    "per_feature": {
+      "speed_ratio": {
+        "mean": 0.8076194524765015,
+        "std": 0.19835565984249115,
+        "finite_fraction": 0.029531572174937598,
+        "skew": -1.306532382965088,
+        "frac_abs_z_gt5": 0.0,
+        "p99": 1.0174814462661743,
+        "p999": 1.0866869688034058
+      },
+      "occupancy": {
+        "mean": 0.0011346641695126891,
+        "std": 0.0011219916632398963,
+        "finite_fraction": 0.029531572174937598,
+        "skew": 2.5729799270629883,
+        "frac_abs_z_gt5": 0.00448410875604261,
+        "p99": 0.005597014911472797,
+        "p999": 0.008737863972783089
+      },
+      "halting": {
+        "mean": 0.011719326488673687,
+        "std": 0.10293936729431152,
+        "finite_fraction": 0.029531572174937598,
+        "skew": 8.99259090423584,
+        "frac_abs_z_gt5": 0.012183651595686506,
+        "p99": 0.800000011920929,
+        "p999": 1.0
+      },
+      "observation_age_min": {
+        "mean": 11.93740177154541,
+        "std": 6.017214775085449,
+        "finite_fraction": 0.811915724850007,
+        "skew": -0.13180968165397644,
+        "frac_abs_z_gt5": 0.0,
+        "p99": 24.0,
+        "p999": 25.0
+      },
+      "missing": {
+        "mean": 0.963627278804779,
+        "std": 0.18721574544906616,
+        "finite_fraction": 0.811915724850007,
+        "skew": -4.952866554260254,
+        "frac_abs_z_gt5": 0.03637270626873652,
+        "p99": 1.0,
+        "p999": 1.0
+      },
+      "known_closed": {
+        "mean": 0.0,
+        "std": 1.0,
+        "finite_fraction": 0.811915724850007,
+        "skew": 0.0,
+        "frac_abs_z_gt5": 0.0,
+        "p99": 0.0,
+        "p999": 0.0
+      }
+    },
+    "windows_used": 27
+  },
+  "split_density_drift_vs_train": 1.6320728269861713,
+  "ranked_limits": [
+    {
+      "severity": "HIGH",
+      "title": "Extreme supervision sparsity",
+      "evidence": "train speed coverage mean 0.0347, traversal 0.0311; sampled obs missing 0.954; only 9 issue-times/episode"
+    },
+    {
+      "severity": "HIGH",
+      "title": "9-windows/episode thinness",
+      "evidence": "27 windows over 3 sampled episodes; ~2250 windows corpus-wide dilute incident supervision"
+    },
+    {
+      "severity": "MEDIUM-HIGH",
+      "title": "Train/val/test density drift",
+      "evidence": "val/test mean speed coverage 0.0566/0.0512 vs train 0.0347 (1.63x)"
+    },
+    {
+      "severity": "MEDIUM-HIGH",
+      "title": "Traversal-target heavy tail + scale mismatch",
+      "evidence": "sampled trav p50 5.0s, p99 41.7s, max 570.0s vs speed_ratio~[0,1]"
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Incident supervision thin",
+      "evidence": "incident-window fraction of valid labels 0.0000 (sampled); spillover (any-edge, in-effect-window) valid-label fraction ranges 0.00-0.69 across the 8 sampled event episodes, so disruption signal exists only as ambient context, never on disrupted edges themselves"
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Per-map graph-size spread + single-map val/test",
+      "evidence": "edges [2082, 4778, 1929, 5465, 2137]; val/test rely on one map each"
+    },
+    {
+      "severity": "LOW-MEDIUM",
+      "title": "No scaler clipping on skewed features",
+      "evidence": "FeatureScaler is pure z-score; halting/occupancy skew reported per-feature above"
+    }
+  ],
+  "incident_spillover": {
+    "definition": "fraction of valid labels in event episodes whose target_time falls inside ANY event effect window (any edge)",
+    "per_episode": {
+      "ep-0077": 0.645,
+      "ep-0053": 0.6897,
+      "ep-0117": 0.0175,
+      "ep-0133": 0.0048,
+      "ep-0176": 0.0,
+      "ep-0231": 0.1076,
+      "ep-0223": 0.1171,
+      "ep-0238": 0.5756
+    }
+  }
+}

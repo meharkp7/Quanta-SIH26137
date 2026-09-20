@@ -43,6 +43,27 @@ class DynamicEpisodeConfig:
     occupancy_noise: float = 0.015
     seed: int = 26137
     backend: str = "synthetic_field_v1"
+    # --- corpus_v2 density / supervision knobs (default-off: legacy behavior) ---
+    # background_min/max_gap_s override the SUMO background-trip departure gap
+    # (legacy hard-coded default in RouteBuilder is 3.0-6.0 s). Smaller gaps
+    # emit more background probe vehicles per episode, which is the dominant
+    # driver of observation/label density on real OSM graphs: a minute bucket
+    # with no vehicle sample is recorded missing, so density ~= traffic volume.
+    # None means "leave the downstream default untouched".
+    background_min_gap_s: float | None = None
+    background_max_gap_s: float | None = None
+    # emit_closed_edge_speed_zero: when True, SUMO-backed observation logging
+    # records a closed edge's minute bucket as a NON-missing speed-0
+    # observation (missing=0, known_closed=1) instead of a missing row. Rationale:
+    # a closed road carries zero flow by intervention, which is measured ground
+    # truth (the closure tape is applied in-sim), not an imputed value. This
+    # gives disrupted (edge, bucket) cells valid speed_proxy labels (value 0.0,
+    # available at the target bucket, same maturity rule as all speed labels)
+    # where corpus_delhi emitted missing rows and hence zero valid labels on
+    # disrupted cells. Realized-traversal labels on closed edges stay missing
+    # (no traversal can complete through a closed edge). Default False so all
+    # existing corpora reproduce byte-identically.
+    emit_closed_edge_speed_zero: bool = False
 
     def __post_init__(self) -> None:
         if self.duration_s <= 0 or self.interval_s <= 0:
@@ -65,6 +86,11 @@ class DynamicEpisodeConfig:
             raise ValueError("observation_missing_fraction must be in [0, 1)")
         if self.speed_noise_fraction < 0 or self.occupancy_noise < 0:
             raise ValueError("observation noise must be non-negative")
+        if (self.background_min_gap_s is None) != (self.background_max_gap_s is None):
+            raise ValueError("background_min_gap_s and background_max_gap_s must be set together")
+        if self.background_min_gap_s is not None:
+            if self.background_min_gap_s <= 0 or self.background_max_gap_s < self.background_min_gap_s:
+                raise ValueError("background gaps must satisfy 0 < min <= max")
 
 
 @dataclass(frozen=True)

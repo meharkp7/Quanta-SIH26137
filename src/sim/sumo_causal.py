@@ -265,6 +265,14 @@ def run_sumo_causal_episode(
             background_target_edges=affected_sumo_edges,
             background_blocked_intervals=blocked_intervals,
             background_seed=config.seed,
+            # corpus_v2 density knob: DynamicEpisodeConfig.background_{min,max}_gap_s
+            # override the RouteBuilder 3.0-6.0 s defaults when set; None (legacy
+            # corpora) leaves the defaults untouched. Denser background traffic
+            # is the primary lever for observation/label density on real graphs.
+            **({"background_min_departure_gap_s": float(config.background_min_gap_s)}
+               if config.background_min_gap_s is not None else {}),
+            **({"background_max_departure_gap_s": float(config.background_max_gap_s)}
+               if config.background_max_gap_s is not None else {}),
         ).build(
             output_dir=output_dir / "routes"
         )
@@ -282,6 +290,8 @@ def run_sumo_causal_episode(
     logger_obj = CausalSumoLogger(
         scenario,
         interval_s=config.interval_s,
+        # corpus_v2 closed-edge supervision (default False = legacy behavior).
+        closed_edge_speed_zero=bool(getattr(config, "emit_closed_edge_speed_zero", False)),
     )
     tape = _RuntimeEventTape(
         scenario,

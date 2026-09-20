@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
 import time
@@ -165,6 +166,17 @@ def episode_config(
     else:
         event_count = 1 if event_type else 0
 
+    # corpus_v2 density/supervision policy, gated on QUANTA_CORPUS_V2=1 so every
+    # existing caller reproduces legacy behavior unless the v2 driver opts in
+    # (the env var propagates automatically to sharded worker processes):
+    #   * background departure gap 1.0-2.5 s (legacy 3.0-6.0 s) -> ~2.5x more
+    #     background probe vehicles per episode -> richer per-bucket speed
+    #     samples (observation missing fraction) and realized_traversal labels.
+    #   * emit_closed_edge_speed_zero=True -> closed-edge buckets become valid
+    #     speed-0 labels instead of missing rows (see CausalSumoLogger).
+    # Episode duration stays a caller argument (--duration-s 3600 for v2 gives
+    # 29 issue slots vs 9 at 2400 s; the loader derives issue times from data).
+    v2 = os.environ.get("QUANTA_CORPUS_V2") == "1"
     return DynamicEpisodeConfig(
         duration_s=duration_s,
         interval_s=60,
@@ -180,6 +192,9 @@ def episode_config(
         occupancy_noise=0.01 + ((local_index + map_index) % 3) * 0.005,
         seed=stable_seed(seed, 0x45504953, map_index, local_index, attempt),
         backend="sumo",
+        background_min_gap_s=1.0 if v2 else None,
+        background_max_gap_s=2.5 if v2 else None,
+        emit_closed_edge_speed_zero=v2,
     )
 
 

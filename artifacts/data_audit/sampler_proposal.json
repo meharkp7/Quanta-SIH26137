@@ -1,0 +1,45 @@
+{
+  "status": "PROPOSAL ONLY - trainer untouched; adopt in next run after review",
+  "measured_sample_episodes": 12,
+  "loss_weights_inverse_sqrt_coverage": {
+    "300s/speed_proxy": {
+      "valid": 12600,
+      "total": 331632,
+      "coverage": 0.037993920972644375,
+      "recommended_loss_weight": 0.9263509110593764
+    },
+    "300s/realized_traversal": {
+      "valid": 11765,
+      "total": 331632,
+      "coverage": 0.03547606986056834,
+      "recommended_loss_weight": 0.9586605141607011
+    },
+    "600s/speed_proxy": {
+      "valid": 11804,
+      "total": 331632,
+      "coverage": 0.03559367009215034,
+      "recommended_loss_weight": 0.9570755136043341
+    },
+    "600s/realized_traversal": {
+      "valid": 10416,
+      "total": 331632,
+      "coverage": 0.031408308004052685,
+      "recommended_loss_weight": 1.0188501645319485
+    },
+    "900s/speed_proxy": {
+      "valid": 10620,
+      "total": 331632,
+      "coverage": 0.032023447676943116,
+      "recommended_loss_weight": 1.0090171483100212
+    },
+    "900s/realized_traversal": {
+      "valid": 8467,
+      "total": 331632,
+      "coverage": 0.025531311815506344,
+      "recommended_loss_weight": 1.1300457483336186
+    }
+  },
+  "incident_window_fraction_of_valid_sampled": 4.372158097236796e-05,
+  "incident_recommendation": "route ~0.15 of each batch from incident-affected (edge,bucket) pairs OR scale incident-window loss by ~1000.0x capped at 8x; measured incident fraction=0.0000",
+  "traversal_recommendation": "log1p-transform or winsorize traversal targets at p99 before MSE (heavy right tail); see quality_report scaler section"
+}

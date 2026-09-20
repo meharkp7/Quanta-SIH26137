@@ -1,0 +1,19 @@
+{
+  "_comment": "Pre-registered map-disjoint train/validation/test split for corpus_v2, committed before generation. The first five zones keep their corpus_delhi order so maps 0-4 reproduce v1 demand exactly (same seed); val and test each hold TWO maps including one v1 map so density drift vs v1 stays measurable.",
+  "train": [
+    "connaught_place",
+    "chandni_chowk",
+    "karol_bagh",
+    "saket",
+    "hauz_khas",
+    "okhla"
+  ],
+  "validation": [
+    "dwarka_sector12",
+    "pitampura"
+  ],
+  "test": [
+    "nehru_place",
+    "model_town"
+  ]
+}

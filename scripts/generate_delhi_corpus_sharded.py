@@ -171,6 +171,7 @@ def generate_osm_corpus_sharded(
     seed: int = 26137,
     num_shards: int = 1,
     overwrite: bool = False,
+    split_spec: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     maps = len(zones)
     if maps < 5:
@@ -194,9 +195,38 @@ def generate_osm_corpus_sharded(
 
     split_maps = build_split_map_indices(maps)
     split_by_index: dict[int, str] = {}
-    for split_name, indices in split_maps.items():
-        for idx in indices:
-            split_by_index[idx] = split_name
+    if split_spec is not None:
+        # Pre-registered map-disjoint split (corpus_v2): explicit zone-name ->
+        # split assignment committed before generation, covering every zone
+        # exactly once. Lets small corpora have multi-zone val AND test maps,
+        # which the default 80/10/10 rule cannot provide below ~18 maps.
+        seen: dict[str, str] = {}
+        for split_name, names in split_spec.items():
+            if split_name not in ("train", "validation", "test"):
+                raise ValueError(f"split_spec has unknown split {split_name!r}")
+            for name in names:
+                if name in seen:
+                    raise ValueError(f"split_spec assigns zone {name!r} twice")
+                seen[name] = split_name
+        zone_index = {z.name: i for i, z in enumerate(zones)}
+        if set(seen) != set(zone_index):
+            raise ValueError(
+                f"split_spec must cover every zone exactly once; "
+                f"missing={sorted(set(zone_index) - set(seen))} "
+                f"unknown={sorted(set(seen) - set(zone_index))}"
+            )
+        for name, split_name in seen.items():
+            split_by_index[zone_index[name]] = split_name
+        split_maps = {
+            split_name: sorted(
+                idx for idx, sp in split_by_index.items() if sp == split_name
+            )
+            for split_name in ("train", "validation", "test")
+        }
+    else:
+        for split_name, indices in split_maps.items():
+            for idx in indices:
+                split_by_index[idx] = split_name
 
     shard_indices = partition_zones_round_robin(maps, num_shards)
 
@@ -340,6 +370,7 @@ def generate_osm_corpus_sharded(
         "failed_attempts": merged_failed_attempts,
         "num_shards": num_shards,
         "shard_zone_counts": [len(a) for a in shard_assignments],
+        "split_spec": split_spec,
         "orchestrator_wall_clock_s": orchestrator_elapsed,
         "sum_of_shard_wall_clock_s": sum(
             m.get("created_wall_clock_s", 0.0) for m in results.values()
@@ -376,12 +407,28 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--split-spec",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON file with a pre-registered map-disjoint split: "
+            '{"train": [zone...], "validation": [zone...], "test": [zone...]} '
+            "covering every zone exactly once. When omitted, the default "
+            "80/10/10 map-index rule is used."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     zones = load_zone_specs(args.zones_file)
+    split_spec = (
+        json.loads(args.split_spec.read_text(encoding="utf-8"))
+        if args.split_spec is not None
+        else None
+    )
 
     manifest = generate_osm_corpus_sharded(
         args.output,
@@ -391,6 +438,7 @@ def main() -> int:
         seed=args.seed,
         num_shards=args.shards,
         overwrite=args.overwrite,
+        split_spec=split_spec,
     )
 
     print(
