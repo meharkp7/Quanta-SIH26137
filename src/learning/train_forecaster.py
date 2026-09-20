@@ -126,6 +126,21 @@ def _supervision_report(dataset):
     return report
 
 
+def _global_edge_count(dataset) -> int:
+    """Max edge count across windows (maps have different E)."""
+    return max(len(window.edge_ids) for window in dataset.windows)
+
+
+def _pad_edge_axis(array: np.ndarray, width: int, *, fill_value) -> np.ndarray:
+    """Pad axis=1 (E) to `width`; exact for masked metrics (mask=False there)."""
+    pad = width - array.shape[1]
+    if pad <= 0:
+        return array
+    shape = [(0, 0)] * array.ndim
+    shape[1] = (0, pad)
+    return np.pad(array, shape, constant_values=fill_value)
+
+
 def _predict_dataset(
     model,
     dataset,
@@ -165,9 +180,27 @@ def _predict_dataset(
             if collect_outputs:
                 all_outputs.append(outputs)
 
-    prediction = np.concatenate(predictions, axis=0)
-    targets = np.concatenate(speed_targets, axis=0)
-    masks = np.concatenate(speed_masks, axis=0)
+    prediction = np.concatenate(
+        [
+            _pad_edge_axis(p, _global_edge_count(dataset), fill_value=0.0)
+            for p in predictions
+        ],
+        axis=0,
+    )
+    targets = np.concatenate(
+        [
+            _pad_edge_axis(t, _global_edge_count(dataset), fill_value=np.nan)
+            for t in speed_targets
+        ],
+        axis=0,
+    )
+    masks = np.concatenate(
+        [
+            _pad_edge_axis(m, _global_edge_count(dataset), fill_value=False)
+            for m in speed_masks
+        ],
+        axis=0,
+    )
 
     metrics = {}
     for horizon in range(prediction.shape[-1]):
@@ -271,7 +304,13 @@ def _breakdown_metrics(
         )
         batches.append(batch)
 
-    prediction = np.concatenate(predictions, axis=0)
+    prediction = np.concatenate(
+        [
+            _pad_edge_axis(p, _global_edge_count(dataset), fill_value=0.0)
+            for p in predictions
+        ],
+        axis=0,
+    )
     batch = _batch_from_windows(dataset.windows)
 
     groups = {"per_map": {}}
@@ -332,10 +371,20 @@ def _calibration_inputs(
         targets.append(batch.speed_targets)
         masks.append(batch.speed_target_mask)
 
+    width = _global_edge_count(dataset)
     return (
-        np.concatenate(predictions, axis=0),
-        np.concatenate(targets, axis=0),
-        np.concatenate(masks, axis=0),
+        np.concatenate(
+            [_pad_edge_axis(p, width, fill_value=0.0) for p in predictions],
+            axis=0,
+        ),
+        np.concatenate(
+            [_pad_edge_axis(t, width, fill_value=np.nan) for t in targets],
+            axis=0,
+        ),
+        np.concatenate(
+            [_pad_edge_axis(m, width, fill_value=False) for m in masks],
+            axis=0,
+        ),
     )
 
 
@@ -530,12 +579,18 @@ def train_forecaster(
                 name: value.detach().cpu().clone()
                 for name, value in model.state_dict().items()
             }
+            # Persist immediately: a later crash must not lose the best model.
+            torch.save(best_state, output_dir / "best_weights.pt")
 
     if best_state is None:
         raise RuntimeError("No model checkpoint was produced")
 
     model.load_state_dict(best_state)
 
+    torch.save(
+        model.state_dict(),
+        output_dir / "weights.pt",
+    )
     metrics = {}
     breakdowns = {}
 
@@ -645,10 +700,13 @@ def train_forecaster(
 
     cutoff = max(cutoff_values)
 
-    torch.save(
-        model.state_dict(),
-        output_dir / "weights.pt",
-    )
+    # weights.pt already saved from the best in-RAM state above; re-save here
+    # only if the file is missing (e.g. best_weights.pt recovery path).
+    if not (output_dir / "weights.pt").exists():
+        torch.save(
+            model.state_dict(),
+            output_dir / "weights.pt",
+        )
 
     shutil.copy2(
         pilot_dir / "corpus_manifest.json",
@@ -693,8 +751,9 @@ def train_forecaster(
         "loss": {
             "speed_weight": 1.0,
             "traversal_weight": 1.0,
-            "traversal_scale_s": 60.0,
-            "rationale": "Normalize traversal-time residuals to minute scale before multi-task aggregation.",
+            "traversal_log_space": True,
+            "traversal_scale_s": None,
+            "rationale": "Traversal optimized in log1p space (seconds) so it cannot numerically dominate the dimensionless speed-ratio objective.",
         },
         "supervision": supervision,
     }
@@ -720,6 +779,12 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=26137)
     parser.add_argument("--width", type=int, default=32)
     parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="mps" if torch.backends.mps.is_available() else "cpu",
+        help="Torch device for training (mps on Apple Silicon, cpu fallback).",
+    )
     args = parser.parse_args()
 
     print(
@@ -731,6 +796,7 @@ def main() -> int:
                 seed=args.seed,
                 width=args.width,
                 batch_size=args.batch_size,
+                device=args.device,
             ),
             indent=2,
         )
