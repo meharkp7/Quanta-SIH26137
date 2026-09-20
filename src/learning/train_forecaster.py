@@ -403,14 +403,45 @@ def train_forecaster(
     width: int = 32,
     device: str = "cpu",
     batch_size: int = 2,
+    lr: float = 2e-3,
+    weight_decay: float = 1e-4,
+    dropout: float = 0.1,
+    heads: int = 4,
+    layers: int = 2,
+    scheduler: str = "cosine",
+    patience: int = 25,
+    min_delta: float = 1e-4,
+    grad_clip: float = 1.0,
 ) -> dict:
-    """Train on Step-13 windows and write a reproducible artifact manifest."""
+    """Train on Step-13 windows and write a reproducible artifact manifest.
+
+    Early stopping halts when validation MAE fails to improve by ``min_delta``
+    for ``patience`` consecutive epochs (``patience=0`` disables it); the best
+    checkpoint is always retained. ``scheduler`` is one of
+    ``{"cosine", "plateau", "none"}``.
+    """
     if epochs <= 0:
         raise ValueError("epochs must be positive")
     if width <= 0:
         raise ValueError("width must be positive")
     if batch_size <= 0:
         raise ValueError("batch_size must be positive")
+    if not (0.0 < lr <= 1.0):
+        raise ValueError("lr must lie in (0, 1]")
+    if not (0.0 <= weight_decay <= 1.0):
+        raise ValueError("weight_decay must lie in [0, 1]")
+    if not (0.0 <= dropout < 1.0):
+        raise ValueError("dropout must lie in [0, 1)")
+    if heads <= 0 or layers <= 0:
+        raise ValueError("heads and layers must be positive")
+    if scheduler not in ("cosine", "plateau", "none"):
+        raise ValueError("scheduler must be cosine, plateau or none")
+    if patience < 0:
+        raise ValueError("patience cannot be negative")
+    if min_delta < 0.0:
+        raise ValueError("min_delta cannot be negative")
+    if grad_clip <= 0.0:
+        raise ValueError("grad_clip must be positive")
 
     seed_everything(seed)
 
@@ -462,16 +493,33 @@ def train_forecaster(
         flush=True,
     )
 
-    model = CausalGNNTransformer(width=width).to(device_obj)
+    model = CausalGNNTransformer(
+        width=width,
+        heads=heads,
+        layers=layers,
+        dropout=dropout,
+    ).to(device_obj)
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=2e-3,
-        weight_decay=1e-4,
+        lr=lr,
+        weight_decay=weight_decay,
     )
+    lr_scheduler = None
+    if scheduler == "cosine":
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=epochs
+        )
+    elif scheduler == "plateau":
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=10
+        )
 
     history = []
     best = float("inf")
     best_state = None
+    best_epoch = 0
+    epochs_without_improvement = 0
+    stopped_early = False
     rng = np.random.default_rng(seed)
 
     steps_per_epoch = (
@@ -517,7 +565,7 @@ def train_forecaster(
             losses["total"].backward()
             nn.utils.clip_grad_norm_(
                 model.parameters(),
-                1.0,
+                grad_clip,
             )
             optimizer.step()
 
@@ -557,6 +605,7 @@ def train_forecaster(
             "train_speed_loss": running_speed / max(count, 1),
             "train_traversal_loss": running_traversal / max(count, 1),
             "validation_speed_mae": val_mae,
+            "lr": optimizer.param_groups[0]["lr"],
             "validation_speed_coverage": {
                 horizon: val_metrics[horizon].get("label_coverage", 0.0)
                 for horizon in val_metrics
@@ -569,18 +618,39 @@ def train_forecaster(
             f"train={row['train_loss']:.6f} | "
             f"speed={row['train_speed_loss']:.6f} | "
             f"travel={row['train_traversal_loss']:.6f} | "
-            f"val_MAE={val_mae:.6f}",
+            f"val_MAE={val_mae:.6f} | "
+            f"lr={row['lr']:.2e}",
             flush=True,
         )
 
-        if val_mae < best:
+        if val_mae < best - min_delta:
             best = val_mae
+            best_epoch = epoch
+            epochs_without_improvement = 0
             best_state = {
                 name: value.detach().cpu().clone()
                 for name, value in model.state_dict().items()
             }
             # Persist immediately: a later crash must not lose the best model.
             torch.save(best_state, output_dir / "best_weights.pt")
+        else:
+            epochs_without_improvement += 1
+
+        if lr_scheduler is not None:
+            if scheduler == "plateau":
+                lr_scheduler.step(val_mae)
+            else:
+                lr_scheduler.step()
+
+        if patience and epochs_without_improvement >= patience:
+            stopped_early = True
+            print(
+                f"Early stopping at epoch {epoch}: no improvement "
+                f"for {patience} epochs (best val_MAE={best:.6f} "
+                f"at epoch {best_epoch}).",
+                flush=True,
+            )
+            break
 
     if best_state is None:
         raise RuntimeError("No model checkpoint was produced")
@@ -722,6 +792,26 @@ def train_forecaster(
         "architecture": model.config,
         "seed": seed,
         "device": str(device_obj),
+        "hyperparameters": {
+            "epochs_requested": epochs,
+            "epochs_run": len(history),
+            "lr": lr,
+            "weight_decay": weight_decay,
+            "dropout": dropout,
+            "heads": heads,
+            "layers": layers,
+            "scheduler": scheduler,
+            "grad_clip": grad_clip,
+            "batch_size": batch_size,
+        },
+        "early_stopping": {
+            "enabled": bool(patience),
+            "patience": patience,
+            "min_delta": min_delta,
+            "stopped_early": stopped_early,
+            "best_epoch": best_epoch,
+            "best_validation_mae": best,
+        },
         "training_cutoff_s": cutoff,
         "feature_schema": [
             "speed_ratio",
@@ -779,6 +869,25 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=26137)
     parser.add_argument("--width", type=int, default=32)
     parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument("--lr", type=float, default=2e-3)
+    parser.add_argument("--weight-decay", type=float, default=1e-4)
+    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--heads", type=int, default=4)
+    parser.add_argument("--layers", type=int, default=2)
+    parser.add_argument(
+        "--scheduler",
+        type=str,
+        default="cosine",
+        choices=("cosine", "plateau", "none"),
+    )
+    parser.add_argument(
+        "--patience",
+        type=int,
+        default=25,
+        help="Early-stopping patience in epochs (0 disables).",
+    )
+    parser.add_argument("--min-delta", type=float, default=1e-4)
+    parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument(
         "--device",
         type=str,
@@ -797,6 +906,15 @@ def main() -> int:
                 width=args.width,
                 batch_size=args.batch_size,
                 device=args.device,
+                lr=args.lr,
+                weight_decay=args.weight_decay,
+                dropout=args.dropout,
+                heads=args.heads,
+                layers=args.layers,
+                scheduler=args.scheduler,
+                patience=args.patience,
+                min_delta=args.min_delta,
+                grad_clip=args.grad_clip,
             ),
             indent=2,
         )
