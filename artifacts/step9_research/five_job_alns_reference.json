@@ -1,0 +1,55 @@
+{
+  "absolute_gap": 0.0,
+  "budget": {
+    "max_evaluations": 2000,
+    "time_limit_s": 5.0
+  },
+  "elapsed_s": 0.15525266700024076,
+  "evaluations": 2000,
+  "evaluator": "RouteEvaluator with distance + travel_time + waiting (same snapshot costs as MILP)",
+  "exact_reference_objective": 1575.0,
+  "feasible": true,
+  "fixture": "fixtures/step3/base/scenario.json",
+  "fleet": "fixed 2-vehicle fleet, no vehicle creation",
+  "iterations": 162,
+  "lower_bound": null,
+  "message": "ALNS completed within the declared budget",
+  "method": "alns",
+  "objective": 1575.0,
+  "operator_weights": {
+    "random_removal": 1.0291271111111113,
+    "related_removal": 1.0512000000000001,
+    "repair:greedy_insertion": 0.9949587692307693,
+    "repair:regret_insertion": 1.0511024761904764,
+    "worst_removal": 0.9906377142857143
+  },
+  "relative_gap": 0.0,
+  "removal_statistics": {
+    "random_removal": 59,
+    "related_removal": 56,
+    "worst_removal": 46
+  },
+  "repair_statistics": {
+    "greedy_insertion": 75,
+    "regret_insertion": 86
+  },
+  "route": {
+    "V1": [
+      "J1",
+      "J2"
+    ],
+    "V2": [
+      "J3",
+      "J4",
+      "J5"
+    ]
+  },
+  "seed": 0,
+  "validator_verdict": {
+    "evaluator_feasible": true,
+    "evaluator_objective": 1575.0,
+    "independent_validator_all_served": true,
+    "independent_validator_feasible": true
+  },
+  "wall_s": 0.15530708400001458
+}

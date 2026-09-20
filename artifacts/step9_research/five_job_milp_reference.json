@@ -1,6 +1,6 @@
 {
   "certified_optimum": true,
-  "elapsed_s": 0.06635991700022714,
+  "elapsed_s": 0.06554837499970745,
   "evaluator_feasible": true,
   "evaluator_objective": 1575.0,
   "lower_bound": 1575.0,

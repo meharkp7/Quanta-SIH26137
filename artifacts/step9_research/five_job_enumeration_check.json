@@ -1,0 +1,53 @@
+{
+  "enumeration": {
+    "elapsed_s": 0.29606216700085497,
+    "evaluator_semantics": "RouteEvaluator",
+    "exact": true,
+    "feasible_candidates": 175,
+    "objective": 1575.0,
+    "total_candidates": 3840,
+    "total_distance_m": 1400.0,
+    "total_service_time_s": 55.0,
+    "total_travel_time_s": 140.0,
+    "total_waiting_time_s": 35.0,
+    "vehicle_routes": {
+      "V1": [
+        "J3",
+        "J4",
+        "J5"
+      ],
+      "V2": [
+        "J1",
+        "J2"
+      ]
+    }
+  },
+  "evaluator_config": {
+    "default_start_time_s": 0.0,
+    "distance_weight": 1.0,
+    "service_time_weight": 0.0,
+    "travel_time_weight": 1.0,
+    "waiting_time_weight": 1.0
+  },
+  "fixture": "fixtures/step3/base/scenario.json",
+  "match": true,
+  "milp": {
+    "certified_optimum": true,
+    "evaluator_objective": 1575.0,
+    "objective": 1575.0,
+    "route": {
+      "V1": [
+        "J1",
+        "J2"
+      ],
+      "V2": [
+        "J3",
+        "J4",
+        "J5"
+      ]
+    },
+    "status": "optimal"
+  },
+  "objective_difference": 0.0,
+  "tolerance": 1e-06
+}
