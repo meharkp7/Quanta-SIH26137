@@ -202,6 +202,8 @@ def generate_osm_corpus_sharded(
         # which the default 80/10/10 rule cannot provide below ~18 maps.
         seen: dict[str, str] = {}
         for split_name, names in split_spec.items():
+            if split_name.startswith("_"):
+                continue  # metadata (e.g. "_comment"); not a split assignment
             if split_name not in ("train", "validation", "test"):
                 raise ValueError(f"split_spec has unknown split {split_name!r}")
             for name in names:
