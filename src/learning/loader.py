@@ -215,10 +215,16 @@ def load_pilot_windows(
             f"({cache})",
             flush=True,
         )
-    # Fit only training, with invalid entries restored to NaN (zero is real data).
-    train = datasets["train"].batch()
-    scaler = FeatureScaler.fit(np.where(train.feature_mask, train.features, np.nan), FEATURE_NAMES)
-    return {name: WindowDataset(ds.windows, scaler=scaler) for name,ds in datasets.items()}
+    # Streaming scaler fit on training windows only: never materializes the
+    # dense [B, L, Emax, F] batch (tens of GB on thousand-episode corpora).
+    # Invalid entries are restored to NaN first (zero is real data).
+    scaler = FeatureScaler.fit_windows(
+        datasets["train"].windows, FEATURE_NAMES
+    )
+    return {
+        name: WindowDataset(ds.windows, scaler=scaler)
+        for name, ds in datasets.items()
+    }
 
 def write_fixture_tensors(output_dir: Path, dataset: WindowDataset) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
