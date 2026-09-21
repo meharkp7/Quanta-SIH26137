@@ -125,21 +125,34 @@ def load_pilot_windows(
         scenarios[sid] = Scenario.model_validate_json((root / relative_path).read_text(encoding="utf-8"))
     datasets, graph_owners = {}, {}
     cache_hits, cache_misses = 0, 0
+    import concurrent.futures
+
     for name in names:
-        windows = []
+        # Manifest parsing is cheap and stays serial (split validation,
+        # leakage checks). Only the heavy CSV->window build parallelizes.
+        jobs = []
         for episode_id in split[name]:
             folder = root / "episodes" / episode_id
-            manifest = json.loads((folder / "episode_manifest.json").read_text(encoding="utf-8"))
+            manifest = json.loads(
+                (folder / "episode_manifest.json").read_text(encoding="utf-8")
+            )
             sc = scenarios.get(manifest["scenario_id"], scenario)
             if sc is None:
                 raise ValueError("No scenario file for episode")
             if manifest.get("split") != name:
-                raise ValueError("Episode manifest disagrees with split assignment")
+                raise ValueError(
+                    "Episode manifest disagrees with split assignment"
+                )
             if split.get("map_disjoint"):
                 key = split["map_fingerprints"][sc.scenario_id]
                 if key in graph_owners and graph_owners[key] != name:
                     raise ValueError("Base map leakage across splits")
                 graph_owners[key] = name
+            jobs.append((episode_id, sc))
+
+        def _build(job):
+            episode_id, sc = job
+            folder = root / "episodes" / episode_id
             episode_windows = None
             fingerprint = ""
             if cache is not None:
@@ -147,16 +160,23 @@ def load_pilot_windows(
                 episode_windows = load_episode_windows(
                     cache, episode_id, fingerprint
                 )
-            if episode_windows is None:
+            hit = episode_windows is not None
+            if not hit:
                 episode_windows = build_episode_windows(folder, sc, split=name)
                 if cache is not None:
                     save_episode_windows(
                         cache, episode_id, fingerprint, episode_windows
                     )
-                cache_misses += 1
-            else:
-                cache_hits += 1
-            windows.extend(episode_windows)
+            return episode_windows, hit
+
+        windows = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            for episode_windows, hit in pool.map(_build, jobs):
+                if hit:
+                    cache_hits += 1
+                else:
+                    cache_misses += 1
+                windows.extend(episode_windows)
         datasets[name] = WindowDataset(windows)
     if cache is not None:
         print(
