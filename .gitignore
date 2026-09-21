@@ -58,3 +58,15 @@ artifacts/step12_sumo_windows/
 # Cache folders
 /cache/
 
+
+# Generated corpora, checkpoints, weights: never commit (LFS discipline)
+artifacts/corpus_v2/
+artifacts/corpus_v2_*/
+artifacts/forecaster_*/
+artifacts/delhi_2280/
+corpus_delhi/
+generated_dataset/
+dynamic_pilot/
+delhi_pilot_out/
+*.pt
+*.pth
