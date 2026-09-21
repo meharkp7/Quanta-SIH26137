@@ -93,8 +93,27 @@ class WindowDataset:
             tuple(w.scenario_id for w in selected), tuple(w.graph_version for w in selected),
             tuple(w.split for w in selected))
 
-def load_pilot_windows(pilot_dir: Path, scenario: Scenario | None = None):
+def load_pilot_windows(
+    pilot_dir: Path,
+    scenario: Scenario | None = None,
+    *,
+    cache_dir: Path | str | None = None,
+) -> dict:
+    """Load causal windows, optionally via the per-episode NPZ window cache.
+
+    ``cache_dir`` (e.g. ``<corpus>/.window_cache``) turns repeat loads from
+    ~1 h into minutes on thousand-episode corpora. Cached windows are
+    validated by source-file fingerprint; misses and corrupt entries rebuild
+    transparently. The scaler is always fit fresh on training data.
+    """
+    from src.learning.window_cache import (
+        episode_fingerprint,
+        load_episode_windows,
+        save_episode_windows,
+    )
+
     root = Path(pilot_dir)
+    cache = Path(cache_dir) if cache_dir is not None else None
     split = json.loads((root / "corpus_manifest.json").read_text(encoding="utf-8"))
     names = ("train", "validation", "test")
     validate_manifest_splits(split)
@@ -105,6 +124,7 @@ def load_pilot_windows(pilot_dir: Path, scenario: Scenario | None = None):
     for sid, relative_path in split.get("scenario_files", {}).items():
         scenarios[sid] = Scenario.model_validate_json((root / relative_path).read_text(encoding="utf-8"))
     datasets, graph_owners = {}, {}
+    cache_hits, cache_misses = 0, 0
     for name in names:
         windows = []
         for episode_id in split[name]:
@@ -120,8 +140,30 @@ def load_pilot_windows(pilot_dir: Path, scenario: Scenario | None = None):
                 if key in graph_owners and graph_owners[key] != name:
                     raise ValueError("Base map leakage across splits")
                 graph_owners[key] = name
-            windows.extend(build_episode_windows(folder, sc, split=name))
+            episode_windows = None
+            fingerprint = ""
+            if cache is not None:
+                fingerprint = episode_fingerprint(folder)
+                episode_windows = load_episode_windows(
+                    cache, episode_id, fingerprint
+                )
+            if episode_windows is None:
+                episode_windows = build_episode_windows(folder, sc, split=name)
+                if cache is not None:
+                    save_episode_windows(
+                        cache, episode_id, fingerprint, episode_windows
+                    )
+                cache_misses += 1
+            else:
+                cache_hits += 1
+            windows.extend(episode_windows)
         datasets[name] = WindowDataset(windows)
+    if cache is not None:
+        print(
+            f"Window cache: {cache_hits} hits, {cache_misses} misses "
+            f"({cache})",
+            flush=True,
+        )
     # Fit only training, with invalid entries restored to NaN (zero is real data).
     train = datasets["train"].batch()
     scaler = FeatureScaler.fit(np.where(train.feature_mask, train.features, np.nan), FEATURE_NAMES)

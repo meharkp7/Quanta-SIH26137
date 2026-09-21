@@ -52,6 +52,7 @@ def run_sweep(
     seed: int,
     device: str,
     batch_size: int,
+    window_cache: str | None = None,
 ) -> dict:
     seed_everything(seed)
     output_base.mkdir(parents=True, exist_ok=True)
@@ -69,6 +70,7 @@ def run_sweep(
             batch_size=batch_size,
             patience=0,  # fixed screening budget; selection by best val MAE
             final_eval=False,  # skip expensive full-corpus eval in screening
+            window_cache=window_cache,
             **config,
         )
         curve = json.loads((out / "training_curve.json").read_text())
@@ -109,6 +111,12 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=26137)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument(
+        "--window-cache",
+        type=str,
+        default=None,
+        help="Per-episode NPZ window cache dir shared across configs.",
+    )
+    parser.add_argument(
         "--device",
         type=str,
         default="mps" if torch.backends.mps.is_available() else "cpu",
@@ -131,6 +139,7 @@ def main() -> int:
                 seed=args.seed,
                 device=args.device,
                 batch_size=args.batch_size,
+                window_cache=args.window_cache,
             ),
             indent=2,
         )

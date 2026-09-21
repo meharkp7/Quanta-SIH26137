@@ -33,8 +33,9 @@ fi
 
 echo "[autotrain] gate PASS -- hyperparameter screening (3 configs x 2 epochs, MPS)"
 export PYTHONPATH="${PYTHONPATH:-.}"
+CACHE_DIR="artifacts/corpus_v2/.window_cache"
 python3 -u scripts/sweep_forecaster.py artifacts/corpus_v2 "${SWEEP}" \
-  --epochs 2 --device mps \
+  --epochs 2 --device mps --window-cache "${CACHE_DIR}" \
   --configs '[{"width": 64, "lr": 0.001, "weight_decay": 0.0001, "dropout": 0.15}, {"width": 64, "lr": 0.002, "weight_decay": 0.0001, "dropout": 0.1}, {"width": 32, "lr": 0.001, "weight_decay": 0.0003, "dropout": 0.2}]' \
   > "${SWEEP}.log" 2>&1
 echo "SWEEP_EXIT:$?" >> "${SWEEP}.log"
@@ -57,11 +58,13 @@ echo "[autotrain] sweep winner flags: ${WINNER_CFG}"
 mkdir -p "${OUT}"
 echo "[autotrain] starting full 500-epoch joint GNN-Transformer training on MPS"
 # shellcheck disable=SC2086
+CACHE_DIR="${CACHE_DIR:-artifacts/corpus_v2/.window_cache}"
 python3 -u -m src.learning.train_forecaster artifacts/corpus_v2 "${OUT}" \
   --epochs 500 --batch-size 2 --device mps \
   ${WINNER_CFG} \
   --heads 4 --layers 2 --scheduler cosine \
   --patience 30 --min-delta 1e-4 --grad-clip 1.0 \
+  --window-cache "${CACHE_DIR}" \
   > "${OUT}/training.log" 2>&1
 echo "TRAIN_EXIT:$?" >> "${OUT}/training.log"
 echo "[autotrain] done"

@@ -413,6 +413,7 @@ def train_forecaster(
     min_delta: float = 1e-4,
     grad_clip: float = 1.0,
     final_eval: bool = True,
+    window_cache: str | None = None,
 ) -> dict:
     """Train on Step-13 windows and write a reproducible artifact manifest.
 
@@ -478,7 +479,7 @@ def train_forecaster(
         f"Loading Step-13 windows from {pilot_dir}...",
         flush=True,
     )
-    datasets = load_pilot_windows(pilot_dir)
+    datasets = load_pilot_windows(pilot_dir, cache_dir=window_cache)
 
     train_windows = len(datasets["train"])
     validation_windows = len(datasets["validation"])
@@ -848,6 +849,7 @@ def train_forecaster(
             "scheduler": scheduler,
             "grad_clip": grad_clip,
             "batch_size": batch_size,
+            "window_cache": window_cache,
         },
         "early_stopping": {
             "enabled": bool(patience),
@@ -939,6 +941,12 @@ def main() -> int:
         help="Screening mode: skip full-corpus eval/baselines/calibration.",
     )
     parser.add_argument(
+        "--window-cache",
+        type=str,
+        default=None,
+        help="Per-episode NPZ window cache dir (repeat loads in minutes).",
+    )
+    parser.add_argument(
         "--device",
         type=str,
         default="mps" if torch.backends.mps.is_available() else "cpu",
@@ -966,6 +974,7 @@ def main() -> int:
                 min_delta=args.min_delta,
                 grad_clip=args.grad_clip,
                 final_eval=not args.no_final_eval,
+                window_cache=args.window_cache,
             ),
             indent=2,
         )
