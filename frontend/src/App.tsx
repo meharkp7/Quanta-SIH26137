@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Activity, AlertTriangle, ArrowRight, Bot, CarFront, CheckCircle2, ChevronRight, CircleAlert, Gauge, Layers3, MapPinned, Minus, Pause, Play, Route, ShieldCheck, Sparkles, TrafficCone, TrendingDown, TrendingUp, Trophy, X } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Bot, CarFront, CheckCircle2, ChevronRight, CircleAlert, Gauge, Layers3, MapPinned, Minus, Pause, Play, Route, ScrollText, ShieldCheck, Sparkles, Square, TrafficCone, TrendingDown, TrendingUp, Trophy, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { api, Evidence, DrlDemo, Evaluation, Graph, ReplayFrame, ReplayResult, ScenarioSummary, SolveResult, postJson } from "@/api";
+import { api, CompareResult, Evidence, DrlDemo, Evaluation, Graph, ReplayFrame, ReplayResult, ScenarioSummary, SolveResult, Story, StoryStep, SOLVE_TIMEOUT_MS, postJson } from "@/api";
 import { GeoMap, isGeoGraph, speedBandColor } from "@/GeoMap";
 import { useCountUp, useInView, usePrefersReducedMotion } from "@/hooks";
 
@@ -32,6 +32,16 @@ function App() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("control");
   const [evidence, setEvidence] = useState<Evidence | null>(null);
+  const [compareResult, setCompareResult] = useState<CompareResult | null>(null);
+  const [story, setStory] = useState<Story | null>(null);
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [stepStatus, setStepStatus] = useState<Record<string, "pending" | "running" | "done" | "error">>({});
+  const [autoPlaying, setAutoPlaying] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
+  const solveRef = useRef<SolveResult | null>(null);
+  solveRef.current = solve;
+  const autoAbortRef = useRef(false);
+  const stepAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     Promise.all([api<{ scenarios: ScenarioSummary[] }>("/api/scenarios"), api<Graph>(`/api/scenarios/${scenarioId}`)])
@@ -61,6 +71,7 @@ function App() {
 
   const activeFrame = replay[frame];
   const activeEdges = useMemo(() => new Set(solve?.evaluation.vehicles.flatMap((vehicle) => vehicle.edge_ids) || []), [solve]);
+  const prevEdges = useMemo(() => new Set(previousSolve?.evaluation.vehicles.flatMap((vehicle) => vehicle.edge_ids) || []), [previousSolve]);
 
   async function runSolve() {
     setBusy("solve"); setError("");
@@ -68,7 +79,7 @@ function App() {
       // Large real-city graphs solve with a smaller budget so the UI never hangs;
       // the backend enforces the same cap and reports it as budget_note.
       const large = (graph?.nodes.length || 0) > 100;
-      const result = await postJson<SolveResult>("/api/solve", { scenario_id: scenarioId, method, particles: large ? 6 : 12, evaluations: large ? 20 : 40, seed: 7, closed_edge_ids: closed });
+      const result = await postJson<SolveResult>("/api/solve", { scenario_id: scenarioId, method, particles: large ? 6 : 12, evaluations: large ? 20 : 40, seed: 7, closed_edge_ids: closed }, SOLVE_TIMEOUT_MS);
       setPreviousSolve(solve);
       setSolve(result);
     } catch (err) { setError((err as Error).message); } finally { setBusy(""); }
@@ -76,8 +87,93 @@ function App() {
 
   async function runReplay() {
     setBusy("replay"); setError("");
-    try { const result = await postJson<ReplayResult>("/api/sumo/replay", { scenario_id: scenarioId, plan: solve?.plan || null, closed_edge_ids: closed }); setReplay(result.frames || []); setReplayMeta(result); setFrame(0); setIsPlaying(true); }
+    try { const result = await postJson<ReplayResult>("/api/sumo/replay", { scenario_id: scenarioId, plan: solve?.plan || null, closed_edge_ids: closed }, SOLVE_TIMEOUT_MS); setReplay(result.frames || []); setReplayMeta(result); setFrame(0); setIsPlaying(true); }
     catch (err) { setError((err as Error).message); } finally { setBusy(""); }
+  }
+
+  async function openStory() {
+    setStoryOpen(true);
+    if (story) return;
+    try {
+      const next = await api<Story>("/api/demo/story", undefined, SOLVE_TIMEOUT_MS);
+      setStory(next);
+      setStepStatus(Object.fromEntries(next.steps.map((s) => [s.id, "pending"])));
+    } catch (err) { setError((err as Error).message); }
+  }
+
+  function applyStoryResult(step: StoryStep, payload: unknown, params: Record<string, unknown>) {
+    const endpoint = step.action?.endpoint;
+    if (endpoint === "/api/solve") {
+      const result = payload as SolveResult;
+      setPreviousSolve(solveRef.current);
+      solveRef.current = result;
+      setSolve(result);
+      if (typeof params.scenario_id === "string") setScenarioId(params.scenario_id);
+      if (Array.isArray(params.closed_edge_ids)) setClosed(params.closed_edge_ids as string[]);
+    } else if (endpoint === "/api/sumo/replay") {
+      const result = payload as ReplayResult;
+      setReplay(result.frames || []);
+      setReplayMeta(result);
+      setFrame(0);
+      setIsPlaying(!reducedMotion);
+      setActiveTab("control");
+    } else if (endpoint === "/api/compare") {
+      setCompareResult(payload as CompareResult);
+    } else if (endpoint === "/api/evidence") {
+      setEvidence(payload as Evidence);
+      setActiveTab("evidence");
+    }
+  }
+
+  async function runStoryStep(step: StoryStep): Promise<boolean> {
+    if (!step.action || stepStatus[step.id] === "running") return false;
+    autoAbortRef.current = false;
+    setStepStatus((s) => ({ ...s, [step.id]: "running" }));
+    setError("");
+    const controller = new AbortController();
+    stepAbortRef.current = controller;
+    try {
+      const { http_method, endpoint, params } = step.action;
+      const payload = http_method === "GET"
+        ? await api<unknown>(endpoint, { signal: controller.signal }, SOLVE_TIMEOUT_MS)
+        : await postJson<unknown>(endpoint, params, SOLVE_TIMEOUT_MS, controller.signal);
+      applyStoryResult(step, payload, params);
+      setStepStatus((s) => ({ ...s, [step.id]: "done" }));
+      return true;
+    } catch (err) {
+      if (autoAbortRef.current) {
+        setStepStatus((s) => ({ ...s, [step.id]: "pending" }));
+      } else {
+        setStepStatus((s) => ({ ...s, [step.id]: "error" }));
+        setError((err as Error).message);
+      }
+      return false;
+    } finally {
+      stepAbortRef.current = null;
+    }
+  }
+
+  async function autoPlayStory() {
+    if (!story || autoPlaying) return;
+    autoAbortRef.current = false;
+    setAutoPlaying(true);
+    setActiveTab("control");
+    for (const step of story.steps) {
+      if (autoAbortRef.current) break;
+      if (step.action?.endpoint === "/api/solve" && typeof step.action.params.scenario_id === "string") {
+        setScenarioId(step.action.params.scenario_id as string);
+      }
+      const ok = await runStoryStep(step);
+      if (!ok || autoAbortRef.current) break;
+    }
+    setActiveTab("control");
+    setAutoPlaying(false);
+  }
+
+  function abortStory() {
+    autoAbortRef.current = true;
+    stepAbortRef.current?.abort();
+    setAutoPlaying(false);
   }
 
   function toggleReplay() { if (!replay.length) { void runReplay(); return; } setIsPlaying((value) => !value); }
@@ -111,7 +207,7 @@ function App() {
         <div className="headline-row reveal" style={{ "--d": "60ms" } as CSSProperties}><div><h1>See the decision.<br /><em>Trust the route.</em></h1><p className="lede">Quanta turns traffic disruption into a validated delivery plan in seconds.</p></div><div className="step-rail"><Step label="Observe" active /><Step label="Predict" /><Step label="Replan" /><Step label="Prove" /></div></div>
         <Card className="map-card reveal lift" style={{ "--d": "120ms" } as CSSProperties}>
           <CardHeader><div><CardTitle><MapPinned size={17} /> City operations map</CardTitle><CardDescription>Directed roads, delivery fleet, and the route selected by the optimizer.</CardDescription></div><Badge key={closed.length ? `closed-${closed.length}` : "clear"} variant={closed.length ? "warning" : "success"} className="badge-pulse">{closed.length ? `${closed.length} ROAD CLOSURE` : "NETWORK CLEAR"}</Badge></CardHeader>
-          <CardContent><NetworkMap graph={graph} routeEdges={activeEdges} closed={replay.length ? (activeFrame?.closed || []) : closed} movers={activeFrame?.vehicles || []} replayPct={replay.length ? ((frame + 1) / replay.length) * 100 : 0} />{solve?.budget_note && <p className="small-copy budget-note">{solve.budget_note}</p>}<div className="replay-bar"><span className="replay-time">{activeFrame ? `t = ${activeFrame.t.toFixed(0)}s` : "No replay loaded"}</span><input aria-label="SUMO replay timeline" type="range" min="0" max={Math.max(0, replay.length - 1)} value={frame} onChange={(event) => { setIsPlaying(false); setFrame(Number(event.target.value)); }} disabled={!replay.length} /><span className="replay-count">{replay.length ? `${frame + 1} / ${replay.length}` : "—"}</span></div><div className="replay-sub"><button className="replay-toggle" onClick={toggleReplay} disabled={busy === "replay"} aria-label={isPlaying ? "Pause replay" : "Play replay"}>{isPlaying ? <Pause size={13} /> : <Play size={13} />}</button><div className="speed-ctl" role="group" aria-label="Playback speed">{SPEEDS.map((option) => <button key={option} className={speed === option ? "speed-active" : ""} onClick={() => setSpeed(option)}>{option}x</button>)}</div><span className="replay-vehicles">{activeFrame ? `${activeFrame.vehicles.length} vehicles` : "0 vehicles"}</span><span className="replay-hint">Space to play / pause</span></div>{replayMeta?.incidents?.length ? <div className="incident-banner" role="status"><TrafficCone size={14} /><span>{replayMeta.incidents.map((i) => `${i.edge_id} closes at t=${i.trigger_time_s.toFixed(0)}s`).join(" · ")}</span><small>Enforced in SUMO — new entry forbidden, vehicles on-link clear it</small></div> : null}</CardContent>
+          <CardContent><NetworkMap graph={graph} routeEdges={activeEdges} previousRouteEdges={prevEdges} closed={replay.length ? (activeFrame?.closed || []) : closed} movers={activeFrame?.vehicles || []} replayPct={replay.length ? ((frame + 1) / replay.length) * 100 : 0} incidents={replayMeta?.incidents} scenarioId={scenarioId} />{solve?.budget_note && <p className="small-copy budget-note">{solve.budget_note}</p>}{solve?.cached && <p className="small-copy budget-note">Served from the in-memory solve cache — identical repeat solves return instantly.</p>}<div className="replay-bar"><span className="replay-time">{activeFrame ? `t = ${activeFrame.t.toFixed(0)}s` : "No replay loaded"}</span><input aria-label="SUMO replay timeline" type="range" min="0" max={Math.max(0, replay.length - 1)} value={frame} onChange={(event) => { setIsPlaying(false); setFrame(Number(event.target.value)); }} disabled={!replay.length} /><span className="replay-count">{replay.length ? `${frame + 1} / ${replay.length}` : "—"}</span></div><div className="replay-sub"><button className="replay-toggle" onClick={toggleReplay} disabled={busy === "replay"} aria-label={isPlaying ? "Pause replay" : "Play replay"}>{isPlaying ? <Pause size={13} /> : <Play size={13} />}</button><div className="speed-ctl" role="group" aria-label="Playback speed">{SPEEDS.map((option) => <button key={option} className={speed === option ? "speed-active" : ""} onClick={() => setSpeed(option)}>{option}x</button>)}</div><span className="replay-vehicles">{activeFrame ? `${activeFrame.vehicles.length} vehicles` : "0 vehicles"}</span><span className="replay-hint">Space to play / pause</span></div>{replayMeta?.incidents?.length ? <div className="incident-banner" role="status"><TrafficCone size={14} /><span>{replayMeta.incidents.map((i) => `${i.edge_id} closes at t=${i.trigger_time_s.toFixed(0)}s`).join(" · ")}</span><small>Enforced in SUMO — new entry forbidden, vehicles on-link clear it</small></div> : null}</CardContent>
         </Card>
         <div className="kpi-grid"><CountKpi icon={<Gauge />} label="Travel time" value={solve ? solve.evaluation.time_s : null} format={(n) => `${n.toFixed(0)} s`} delay="160ms" /><CountKpi icon={<Route />} label="Distance" value={solve ? solve.evaluation.distance_m / 1000 : null} format={(n) => `${n.toFixed(2)} km`} delay="220ms" /><Kpi icon={<CarFront />} label="Completed delivery" value={solve ? `${solve.evaluation.vehicles.reduce((sum, v) => sum + v.order.length, 0)} / ${graph?.requests.length || 5}` : "—"} accent={solve?.evaluation.all_served ? "good" : ""} delay="280ms" /><CountKpi icon={<Activity />} label="Replanning latency" value={solve ? solve.elapsed_s : null} format={(n) => `${n.toFixed(2)} s`} delay="340ms" /></div>
       </section>
@@ -125,11 +221,12 @@ function App() {
               <optgroup label="City fixtures">{fixtures.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</optgroup>
               {delhi.length > 0 && <optgroup label="Real Delhi maps">{delhi.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</optgroup>}
             </>);
-          })()}</select></Field><Field label="Optimizer"><select value={method} onChange={(e) => setMethod(e.target.value)}><option value="qpso">QPSO · quantum-inspired</option><option value="pso">PSO · classical comparator</option><option value="alns">ALNS · adaptive heuristic</option><option value="constructive">Constructive baseline</option></select></Field><Field label="Incident"><select value={closed[0] || ""} onChange={(e) => setClosed(e.target.value ? [e.target.value] : [])}><option value="">No active incident</option>{graph?.edges.map((edge) => <option key={edge.id} value={edge.id}>{edge.id} · {edge.from} → {edge.to}</option>)}</select></Field><div className="button-stack"><Button size="lg" onClick={runSolve} disabled={!!busy}><Sparkles size={16} /> {busy === "solve" ? "Solving…" : "Solve & validate"}</Button><Button size="lg" variant="outline" onClick={toggleReplay} disabled={busy === "replay"}>{isPlaying ? <Pause size={16} /> : <Play size={16} />} {busy === "replay" ? "Loading SUMO…" : replay.length ? (isPlaying ? "Pause SUMO replay" : "Resume SUMO replay") : "Load SUMO replay"}</Button></div></CardContent></Card>
+          })()}</select></Field><Field label="Optimizer"><select value={method} onChange={(e) => setMethod(e.target.value)}><option value="qpso">QPSO · quantum-inspired</option><option value="pso">PSO · classical comparator</option><option value="alns">ALNS · adaptive heuristic</option><option value="constructive">Constructive baseline</option></select></Field><Field label="Incident"><select value={closed[0] || ""} onChange={(e) => setClosed(e.target.value ? [e.target.value] : [])}><option value="">No active incident</option>{graph?.edges.map((edge) => <option key={edge.id} value={edge.id}>{edge.id} · {edge.from} → {edge.to}</option>)}</select></Field><div className="button-stack"><Button size="lg" onClick={runSolve} disabled={!!busy}><Sparkles size={16} /> {busy === "solve" ? "Solving…" : "Solve & validate"}</Button><Button size="lg" variant="outline" onClick={toggleReplay} disabled={busy === "replay"}>{isPlaying ? <Pause size={16} /> : <Play size={16} />} {busy === "replay" ? "Loading SUMO…" : replay.length ? (isPlaying ? "Pause SUMO replay" : "Resume SUMO replay") : "Load SUMO replay"}</Button><Button size="lg" variant="outline" onClick={openStory}><ScrollText size={16} /> Guided demo</Button></div></CardContent></Card>
         <Card className="why-card reveal lift" style={{ "--d": "240ms" } as CSSProperties}><CardHeader><CardTitle><Bot size={17} /> Why did it choose this?</CardTitle></CardHeader><CardContent>{solve ? <div className="decision-list"><Decision icon={<TrafficCone />} title={closed.length ? "Closure-aware" : "Traffic-aware"} body={closed.length ? "The blocked road was removed from legal route search." : "The solver used directed road time and service windows."} /><Decision icon={<ShieldCheck />} title="Validator-first" body={solve.evaluation.feasible ? "Every vehicle, customer, time window, and depot return passed." : "The independent validator found a constraint issue."} /><Decision icon={<Activity />} title="Search trace" body={`${solve.method} evaluated ${solve.evaluations || "multiple"} candidate plans.`} /></div> : <div className="empty-explain"><Bot size={30} /><p>Run a scenario to see the reasoning chain here.</p></div>}</CardContent></Card>
       </aside>
       <section className="bottom-grid"><CompareStrip current={solve} previous={previousSolve} /><Card className="reveal lift" style={{ "--d": "60ms" } as CSSProperties}><CardHeader><CardTitle>Route result</CardTitle><CardDescription>The exact customer order and road path returned by the backend.</CardDescription></CardHeader><CardContent><RouteTable result={solve} />{solve && <><Separator /><div className="route-subhead">Delivery timeline</div><VehicleGantt result={solve} /><div className="route-subhead">Validator report</div><ViolationsPanel evaluation={solve.evaluation} /></>}</CardContent></Card><Card className="reveal lift" style={{ "--d": "120ms" } as CSSProperties}><CardHeader><CardTitle>Convergence</CardTitle><CardDescription>Lower objective is better. This is the optimizer’s actual evaluation trace.</CardDescription></CardHeader><CardContent><Trace values={solve?.trace?.best || []} diversity={solve?.trace?.diversity} traceKey={solve ? `${solve.method}-${solve.evaluations || 0}-${(solve.trace?.best || []).length}` : "empty"} /></CardContent></Card><Card className="timeline-card reveal" style={{ "--d": "180ms" } as CSSProperties}><CardHeader><CardTitle>What happened</CardTitle><CardDescription>A short audit trail for the current run.</CardDescription></CardHeader><CardContent><Timeline solve={solve} replay={replay} /></CardContent></Card></section>
-    </main> : activeTab === "forecast" ? <ForecastTab evidence={evidence} graph={graph} /> : activeTab === "replanning" ? <ReplanningTab current={solve} previous={previousSolve} /> : <EvidenceTab evidence={evidence} />}
+    </main> : activeTab === "forecast" ? <ForecastTab evidence={evidence} graph={graph} /> : activeTab === "replanning" ? <ReplanningTab current={solve} previous={previousSolve} compare={compareResult} /> : <EvidenceTab evidence={evidence} />}
+    {storyOpen && <StoryPanel story={story} status={stepStatus} autoPlaying={autoPlaying} onRun={runStoryStep} onAutoPlay={autoPlayStory} onAbort={abortStory} onClose={() => { abortStory(); setStoryOpen(false); }} compare={compareResult} current={solve} />}
   </div>;
 }
 
@@ -157,11 +254,71 @@ function ForecastTab({ evidence, graph }: { evidence: Evidence | null; graph: Gr
         })}</div> : <div className="road-forecast-list"><div className="skeleton skeleton-row" /><div className="skeleton skeleton-row" /><div className="skeleton skeleton-row" /></div>}{graph && isGeoGraph(graph) ? <p className="small-copy">Free-flow speed profile from OSM speed limits (green ≥80% of network max, red &lt;40%). This is the static network profile, not a neural prediction — neural road predictions are measured offline in the evidence artifact.</p> : <p className="small-copy">This is the live network profile used by the planner. Neural road predictions are measured offline in the evidence artifact and are not presented here as fake live values.</p>}</CardContent></Card><Card className="reveal lift" style={{ "--d": "260ms" } as CSSProperties}><CardHeader><CardTitle>Uncertainty contract</CardTitle><CardDescription>Versioned forecast metadata for planner integration.</CardDescription></CardHeader><CardContent><div className="compare-row"><span>Forecast version</span><strong>forecaster_v1</strong></div><div className="compare-row"><span>Issue time</span><strong>Per forecast request</strong></div><div className="compare-row"><span>Held-out coverage</span><strong className={coverage && coverage >= 0.8 ? "good-text" : "warning-text"}>{coverage == null ? "Unavailable" : `${(coverage * 100).toFixed(1)}%`}</strong></div><Separator /><p className="small-copy">Known closures remain hard constraints. Beyond the served horizon, the planner uses the declared current/time-of-day extension.</p></CardContent></Card></div></main>
 }
 
-function ReplanningTab({ current, previous }: { current: SolveResult | null; previous: SolveResult | null }) {
+function ReplanningTab({ current, previous, compare }: { current: SolveResult | null; previous: SolveResult | null; compare: CompareResult | null }) {
   const planEntries = (plan: Record<string, string[]> | undefined) => Object.entries(plan || {});
   const [drl, setDrl] = useState<DrlDemo | null>(null);
   useEffect(() => { api<DrlDemo>("/api/demo/drl").then(setDrl).catch(() => setDrl(null)); }, []);
-  return <main className="evidence-page replanning-page" key="replanning"><div className="eyebrow reveal"><Sparkles size={14} /> REPLANNING TRACE</div><h1 className="reveal" style={{ "--d": "60ms" } as CSSProperties}>See what changed, and why.</h1><p className="lede reveal" style={{ "--d": "120ms" } as CSSProperties}>Run the same scenario again after changing an incident to compare the previous plan with the current validated plan.</p><CompareStrip current={current} previous={previous} /><div className="plan-compare"><Card className="plan-box reveal lift" style={{ "--d": "180ms" } as CSSProperties}><CardHeader><CardTitle>Before</CardTitle><CardDescription>{previous ? "Previous solve in this session" : "No previous solve captured"}</CardDescription></CardHeader><CardContent>{previous ? planEntries(previous.plan).map(([vehicle, stops]) => <div className="plan-line" key={vehicle}><strong>{vehicle}</strong><span>{stops.join(" → ") || "No stops"}</span></div>) : <div className="empty-table"><Route size={22} /><span>Run solve twice to create a before/after comparison.</span></div>}</CardContent></Card><Card className="plan-box reveal lift" style={{ "--d": "240ms" } as CSSProperties}><CardHeader><CardTitle>After</CardTitle><CardDescription>{current ? `${current.status} · ${current.evaluation.time_s.toFixed(0)}s` : "Current plan appears here"}</CardDescription></CardHeader><CardContent>{current ? planEntries(current.plan).map(([vehicle, stops]) => <div className="plan-line" key={vehicle}><strong>{vehicle}</strong><span>{stops.join(" → ") || "No stops"}</span></div>) : <div className="empty-table"><Sparkles size={22} /><span>Run a scenario from Live Control Room.</span></div>}</CardContent></Card></div><div className="evidence-grid"><Card className="reveal lift" style={{ "--d": "300ms" } as CSSProperties}><CardHeader><CardTitle>Change driver</CardTitle><CardDescription>The event that can force a new route.</CardDescription></CardHeader><CardContent><div className="route-change"><CircleAlert size={20} /><div><strong>{current?.closed_edge_ids.length ? current.closed_edge_ids.join(", ") : "No closure selected"}</strong><p>{current?.closed_edge_ids.length ? "Closed roads were removed from legal search." : "Change an incident to create a controlled comparison."}</p></div></div></CardContent></Card><Card className="reveal lift" style={{ "--d": "360ms" } as CSSProperties}><CardHeader><CardTitle>QPSO convergence</CardTitle><CardDescription>Search effort and validator outcome.</CardDescription></CardHeader><CardContent><div className="compare-row"><span>Evaluations</span><strong>{current?.evaluations ?? "—"}</strong></div><div className="compare-row"><span>Best objective</span><strong>{current?.trace?.best?.at(-1)?.toFixed(1) ?? "—"}</strong></div><div className="compare-row"><span>Validator</span><strong className={current?.evaluation.feasible ? "good-text" : "warning-text"}>{current ? (current.evaluation.feasible ? "PASS" : "REPAIR") : "—"}</strong></div></CardContent></Card>{drl && <Card className="reveal lift" style={{ "--d": "420ms" } as CSSProperties}><CardHeader><CardTitle>Scope decision</CardTitle><CardDescription>Rule-baseline replanning scope {drl.demo === true && <Badge variant="warning">DEMO VALUES</Badge>}</CardDescription></CardHeader><CardContent><div className="plan-line"><strong>{drl.action}</strong><span>{drl.scope === "job" ? `job ${drl.job_id} · vehicle ${drl.vehicle_id}` : drl.scope || "—"}</span></div><p className="small-copy">{drl.reason}</p></CardContent></Card>}</div></main>
+  return <main className="evidence-page replanning-page" key="replanning"><div className="eyebrow reveal"><Sparkles size={14} /> REPLANNING TRACE</div><h1 className="reveal" style={{ "--d": "60ms" } as CSSProperties}>See what changed, and why.</h1><p className="lede reveal" style={{ "--d": "120ms" } as CSSProperties}>Run the same scenario again after changing an incident to compare the previous plan with the current validated plan.</p><CompareStrip current={current} previous={previous} /><div className="plan-compare"><Card className="plan-box reveal lift" style={{ "--d": "180ms" } as CSSProperties}><CardHeader><CardTitle>Before</CardTitle><CardDescription>{previous ? "Previous solve in this session" : "No previous solve captured"}</CardDescription></CardHeader><CardContent>{previous ? planEntries(previous.plan).map(([vehicle, stops]) => <div className="plan-line" key={vehicle}><strong>{vehicle}</strong><span>{stops.join(" → ") || "No stops"}</span></div>) : <div className="empty-table"><Route size={22} /><span>Run solve twice to create a before/after comparison.</span></div>}</CardContent></Card><Card className="plan-box reveal lift" style={{ "--d": "240ms" } as CSSProperties}><CardHeader><CardTitle>After</CardTitle><CardDescription>{current ? `${current.status} · ${current.evaluation.time_s.toFixed(0)}s` : "Current plan appears here"}</CardDescription></CardHeader><CardContent>{current ? planEntries(current.plan).map(([vehicle, stops]) => <div className="plan-line" key={vehicle}><strong>{vehicle}</strong><span>{stops.join(" → ") || "No stops"}</span></div>) : <div className="empty-table"><Sparkles size={22} /><span>Run a scenario from Live Control Room.</span></div>}</CardContent></Card></div><div className="evidence-grid">{compare && <Card className="evidence-wide reveal lift" style={{ "--d": "120ms" } as CSSProperties}><CardHeader><CardTitle>Optimizer comparison</CardTitle><CardDescription>Same network, same budget — {compare.scenario_id} (from guided demo step 3 or a manual compare).</CardDescription></CardHeader><CardContent>{compare.rows.map((row) => <div className="compare-row" key={row.method}><span>{row.method}</span><strong className={row.feasible ? "good-text" : "warning-text"}>{row.feasible ? `${row.objective?.toFixed(1)} obj · ${row.time_s?.toFixed(0)}s · ${row.elapsed_s?.toFixed(2)}s search` : row.error || "infeasible"}</strong></div>)}</CardContent></Card>}<Card className="reveal lift" style={{ "--d": "300ms" } as CSSProperties}><CardHeader><CardTitle>Change driver</CardTitle><CardDescription>The event that can force a new route.</CardDescription></CardHeader><CardContent><div className="route-change"><CircleAlert size={20} /><div><strong>{current?.closed_edge_ids.length ? current.closed_edge_ids.join(", ") : "No closure selected"}</strong><p>{current?.closed_edge_ids.length ? "Closed roads were removed from legal search." : "Change an incident to create a controlled comparison."}</p></div></div></CardContent></Card><Card className="reveal lift" style={{ "--d": "360ms" } as CSSProperties}><CardHeader><CardTitle>QPSO convergence</CardTitle><CardDescription>Search effort and validator outcome.</CardDescription></CardHeader><CardContent><div className="compare-row"><span>Evaluations</span><strong>{current?.evaluations ?? "—"}</strong></div><div className="compare-row"><span>Best objective</span><strong>{current?.trace?.best?.at(-1)?.toFixed(1) ?? "—"}</strong></div><div className="compare-row"><span>Validator</span><strong className={current?.evaluation.feasible ? "good-text" : "warning-text"}>{current ? (current.evaluation.feasible ? "PASS" : "REPAIR") : "—"}</strong></div></CardContent></Card>{drl && <Card className="reveal lift" style={{ "--d": "420ms" } as CSSProperties}><CardHeader><CardTitle>Scope decision</CardTitle><CardDescription>Rule-baseline replanning scope {drl.demo === true && <Badge variant="warning">DEMO VALUES</Badge>}</CardDescription></CardHeader><CardContent><div className="plan-line"><strong>{drl.action}</strong><span>{drl.scope === "job" ? `job ${drl.job_id} · vehicle ${drl.vehicle_id}` : drl.scope || "—"}</span></div><p className="small-copy">{drl.reason}</p></CardContent></Card>}</div></main>
+}
+
+function StoryPanel({ story, status, autoPlaying, onRun, onAutoPlay, onAbort, onClose, compare, current }: {
+  story: Story | null;
+  status: Record<string, "pending" | "running" | "done" | "error">;
+  autoPlaying: boolean;
+  onRun: (step: StoryStep) => void;
+  onAutoPlay: () => void;
+  onAbort: () => void;
+  onClose: () => void;
+  compare: CompareResult | null;
+  current: SolveResult | null;
+}) {
+  return (
+    <div className="story-overlay" role="dialog" aria-label="Guided demo">
+      <div className="story-panel">
+        <div className="story-head">
+          <div>
+            <span className="eyebrow"><ScrollText size={13} /> GUIDED DEMO</span>
+            <strong>{story ? `Closed-loop story · ${story.scenario_id}` : "Loading story…"}</strong>
+          </div>
+          <button className="story-close" onClick={onClose} aria-label="Close guided demo"><X size={16} /></button>
+        </div>
+        {!story && <div className="skeleton skeleton-row" />}
+        {story?.steps.map((step, index) => {
+          const state = status[step.id] || "pending";
+          return (
+            <div className={`story-step story-${state}`} key={step.id}>
+              <span className="story-num">{state === "done" ? "✓" : state === "error" ? "!" : state === "running" ? "…" : index + 1}</span>
+              <div className="story-body">
+                <strong>{step.title}</strong>
+                <p>{step.caption}</p>
+                {step.id === "compare" && compare && (
+                  <div className="story-compare">
+                    {compare.rows.map((row) => (
+                      <span key={row.method}>{row.method}: {row.feasible ? (row.objective?.toFixed(0) ?? "?") : "infeasible"}</span>
+                    ))}
+                  </div>
+                )}
+                {step.id === "detour" && state === "done" && current && (
+                  <p className="small-copy">Current objective {current.evaluation.objective.toFixed(1)} — read the compare strip for the delta.</p>
+                )}
+                <div className="story-actions">
+                  <Button size="sm" variant="outline" onClick={() => onRun(step)} disabled={state === "running" || autoPlaying}>
+                    {state === "running" ? "Running…" : state === "done" ? "Re-run step" : "Run step"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <div className="story-foot">
+          {autoPlaying
+            ? <Button size="sm" variant="outline" onClick={onAbort}><Square size={13} /> Abort</Button>
+            : <Button size="sm" onClick={onAutoPlay} disabled={!story}><Play size={13} /> Auto-play all</Button>}
+          <span className="small-copy">Results land in the normal views — map, route result, compare strip, evidence.</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function CompareStrip({ current, previous }: { current: SolveResult | null; previous: SolveResult | null }) {
@@ -178,8 +335,10 @@ function CompareStrip({ current, previous }: { current: SolveResult | null; prev
         <div className="compare-stat"><span>Evaluations</span><strong>{current.evaluations ?? "—"}</strong></div>
         <div className="compare-stat"><span>Solve time</span><strong>{current.elapsed_s.toFixed(2)} s</strong></div>
         <div className="compare-stat"><span>Objective</span><strong>{Number.isFinite(objective) ? animatedObjective.toFixed(1) : "—"}</strong></div>
-      </div>
-      {delta == null
+        </div>
+      {current?.cached
+        ? <Badge variant="success" className="delta-badge">CACHED · INSTANT</Badge>
+        : delta == null
         ? <Badge variant="secondary" className="delta-badge"><Minus size={12} /> FIRST SOLVE</Badge>
         : improved
           ? <Badge variant="success" className="delta-badge badge-pulse"><TrendingDown size={12} /> IMPROVED −{delta.toFixed(1)} vs previous</Badge>
@@ -190,9 +349,10 @@ function CompareStrip({ current, previous }: { current: SolveResult | null; prev
   </Card>;
 }
 
-function NetworkMap({ graph, routeEdges, closed, movers, replayPct }: { graph: Graph | null; routeEdges: Set<string>; closed: string[]; movers: ReplayFrame["vehicles"]; replayPct: number }) {
+function NetworkMap({ graph, routeEdges, previousRouteEdges, closed, movers, replayPct, incidents, scenarioId }: { graph: Graph | null; routeEdges: Set<string>; previousRouteEdges?: Set<string>; closed: string[]; movers: ReplayFrame["vehicles"]; replayPct: number; incidents?: ReplayResult["incidents"]; scenarioId?: string }) {
   const reduced = usePrefersReducedMotion();
   const posRef = useRef<Record<string, { x: number; y: number }>>({});
+  const trailRef = useRef<Record<string, { x: number; y: number; kind?: string }[]>>({});
   const [, setTick] = useState(0);
 
   // Smooth vehicle interpolation: ease displayed positions toward each new
@@ -202,8 +362,18 @@ function NetworkMap({ graph, routeEdges, closed, movers, replayPct }: { graph: G
     for (const key of Object.keys(posRef.current)) {
       if (!ids.has(key)) delete posRef.current[key];
     }
+    for (const key of Object.keys(trailRef.current)) {
+      if (!ids.has(key)) delete trailRef.current[key];
+    }
     for (const m of movers) {
       if (!posRef.current[m.id]) posRef.current[m.id] = { x: m.x, y: m.y };
+      const trail = trailRef.current[m.id] || [];
+      const last = trail[trail.length - 1];
+      if (!last || Math.abs(last.x - m.x) > 0.05 || Math.abs(last.y - m.y) > 0.05) {
+        trail.push({ x: m.x, y: m.y, kind: m.kind });
+        while (trail.length > 12) trail.shift();
+        trailRef.current[m.id] = trail;
+      }
     }
     if (reduced || movers.length === 0) {
       const snap: Record<string, { x: number; y: number }> = {};
@@ -237,14 +407,14 @@ function NetworkMap({ graph, routeEdges, closed, movers, replayPct }: { graph: G
   if (graph && isGeoGraph(graph)) {
     // Real geography: tile map with true lat/lon. SUMO replay movers are
     // fixture-only (scenario metres), so they are not overlaid here.
-    return <GeoMap graph={graph} routeEdges={routeEdges} closed={closed} />;
+    return <GeoMap graph={graph} routeEdges={routeEdges} previousRouteEdges={previousRouteEdges} closed={closed} incidents={incidents} scenarioId={scenarioId} />;
   }
   if (!graph) return <div className="map-wrap"><div className="map-loading"><div className="skeleton skeleton-map" /><div className="skeleton skeleton-line" /></div></div>;
   const xs = graph.nodes.map((n) => n.x), ys = graph.nodes.map((n) => n.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
   const point = (n: { x: number; y: number }) => ({ x: 40 + ((n.x - minX) / Math.max(1, maxX - minX)) * 720, y: 360 - ((n.y - minY) / Math.max(1, maxY - minY)) * 300 });
   const nodes = Object.fromEntries(graph.nodes.map((n) => [n.id, n]));
-  return <div className="map-wrap"><svg viewBox="0 0 800 400" role="img" aria-label="Directed city road network"><defs><filter id="glow"><feGaussianBlur stdDeviation="4" result="coloredBlur" /><feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge></filter><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9" fill="none" stroke="#5b6a58" strokeWidth="1.6" /></marker></defs>{graph.edges.map((edge) => { const a = point(nodes[edge.from]), b = point(nodes[edge.to]); const isRoute = routeEdges.has(edge.id); const isClosed = closed.includes(edge.id) || !edge.open; return <line key={edge.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`map-edge ${isRoute ? "map-route" : ""} ${isClosed ? "map-closed" : ""}`} markerEnd="url(#arrow)" />; })}{graph.edges.filter((edge) => closed.includes(edge.id) || !edge.open).map((edge) => { const a = point(nodes[edge.from]), b = point(nodes[edge.to]); return <g key={`closure-${edge.id}`} className="closure-marker"><circle cx={(a.x + b.x) / 2} cy={(a.y + b.y) / 2} r="5" className="closure-core" /><circle cx={(a.x + b.x) / 2} cy={(a.y + b.y) / 2} r="5" className="closure-ping" /></g>; })}{graph.nodes.map((node) => { const p = point(node); const isDepot = node.kind.includes("depot"); return <g key={node.id}>{isDepot && <circle cx={p.x} cy={p.y} r={16} className="depot-halo" />}<circle cx={p.x} cy={p.y} r={isDepot ? 10 : 6} className={isDepot ? "map-depot" : "map-node"} /><text x={p.x + 9} y={p.y - 9} className="map-label">{node.id}</text></g>; })}{graph.requests.map((job) => { const p = point(nodes[job.node]); return <g key={job.id}><circle cx={p.x} cy={p.y} r="3" className="map-job" /><text x={p.x + 9} y={p.y + 15} className="map-job-label">{job.id}</text></g>; })}{movers.map((mover) => { const raw = posRef.current[mover.id] ?? { x: mover.x, y: mover.y }; const p = point(raw); return <circle key={mover.id} cx={p.x} cy={p.y} r={mover.kind === "delivery" ? 8 : 4} className={mover.kind === "delivery" ? "map-mover delivery" : "map-mover traffic"} />; })}</svg><div className="replay-progress" aria-hidden="true"><span style={{ width: `${Math.min(100, Math.max(0, replayPct))}%` }} /></div><div className="map-legend"><span><i className="legend-line route" />Selected route</span><span><i className="legend-line closed" />Closure</span><span><i className="legend-dot car" />SUMO vehicle</span><span><i className="legend-dot job" />Delivery</span></div></div> }
+  return <div className="map-wrap"><svg viewBox="0 0 800 400" role="img" aria-label="Directed city road network"><defs><filter id="glow"><feGaussianBlur stdDeviation="4" result="coloredBlur" /><feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge></filter><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9" fill="none" stroke="#5b6a58" strokeWidth="1.6" /></marker></defs>{graph.edges.map((edge) => { const a = point(nodes[edge.from]), b = point(nodes[edge.to]); const isRoute = routeEdges.has(edge.id); const isPrev = !isRoute && (previousRouteEdges?.has(edge.id) || false); const isClosed = closed.includes(edge.id) || !edge.open; return <line key={edge.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`map-edge ${isRoute ? "map-route" : ""} ${isPrev ? "map-prev-route" : ""} ${isClosed ? "map-closed" : ""}`} markerEnd="url(#arrow)" />; })}{graph.edges.filter((edge) => closed.includes(edge.id) || !edge.open).map((edge) => { const a = point(nodes[edge.from]), b = point(nodes[edge.to]); return <g key={`closure-${edge.id}`} className="closure-marker"><circle cx={(a.x + b.x) / 2} cy={(a.y + b.y) / 2} r="5" className="closure-core" /><circle cx={(a.x + b.x) / 2} cy={(a.y + b.y) / 2} r="5" className="closure-ping" /></g>; })}{graph.nodes.map((node) => { const p = point(node); const isDepot = node.kind.includes("depot"); return <g key={node.id}>{isDepot && <circle cx={p.x} cy={p.y} r={16} className="depot-halo" />}<circle cx={p.x} cy={p.y} r={isDepot ? 10 : 6} className={isDepot ? "map-depot" : "map-node"} /><text x={p.x + 9} y={p.y - 9} className="map-label">{node.id}</text></g>; })}{graph.requests.map((job) => { const p = point(nodes[job.node]); return <g key={job.id}><circle cx={p.x} cy={p.y} r="3" className="map-job" /><text x={p.x + 9} y={p.y + 15} className="map-job-label">{job.id}</text></g>; })}{Object.entries(trailRef.current).map(([id, trail]) => { if (trail.length < 2) return null; const kind = trail[trail.length - 1].kind; return <polyline key={`trail-${id}`} points={trail.map((t) => { const p = point(t); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(" ")} fill="none" className={kind === "delivery" ? "map-trail delivery" : "map-trail traffic"} />; })}{movers.map((mover) => { const raw = posRef.current[mover.id] ?? { x: mover.x, y: mover.y }; const p = point(raw); return <circle key={mover.id} cx={p.x} cy={p.y} r={mover.kind === "delivery" ? 8 : 4} className={mover.kind === "delivery" ? "map-mover delivery" : "map-mover traffic"} />; })}</svg><div className="replay-progress" aria-hidden="true"><span style={{ width: `${Math.min(100, Math.max(0, replayPct))}%` }} /></div><div className="map-legend"><span><i className="legend-line route" />Selected route</span>{previousRouteEdges && previousRouteEdges.size > 0 && <span><i className="legend-line prev" />Previous route</span>}<span><i className="legend-line closed" />Closure</span><span><i className="legend-dot car" />SUMO vehicle</span><span><i className="legend-dot job" />Delivery</span></div></div> }
 
 function Step({ label, active }: { label: string; active?: boolean }) { return <div className={`step ${active ? "step-active" : ""}`}><span className="step-dot" />{label}</div> }
 function Kpi({ icon, label, value, accent = "", delay = "0ms" }: { icon: ReactNode; label: string; value: string; accent?: string; delay?: string }) { return <Card className="kpi lift reveal" style={{ "--d": delay } as CSSProperties}><CardContent><span className="kpi-icon">{icon}</span><div><span className="kpi-label">{label}</span><strong className={accent}>{value}</strong></div></CardContent></Card> }

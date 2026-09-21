@@ -202,3 +202,49 @@ em { color:var(--lime); font-style:normal; }
   .gantt-fill{animation:none}
 }
 .geo-map-wrap{height:365px;position:relative;border:1px solid #2a382a;border-radius:6px;overflow:hidden;background:#0b0f0b}.geo-map{height:100%;width:100%;z-index:1}.geo-map-wrap .map-legend{background:rgba(8,11,8,.72);padding:6px 10px;border-radius:5px}.legend-line.geo-fast{background:#22c55e}.legend-line.geo-slow{background:#ef4444}.band-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:baseline}.budget-note{margin:8px 0 0;color:#9aa698}
+
+/* ---- Guided demo story overlay ---- */
+.story-overlay{position:fixed;inset:0;z-index:30;background:rgba(4,6,4,.55);display:flex;justify-content:flex-end}
+.story-panel{width:min(430px,94vw);height:100%;overflow-y:auto;background:#0c100c;border-left:1px solid var(--line);padding:20px 18px 24px}
+.story-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+.story-head strong{display:block;margin-top:8px;font-size:15px}
+.story-close{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;border:1px solid #4e5c4a;background:transparent;color:var(--muted)}
+.story-close:hover{color:var(--lime);border-color:var(--lime)}
+.story-step{display:flex;gap:10px;padding:12px;border:1px solid #263226;border-radius:8px;margin-bottom:10px;background:#101610}
+.story-step.story-running{border-color:var(--lime)}
+.story-step.story-done{border-color:rgba(141,255,200,.4)}
+.story-step.story-error{border-color:var(--red)}
+.story-num{flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1px solid #4e5c4a;color:var(--muted);font:11px "DM Mono",monospace}
+.story-done .story-num{color:var(--cyan);border-color:var(--cyan)}
+.story-running .story-num{color:var(--lime);border-color:var(--lime)}
+.story-error .story-num{color:var(--red);border-color:var(--red)}
+.story-body strong{font-size:13px}
+.story-body p{margin:6px 0 0;color:var(--muted);font-size:11.5px;line-height:1.55}
+.story-compare{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.story-compare span{padding:4px 8px;border:1px solid #354336;border-radius:4px;color:var(--cyan);font:10px "DM Mono",monospace}
+.story-actions{margin-top:10px}
+.story-foot{display:flex;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap}
+
+/* ---- Before/after route overlay + vehicle trails ---- */
+.map-edge.map-prev-route{stroke:#22d3ee;stroke-width:3;stroke-dasharray:4 6;opacity:.9}
+.legend-line.prev{background:#22d3ee}
+.map-trail{stroke-width:1.5;opacity:.35}
+.map-trail.delivery{stroke:var(--lime)}
+.map-trail.traffic{stroke:#b7c3b5}
+
+/* ---- GeoMap incident preview + zone KPIs ---- */
+.geo-preview{position:absolute;z-index:2;top:10px;left:10px;max-width:310px;background:rgba(8,11,8,.82);border:1px solid #2a382a;border-radius:6px;padding:8px 10px;color:#c6d2c3}
+.geo-preview-head{display:flex;justify-content:space-between;align-items:center;gap:10px;font:10px "DM Mono",monospace;letter-spacing:.08em;color:var(--lime)}
+.geo-preview-head button{background:transparent;border:1px solid #4e5c4a;border-radius:4px;color:var(--muted);font:10px "DM Mono",monospace;padding:3px 8px}
+.geo-preview-head button:hover{color:var(--lime);border-color:var(--lime)}
+.geo-preview-bar{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;margin-top:8px;font:10px "DM Mono",monospace}
+.geo-preview-bar input{accent-color:var(--lime);width:100%}
+.geo-preview .small-copy{margin:6px 0 0}
+.geo-kpis{position:absolute;z-index:2;top:10px;right:46px;max-width:280px;background:rgba(8,11,8,.82);border:1px solid #2a382a;border-radius:6px;padding:6px 8px}
+.geo-kpis-toggle{background:transparent;border:0;color:var(--lime);font:10px "DM Mono",monospace;letter-spacing:.06em}
+.geo-kpis-table{width:100%;border-collapse:collapse;margin-top:6px;color:#c6d2c3;font:10px "DM Mono",monospace}
+.geo-kpis-table th,.geo-kpis-table td{text-align:left;padding:3px 6px;border-top:1px solid #223022}
+.geo-kpis-table th{color:var(--muted);border-top:0;font-weight:500}
+@media(prefers-reduced-motion:reduce){
+  .story-overlay{background:rgba(4,6,4,.7)}
+}

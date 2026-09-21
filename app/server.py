@@ -212,6 +212,136 @@ def demo_drl() -> dict:
     return drl
 
 
+@app.get("/api/demo/story")
+def demo_story() -> dict:
+    """Scripted closed-loop demo narrative using only existing capabilities.
+
+    Each step carries an optional ``action`` (``{http_method, endpoint,
+    params}``) with parameters verified against the live backend at small
+    demo budgets. The frontend executes actions through the normal
+    solve/replay/compare/evidence state — never a parallel universe.
+    """
+    budget = {"particles": 6, "evaluations": 12, "seed": 7}
+    steps = [
+        {
+            "id": "baseline",
+            "title": "Solve a clean baseline",
+            "caption": (
+                "QPSO searches the open S3_BASE network at a small demo "
+                "budget. The result lands in the normal route view with an "
+                "independent validator report — note the objective value, it "
+                "is the 'before' for step 4."
+            ),
+            "action": {
+                "http_method": "POST",
+                "endpoint": "/api/solve",
+                "params": {
+                    "scenario_id": "S3_BASE",
+                    "method": "qpso",
+                    **budget,
+                    "closed_edge_ids": [],
+                },
+            },
+        },
+        {
+            "id": "replay-incident",
+            "title": "Watch E23 close at t=50s",
+            "caption": (
+                "The SUMO replay enforces the fixture incident: E23 closes at "
+                "t=50s. Clearing rule — vehicles already on the link clear "
+                "it, new entry is forbidden. Scrub the timeline and watch "
+                "the per-frame closure state flip."
+            ),
+            "action": {
+                "http_method": "POST",
+                "endpoint": "/api/sumo/replay",
+                "params": {
+                    "scenario_id": "S3_BASE",
+                    "plan": None,
+                    "closed_edge_ids": [],
+                },
+            },
+        },
+        {
+            "id": "compare",
+            "title": "Compare optimizers",
+            "caption": (
+                "Same network, same small budget, three methods "
+                "(QPSO / PSO / ALNS). The compare strip shows feasibility, "
+                "objective, and latency side by side — QPSO is the default "
+                "because it wins here, not by declaration."
+            ),
+            "action": {
+                "http_method": "POST",
+                "endpoint": "/api/compare",
+                "params": {
+                    "scenario_id": "S3_BASE",
+                    "methods": ["qpso", "pso", "alns"],
+                    **budget,
+                    "closed_edge_ids": [],
+                },
+            },
+        },
+        {
+            "id": "detour",
+            "title": "Close E12 and re-solve",
+            "caption": (
+                "E12 (N1→N2) is now a hard closure. The solver must detour "
+                "around it — the compare strip shows the cost delta against "
+                "the step-1 baseline, and the map overlays the previous "
+                "route in cyan dashed for a before/after view."
+            ),
+            "action": {
+                "http_method": "POST",
+                "endpoint": "/api/solve",
+                "params": {
+                    "scenario_id": "S3_BASE",
+                    "method": "qpso",
+                    **budget,
+                    "closed_edge_ids": ["E12"],
+                },
+            },
+        },
+        {
+            "id": "replay-closed",
+            "title": "Replay with incident state",
+            "caption": (
+                "Replay the incident world and scrub the timeline: each "
+                "frame carries its own closure list, the incident banner "
+                "names the enforced schedule, and closure markers track the "
+                "scrubber. (SUMO replays the open network here — closing "
+                "E12 or E23 outright leaves no feasible episode, which the "
+                "validator reports instead of faking one.)"
+            ),
+            "action": {
+                "http_method": "POST",
+                "endpoint": "/api/sumo/replay",
+                "params": {
+                    "scenario_id": "S3_BASE",
+                    "plan": None,
+                    "closed_edge_ids": [],
+                },
+            },
+        },
+        {
+            "id": "evidence",
+            "title": "Evidence checkpoint",
+            "caption": (
+                "Close the loop with real numbers: the evidence tab shows "
+                "measured forecast error, the honest baseline comparison, "
+                "and uncertainty coverage from saved artifacts — DEMO "
+                "labeled where v2 training is still pending."
+            ),
+            "action": {
+                "http_method": "GET",
+                "endpoint": "/api/evidence",
+                "params": {},
+            },
+        },
+    ]
+    return {"scenario_id": "S3_BASE", "steps": steps}
+
+
 @app.get("/api/scenarios")
 def scenarios() -> dict:
     return {"scenarios": service.list_scenarios()}

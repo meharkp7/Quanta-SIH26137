@@ -24,6 +24,7 @@ from src.learning.ppo_runtime import PPORuntime
 from src.learning.ppo_episode_runner import (
     PPOEpisodeRunner,
 )
+from src.learning.ppo_forecast import PPOForecastSignal
 
 from tests.step16.test_ppo_env import (
     DeterministicSimulator,
@@ -31,11 +32,12 @@ from tests.step16.test_ppo_env import (
 )
 
 
-def make_runner(scenario):
+def make_runner(scenario, *, forecast_provider=None):
     env = TrafficRoutingPPOEnv(
         scenario,
         make_plan(),
         simulator=DeterministicSimulator(),
+        forecast_provider=forecast_provider,
     )
 
     state_runtime = PPOPolicyStateRuntime(
@@ -194,3 +196,26 @@ def test_episode_runner_collects_real_environment_rewards(
         result.total_reward,
         expected,
     )
+
+
+def test_episode_runner_uses_forecast_and_uncertainty_signal(scenario):
+    signal = PPOForecastSignal(
+        forecast_features=np.arange(12, dtype=np.float32),
+        uncertainty_features=np.arange(6, dtype=np.float32) + 20.0,
+        forecaster_version="sample-artifact-v1",
+    )
+    runner, _env, _buffer = make_runner(
+        scenario,
+        forecast_provider=lambda _time_s: signal,
+    )
+
+    result = runner.run_episode(
+        episode_id="ppo-forecast-signal",
+        max_steps=1,
+    )
+    state = result.final_policy_state
+
+    np.testing.assert_array_equal(state.forecast_features, signal.forecast_features)
+    np.testing.assert_array_equal(state.uncertainty_features, signal.uncertainty_features)
+    assert state.forecast_version == "sample-artifact-v1"
+    assert state.uncertainty_version == "sample-artifact-v1"

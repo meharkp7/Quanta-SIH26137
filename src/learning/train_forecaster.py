@@ -27,7 +27,12 @@ from src.learning.gnn_transformer import (
     build_graph_batch,
     forecast_loss,
 )
-from src.learning.loader import ForecastBatch, load_pilot_windows
+from src.learning.loader import (
+    ForecastBatch,
+    load_corpus_manifest,
+    load_corpus_scenarios,
+    load_pilot_windows,
+)
 from src.learning.uncertainty import (
     calibrated_arrays,
     fit_residual_calibration,
@@ -415,6 +420,7 @@ def train_forecaster(
     final_eval: bool = True,
     window_cache: str | None = None,
     datasets: dict | None = None,
+    manifest_path: Path | None = None,
 ) -> dict:
     """Train on Step-13 windows and write a reproducible artifact manifest.
 
@@ -453,36 +459,20 @@ def train_forecaster(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    split_manifest = json.loads(
-        (pilot_dir / "corpus_manifest.json").read_text(
-            encoding="utf-8"
-        )
+    split_manifest, _source_manifest_path = load_corpus_manifest(
+        pilot_dir, manifest_path
     )
-
-    scenarios = {
-        sid: Scenario.model_validate_json(
-            (pilot_dir / relative).read_text(
-                encoding="utf-8"
-            )
-        )
-        for sid, relative in split_manifest.get(
-            "scenario_files",
-            {},
-        ).items()
-    }
-
-    if not scenarios:
-        raise ValueError(
-            "No scenario_files found in corpus_manifest.json"
-        )
+    scenarios = load_corpus_scenarios(pilot_dir, split_manifest)
 
     print(
-        f"Loading Step-13 windows from {pilot_dir}...",
+        f"Loading causal forecast windows from {pilot_dir}...",
         flush=True,
     )
     if datasets is None:
-        # Fresh load (parallel builds + optional NPZ cache).
-        datasets = load_pilot_windows(pilot_dir, cache_dir=window_cache)
+        # Fresh load (parallel builds + optional NPZ cache, either schema).
+        datasets = load_pilot_windows(
+            pilot_dir, cache_dir=window_cache, manifest_path=manifest_path
+        )
     else:
         # Shared preloaded datasets (e.g. sweep across configs): same bytes,
         # no reload. Scaler must already be fit on training data.
@@ -492,9 +482,16 @@ def train_forecaster(
                 flush=True,
             )
 
+    if "validation" not in datasets:
+        raise ValueError(
+            "Forecaster training requires a separate validation split. "
+            "Do not use the ten local training episodes as validation data; "
+            "use them only for format and pipeline smoke tests."
+        )
+
     train_windows = len(datasets["train"])
     validation_windows = len(datasets["validation"])
-    test_windows = len(datasets["test"])
+    test_windows = len(datasets.get("test", ()))
 
     supervision = {name: _supervision_report(dataset) for name, dataset in datasets.items()}
 
@@ -783,7 +780,7 @@ def train_forecaster(
             {
                 **calibration.to_dict(),
                 "validation": interval_reports["validation"],
-                "test": interval_reports["test"],
+                "test": interval_reports.get("test"),
             },
             indent=2,
         ),
@@ -835,10 +832,7 @@ def train_forecaster(
             output_dir / "weights.pt",
         )
 
-    shutil.copy2(
-        pilot_dir / "corpus_manifest.json",
-        output_dir / "corpus_manifest.json",
-    )
+    shutil.copy2(source_manifest_path, output_dir / source_manifest_path.name)
 
     datasets["train"].scaler.save(
         output_dir / "scaler.json"
@@ -846,6 +840,7 @@ def train_forecaster(
 
     manifest = {
         "artifact": "forecaster_v1",
+        "corpus_manifest_file": source_manifest_path.name,
         "architecture": model.config,
         "seed": seed,
         "device": str(device_obj),
@@ -963,6 +958,12 @@ def main() -> int:
         default="mps" if torch.backends.mps.is_available() else "cpu",
         help="Torch device for training (mps on Apple Silicon, cpu fallback).",
     )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="Optional explicit corpus manifest; useful for a named smoke subset.",
+    )
     args = parser.parse_args()
 
     print(
@@ -975,17 +976,9 @@ def main() -> int:
                 width=args.width,
                 batch_size=args.batch_size,
                 device=args.device,
-                lr=args.lr,
-                weight_decay=args.weight_decay,
-                dropout=args.dropout,
-                heads=args.heads,
-                layers=args.layers,
-                scheduler=args.scheduler,
-                patience=args.patience,
-                min_delta=args.min_delta,
-                grad_clip=args.grad_clip,
                 final_eval=not args.no_final_eval,
                 window_cache=args.window_cache,
+                manifest_path=args.manifest,
             ),
             indent=2,
         )
