@@ -32,11 +32,18 @@ if ! grep -q "DATA GATE: PASS" "${LOG}" 2>/dev/null; then
 fi
 
 echo "[autotrain] gate PASS -- hyperparameter screening (3 configs x 2 epochs, MPS)"
+export PYTHONPATH="${PYTHONPATH:-.}"
 python3 -u scripts/sweep_forecaster.py artifacts/corpus_v2 "${SWEEP}" \
   --epochs 2 --device mps \
   --configs '[{"width": 64, "lr": 0.001, "weight_decay": 0.0001, "dropout": 0.15}, {"width": 64, "lr": 0.002, "weight_decay": 0.0001, "dropout": 0.1}, {"width": 32, "lr": 0.001, "weight_decay": 0.0003, "dropout": 0.2}]' \
   > "${SWEEP}.log" 2>&1
 echo "SWEEP_EXIT:$?" >> "${SWEEP}.log"
+
+if [ ! -f "${SWEEP}/sweep_report.json" ]; then
+  echo "[autotrain] sweep produced no report -- aborting, needs human. tail:"
+  tail -n 20 "${SWEEP}.log"
+  exit 4
+fi
 
 WINNER_CFG=$(python3 -c "
 import json
