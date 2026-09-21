@@ -1,8 +1,2 @@
-delhi_pilot_out/**/*.jsonl filter=lfs diff=lfs merge=lfs -text
-artifacts/delhi_2280/**/observations.csv filter=lfs diff=lfs merge=lfs -text
-artifacts/delhi_2280/**/labels.jsonl filter=lfs diff=lfs merge=lfs -text
-artifacts/delhi_2280/**/events.json filter=lfs diff=lfs merge=lfs -text
-artifacts/delhi_2280/**/episode_manifest.json filter=lfs diff=lfs merge=lfs -text
-artifacts/delhi_2280/**/scenario.json filter=lfs diff=lfs merge=lfs -text
 osm_extracts/*.graphml filter=lfs diff=lfs merge=lfs -text
 osm_extracts/*.graphml !text !filter !merge !diff
