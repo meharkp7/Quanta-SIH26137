@@ -124,6 +124,36 @@ def evidence() -> dict:
     manifest_path = artifact_dir / "manifest.json"
     uncertainty_path = artifact_dir / "uncertainty.json"
     if not manifest_path.is_file() or not uncertainty_path.is_file():
+        demo_path = PROJECT_ROOT / "artifacts" / "demo_evidence.json"
+        if demo_path.is_file():
+            demo = json.loads(demo_path.read_text(encoding="utf-8"))
+            gnn = demo.get("gnn_pilot", {})
+            horizons = gnn.get("mae_by_horizon_s", {})
+            test_metrics = (
+                {str(h): {"mae": float(v)} for h, v in horizons.items()}
+                if horizons
+                else {}
+            )
+            return {
+                "available": True,
+                "demo": True,
+                "provenance": demo.get(
+                    "provenance",
+                    "Measured on deleted 250-episode pilot corpus; v2 corpus training pending; values are static demo, not live inference.",
+                ),
+                "artifact": "demo_evidence",
+                "model_mae": sum(float(v) for v in horizons.values()) / len(horizons) if horizons else None,
+                "temporal_baseline_mae": gnn.get("temporal_only_mae"),
+                "test_metrics": test_metrics,
+                "uncertainty": {
+                    "nominal_coverage": gnn.get("uncertainty_nominal"),
+                    "validation": {"actual_coverage": gnn.get("uncertainty_actual_coverage_validation")},
+                    "test": {"actual_coverage": gnn.get("uncertainty_actual_coverage_test")},
+                },
+                "step14_demo": demo.get("step14_demo"),
+                "step9": demo.get("step9"),
+                "data_audit": demo.get("data_audit"),
+            }
         return {"available": False, "reason": "forecaster_v1 artifacts are not present"}
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     uncertainty = json.loads(uncertainty_path.read_text(encoding="utf-8"))
@@ -140,6 +170,19 @@ def evidence() -> dict:
         "training_cutoff_s": manifest.get("training_cutoff_s"),
         "split_policy": manifest.get("split_policy"),
     }
+
+
+@app.get("/api/demo/drl")
+def demo_drl() -> dict:
+    """Canned DRL scope decision, honestly labeled as demo (no PPO trained)."""
+    demo_path = PROJECT_ROOT / "artifacts" / "demo_evidence.json"
+    if not demo_path.is_file():
+        raise HTTPException(status_code=404, detail="demo_evidence.json is not present")
+    demo = json.loads(demo_path.read_text(encoding="utf-8"))
+    drl = demo.get("drl_demo")
+    if not drl:
+        raise HTTPException(status_code=404, detail="drl_demo is not present")
+    return drl
 
 
 @app.get("/api/scenarios")

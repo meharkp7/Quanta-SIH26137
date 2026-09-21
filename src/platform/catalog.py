@@ -60,6 +60,13 @@ SCENARIO_CATALOG = (
         "path": FIXTURE_ROOT / "cases" / "wrong_way" / "scenario.json",
         "description": "Illegal directed movement the checker must reject.",
     },
+    {
+        "id": "DELHI_CP",
+        "label": "Delhi — Dwarka Sector 12 (real OSM)",
+        "role": "real Delhi render",
+        "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_003" / "scenario.json",
+        "description": "Real OSM Delhi network (dwarka_sector12-map003, validation split): 1929 edges, 841 nodes, 70 requests, 15 vehicles. Read-only reference; render/solve via the same live service.",
+    },
 )
 
 
