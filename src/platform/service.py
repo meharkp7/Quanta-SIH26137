@@ -6,6 +6,7 @@ This is a facade. It does not reimplement QPSO, validation, or SUMO.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 import random
@@ -889,6 +890,200 @@ class PlatformService:
             ),
             arcs=tuple(arcs),
         )
+
+    # Joint GNN-Transformer forecaster training on artifacts/corpus_v2.
+    #
+    # The Step 13 model is one joint network (CausalGNNTransformer: two
+    # directed edge-aware GNN layers for spatial encoding followed by a
+    # per-road temporal Transformer). "GNN and Transformer" therefore means
+    # training this single forecaster, not two separate models. Training is
+    # launched as a background process so the API never blocks; progress is
+    # tracked via artifacts/forecaster_v2/training_status.json.
+    FORECASTER_CORPUS_DIR = PROJECT_ROOT / "artifacts" / "corpus_v2"
+    FORECASTER_OUTPUT_DIR = PROJECT_ROOT / "artifacts" / "forecaster_v2"
+    FORECASTER_LEGACY_DIR = PROJECT_ROOT / "artifacts" / "step13_forecaster_v1"
+    FORECASTER_STATUS_FILE = "training_status.json"
+
+    def forecaster_artifact_dirs(self) -> list[Path]:
+        return [self.FORECASTER_OUTPUT_DIR, self.FORECASTER_LEGACY_DIR]
+
+    def forecaster_status(self) -> dict:
+        corpus = self.FORECASTER_CORPUS_DIR
+        manifest_path = corpus / "corpus_manifest.json"
+        corpus_info: dict[str, Any] = {
+            "corpus_dir": str(corpus),
+            "present": corpus.is_dir(),
+            "manifest_present": manifest_path.is_file(),
+        }
+        if manifest_path.is_file():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                corpus_info["episodes"] = {
+                    split: len(manifest.get(split, []))
+                    for split in ("train", "validation", "test")
+                }
+                corpus_info["schema_version"] = manifest.get("schema_version")
+                corpus_info["map_disjoint"] = manifest.get("map_disjoint")
+            except Exception as exc:
+                corpus_info["manifest_error"] = str(exc)
+        cache_dir = corpus / ".window_cache"
+        if cache_dir.is_dir():
+            npz_files = list(cache_dir.glob("*.windows.npz"))
+            corpus_info["window_cache"] = {
+                "dir": str(cache_dir),
+                "cached_episodes": len(npz_files),
+            }
+        else:
+            corpus_info["window_cache"] = {"dir": str(cache_dir), "cached_episodes": 0}
+
+        artifacts: dict[str, Any] = {}
+        for directory in self.forecaster_artifact_dirs():
+            entry: dict[str, Any] = {"dir": str(directory), "present": directory.is_dir()}
+            manifest_file = directory / "manifest.json"
+            entry["manifest_present"] = manifest_file.is_file()
+            if manifest_file.is_file():
+                try:
+                    saved = json.loads(manifest_file.read_text(encoding="utf-8"))
+                    entry["artifact"] = saved.get("artifact")
+                    entry["metrics"] = saved.get("metrics")
+                    entry["early_stopping"] = saved.get("early_stopping")
+                except Exception as exc:
+                    entry["manifest_error"] = str(exc)
+            artifacts[directory.name] = entry
+
+        training = self._read_forecaster_training_status()
+        return {
+            "corpus": corpus_info,
+            "artifacts": artifacts,
+            "training": training,
+            "model": "CausalGNNTransformer (joint edge-aware GNN + temporal Transformer)",
+        }
+
+    def _read_forecaster_training_status(self) -> dict:
+        output = self.FORECASTER_OUTPUT_DIR
+        status_path = output / self.FORECASTER_STATUS_FILE
+        if not status_path.is_file():
+            return {"state": "idle", "status_file": str(status_path)}
+        try:
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return {"state": "unknown", "error": str(exc), "status_file": str(status_path)}
+        pid = status.get("pid")
+        if isinstance(pid, int) and status.get("state") == "running":
+            try:
+                os.kill(pid, 0)
+            except (ProcessLookupError, PermissionError, OSError):
+                status = dict(status)
+                status["state"] = "exited"
+                status["alive"] = False
+            else:
+                status["alive"] = True
+        log_path = status.get("log_file")
+        if isinstance(log_path, str) and Path(log_path).is_file():
+            try:
+                lines = Path(log_path).read_text(encoding="utf-8", errors="replace").splitlines()
+                status["log_tail"] = lines[-20:]
+            except Exception:
+                pass
+        return status
+
+    def start_forecaster_training(
+        self,
+        *,
+        epochs: int = 60,
+        width: int = 32,
+        lr: float = 2e-3,
+        weight_decay: float = 1e-4,
+        dropout: float = 0.1,
+        heads: int = 4,
+        layers: int = 2,
+        batch_size: int = 2,
+        seed: int = 26137,
+        device: str = "cpu",
+        scheduler: str = "cosine",
+        patience: int = 25,
+    ) -> dict:
+        if epochs <= 0:
+            raise ValueError("epochs must be positive")
+        if width <= 0:
+            raise ValueError("width must be positive")
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if scheduler not in ("cosine", "plateau", "none"):
+            raise ValueError("scheduler must be cosine, plateau or none")
+        corpus = self.FORECASTER_CORPUS_DIR
+        if not (corpus / "corpus_manifest.json").is_file():
+            raise ValueError(f"corpus_v2 manifest is missing at {corpus}")
+        output = self.FORECASTER_OUTPUT_DIR
+        output.mkdir(parents=True, exist_ok=True)
+
+        current = self._read_forecaster_training_status()
+        if current.get("state") == "running" and current.get("alive", True):
+            result = dict(current)
+            result["already_running"] = True
+            return result
+
+        cache_dir = corpus / ".window_cache"
+        log_path = output / "training.log"
+        command = [
+            sys.executable,
+            "-m",
+            "src.learning.train_forecaster",
+            str(corpus),
+            str(output),
+            "--epochs", str(epochs),
+            "--seed", str(seed),
+            "--width", str(width),
+            "--batch-size", str(batch_size),
+            "--lr", str(lr),
+            "--weight-decay", str(weight_decay),
+            "--dropout", str(dropout),
+            "--heads", str(heads),
+            "--layers", str(layers),
+            "--scheduler", scheduler,
+            "--patience", str(patience),
+            "--device", device,
+            "--window-cache", str(cache_dir),
+        ]
+        log_handle = open(log_path, "ab")
+        process = subprocess.Popen(
+            command,
+            cwd=str(PROJECT_ROOT),
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        # The child keeps the inherited fd; the parent copy can close now.
+        log_handle.close()
+        status = {
+            "state": "running",
+            "pid": process.pid,
+            "corpus": str(corpus),
+            "output": str(output),
+            "log_file": str(log_path),
+            "status_file": str(output / self.FORECASTER_STATUS_FILE),
+            "started_at": time.time(),
+            "config": {
+                "epochs": epochs,
+                "width": width,
+                "lr": lr,
+                "weight_decay": weight_decay,
+                "dropout": dropout,
+                "heads": heads,
+                "layers": layers,
+                "batch_size": batch_size,
+                "seed": seed,
+                "device": device,
+                "scheduler": scheduler,
+                "patience": patience,
+            },
+            "command": command,
+            "already_running": False,
+        }
+        (output / self.FORECASTER_STATUS_FILE).write_text(
+            json.dumps(status, indent=2), encoding="utf-8"
+        )
+        return status
 
 
 def _ensure_sumo_env() -> None:

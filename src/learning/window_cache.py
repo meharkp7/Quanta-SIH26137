@@ -10,6 +10,14 @@ labels.jsonl and episode_manifest.json plus a schema constant. Any content
 change (size/mtime shift) or code change (bump WINDOW_CACHE_VERSION) is a
 miss and the episode rebuilds. Corrupt cache files are treated as misses,
 never as errors.
+
+Version history:
+  v1 stored a single history/target time vector from the first window and
+  reused it for every window of the episode. Forecast windows have
+  per-issue times (history slides with issue_time_s), so every cached
+  window after the first failed ``assert_window_causal`` with
+  "target times must be strictly after issue_time" and blocked all
+  corpus_v2 training/sweep loads. v2 stores per-window time arrays.
 """
 
 from __future__ import annotations
@@ -22,7 +30,7 @@ import numpy as np
 
 from src.learning.windows import ForecastWindow
 
-WINDOW_CACHE_VERSION = 1
+WINDOW_CACHE_VERSION = 2
 
 
 def episode_fingerprint(episode_dir: Path) -> str:
@@ -67,6 +75,16 @@ def save_episode_windows(
         "issue_time_s": np.asarray(
             [w.issue_time_s for w in windows], dtype=np.int64
         ),
+        # Per-window chronology: history slides with issue_time_s and each
+        # issue has its own target buckets. All windows of an episode share
+        # L/H lengths; store the full [N, L] / [N, H] arrays so a reload is
+        # byte-identical to a fresh build_episode_windows() call.
+        "history_times_s": np.asarray(
+            [w.history_times_s for w in windows], dtype=np.int64
+        ),
+        "target_times_s": np.asarray(
+            [w.target_times_s for w in windows], dtype=np.int64
+        ),
     }
     tmp = npz_path.with_suffix(".tmp.npz")
     np.savez_compressed(tmp, **stacked)
@@ -75,13 +93,12 @@ def save_episode_windows(
         json.dumps(
             {
                 "fingerprint": fingerprint,
+                "cache_version": WINDOW_CACHE_VERSION,
                 "episode_id": first.episode_id,
                 "split": first.split,
                 "scenario_id": first.scenario_id,
                 "graph_version": first.graph_version,
                 "edge_ids": list(first.edge_ids),
-                "history_times_s": list(first.history_times_s),
-                "target_times_s": list(first.target_times_s),
             }
         ),
         encoding="utf-8",
@@ -100,18 +117,26 @@ def load_episode_windows(
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         if meta.get("fingerprint") != fingerprint:
             return None
+        # v1 cache files stored one shared time vector (first window) and are
+        # causally wrong for every later window: force a rebuild.
+        if meta.get("cache_version", 1) < WINDOW_CACHE_VERSION:
+            return None
         data = np.load(npz_path, allow_pickle=False)
+        if "history_times_s" not in data or "target_times_s" not in data:
+            return None
         edge_ids = tuple(meta["edge_ids"])
-        history = tuple(meta["history_times_s"])
-        targets = tuple(meta["target_times_s"])
         count = int(data["issue_time_s"].shape[0])
+        histories = np.asarray(data["history_times_s"])
+        targets = np.asarray(data["target_times_s"])
+        if histories.shape[0] != count or targets.shape[0] != count:
+            return None
         return [
             ForecastWindow(
                 episode_id=meta["episode_id"],
                 split=meta["split"],
                 issue_time_s=int(data["issue_time_s"][i]),
-                history_times_s=history,
-                target_times_s=targets,
+                history_times_s=tuple(int(v) for v in histories[i].tolist()),
+                target_times_s=tuple(int(v) for v in targets[i].tolist()),
                 edge_ids=edge_ids,
                 features=np.asarray(data["features"][i], dtype=np.float32),
                 feature_mask=np.asarray(data["feature_mask"][i], dtype=bool),

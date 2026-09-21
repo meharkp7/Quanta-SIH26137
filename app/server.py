@@ -79,6 +79,21 @@ class SumoRequest(BaseModel):
     gui: bool = True
 
 
+class ForecasterTrainRequest(BaseModel):
+    epochs: int = Field(default=60, ge=1, le=500)
+    width: int = Field(default=32, ge=8, le=256)
+    lr: float = Field(default=2e-3, gt=0.0, le=1.0)
+    weight_decay: float = Field(default=1e-4, ge=0.0, le=1.0)
+    dropout: float = Field(default=0.1, ge=0.0, lt=1.0)
+    heads: int = Field(default=4, ge=1, le=16)
+    layers: int = Field(default=2, ge=1, le=8)
+    batch_size: int = Field(default=2, ge=1, le=16)
+    seed: int = 26137
+    device: str = Field(default="cpu")
+    scheduler: str = Field(default="cosine")
+    patience: int = Field(default=25, ge=0, le=200)
+
+
 class ReplayRequest(BaseModel):
     scenario_id: str = Field(default="S3_BASE", min_length=1)
     plan: dict[str, list[str]] | None = None
@@ -120,7 +135,19 @@ def meta() -> dict:
 @app.get("/api/evidence")
 def evidence() -> dict:
     """Expose saved Step 13/14 measurements for the presentation UI."""
-    artifact_dir = PROJECT_ROOT / "artifacts" / "step13_forecaster_v1"
+    candidates = [
+        PROJECT_ROOT / "artifacts" / "forecaster_v2",
+        PROJECT_ROOT / "artifacts" / "step13_forecaster_v1",
+    ]
+    artifact_dir = next(
+        (
+            candidate
+            for candidate in candidates
+            if (candidate / "manifest.json").is_file()
+            and (candidate / "uncertainty.json").is_file()
+        ),
+        candidates[1],
+    )
     manifest_path = artifact_dir / "manifest.json"
     uncertainty_path = artifact_dir / "uncertainty.json"
     if not manifest_path.is_file() or not uncertainty_path.is_file():
@@ -297,6 +324,47 @@ def replay_sumo(request: ReplayRequest | None = None) -> dict:
             plan=request.plan,
             closed_edge_ids=request.closed_edge_ids,
         )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/models/forecaster/status")
+def forecaster_status() -> dict:
+    """Training/corpus status for the joint GNN-Transformer forecaster."""
+    try:
+        return service.forecaster_status()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/models/forecaster/train")
+def forecaster_train(request: ForecasterTrainRequest | None = None) -> dict:
+    """Launch joint GNN-Transformer training on artifacts/corpus_v2.
+
+    The Step 13 model is one joint network (edge-aware GNN spatial encoder
+    + temporal Transformer); this endpoint trains it on the real corpus_v2
+    episodes in a background process and returns immediately. Poll
+    ``GET /api/models/forecaster/status`` for progress; results land in
+    ``artifacts/forecaster_v2`` where ``GET /api/evidence`` picks them up.
+    """
+    request = request or ForecasterTrainRequest()
+    try:
+        return service.start_forecaster_training(
+            epochs=request.epochs,
+            width=request.width,
+            lr=request.lr,
+            weight_decay=request.weight_decay,
+            dropout=request.dropout,
+            heads=request.heads,
+            layers=request.layers,
+            batch_size=request.batch_size,
+            seed=request.seed,
+            device=request.device,
+            scheduler=request.scheduler,
+            patience=request.patience,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

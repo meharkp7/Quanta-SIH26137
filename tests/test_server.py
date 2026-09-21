@@ -16,7 +16,23 @@ def test_server_exposes_current_core_routes():
     assert "/api/loop" in paths
     assert "/api/sumo" in paths
     assert "/api/sumo/replay" in paths
+    assert "/api/models/forecaster/status" in paths
+    assert "/api/models/forecaster/train" in paths
+    assert "/api/evidence" in paths
     assert "/" in paths
+
+
+def test_forecaster_status_reports_corpus_v2():
+    from src.platform.service import PlatformService
+
+    status = PlatformService().forecaster_status()
+    assert status["corpus"]["manifest_present"] is True
+    assert status["corpus"]["episodes"] == {
+        "train": 1050,
+        "validation": 350,
+        "test": 350,
+    }
+    assert "CausalGNNTransformer" in status["model"]
 
 
 def test_solve_methods_match_platform_service():
