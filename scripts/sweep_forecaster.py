@@ -56,6 +56,12 @@ def run_sweep(
 ) -> dict:
     seed_everything(seed)
     output_base.mkdir(parents=True, exist_ok=True)
+    # Load once, share across configs: the dominant cost is window building
+    # (~1 h cold on 1750 eps), not training. Same bytes for every config.
+    from src.learning.loader import load_pilot_windows
+
+    print("Sweep: loading shared datasets once...", flush=True)
+    shared = load_pilot_windows(corpus_dir, cache_dir=window_cache)
     rows = []
     for index, config in enumerate(configs):
         name = config_name(index, config)
@@ -71,6 +77,7 @@ def run_sweep(
             patience=0,  # fixed screening budget; selection by best val MAE
             final_eval=False,  # skip expensive full-corpus eval in screening
             window_cache=window_cache,
+            datasets=shared,
             **config,
         )
         curve = json.loads((out / "training_curve.json").read_text())

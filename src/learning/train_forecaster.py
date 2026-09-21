@@ -414,6 +414,7 @@ def train_forecaster(
     grad_clip: float = 1.0,
     final_eval: bool = True,
     window_cache: str | None = None,
+    datasets: dict | None = None,
 ) -> dict:
     """Train on Step-13 windows and write a reproducible artifact manifest.
 
@@ -479,7 +480,17 @@ def train_forecaster(
         f"Loading Step-13 windows from {pilot_dir}...",
         flush=True,
     )
-    datasets = load_pilot_windows(pilot_dir, cache_dir=window_cache)
+    if datasets is None:
+        # Fresh load (parallel builds + optional NPZ cache).
+        datasets = load_pilot_windows(pilot_dir, cache_dir=window_cache)
+    else:
+        # Shared preloaded datasets (e.g. sweep across configs): same bytes,
+        # no reload. Scaler must already be fit on training data.
+        if window_cache is not None:
+            print(
+                "Using shared preloaded datasets; window_cache not re-read.",
+                flush=True,
+            )
 
     train_windows = len(datasets["train"])
     validation_windows = len(datasets["validation"])

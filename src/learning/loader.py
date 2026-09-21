@@ -93,6 +93,37 @@ class WindowDataset:
             tuple(w.scenario_id for w in selected), tuple(w.graph_version for w in selected),
             tuple(w.split for w in selected))
 
+def _build_episode_job(args) -> tuple[list, bool]:
+    """Picklable episode build for the process pool (ordered map).
+
+    Returns (windows, cache_hit). Cache misses rebuild from CSV and
+    repopulate the cache; corrupt entries are misses, never errors.
+    """
+    from src.learning.window_cache import (
+        episode_fingerprint,
+        load_episode_windows,
+        save_episode_windows,
+    )
+    from src.learning.windows import build_episode_windows
+    from src.contracts.scenario import Scenario
+
+    root_s, episode_id, scenario_json, split, cache_s = args
+    scenario = Scenario.model_validate_json(scenario_json)
+    folder = Path(root_s) / "episodes" / episode_id
+    cache = Path(cache_s) if cache_s is not None else None
+    fingerprint = ""
+    episode_windows = None
+    if cache is not None:
+        fingerprint = episode_fingerprint(folder)
+        episode_windows = load_episode_windows(cache, episode_id, fingerprint)
+    hit = episode_windows is not None
+    if not hit:
+        episode_windows = build_episode_windows(folder, scenario, split=split)
+        if cache is not None:
+            save_episode_windows(cache, episode_id, fingerprint, episode_windows)
+    return episode_windows, hit
+
+
 def load_pilot_windows(
     pilot_dir: Path,
     scenario: Scenario | None = None,
@@ -126,6 +157,7 @@ def load_pilot_windows(
     datasets, graph_owners = {}, {}
     cache_hits, cache_misses = 0, 0
     import concurrent.futures
+    import os
 
     for name in names:
         # Manifest parsing is cheap and stays serial (split validation,
@@ -150,28 +182,27 @@ def load_pilot_windows(
                 graph_owners[key] = name
             jobs.append((episode_id, sc))
 
-        def _build(job):
-            episode_id, sc = job
-            folder = root / "episodes" / episode_id
-            episode_windows = None
-            fingerprint = ""
-            if cache is not None:
-                fingerprint = episode_fingerprint(folder)
-                episode_windows = load_episode_windows(
-                    cache, episode_id, fingerprint
-                )
-            hit = episode_windows is not None
-            if not hit:
-                episode_windows = build_episode_windows(folder, sc, split=name)
-                if cache is not None:
-                    save_episode_windows(
-                        cache, episode_id, fingerprint, episode_windows
-                    )
-            return episode_windows, hit
-
         windows = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            for episode_windows, hit in pool.map(_build, jobs):
+        # Process pool: episode builds are GIL-bound CPython (csv + loops),
+        # threads measured 1.00x. Ordered map preserves episode order, so
+        # downstream batching/shuffling stays deterministic.
+        workers = max(1, (os.cpu_count() or 4) // 2)
+        ctx_args = [
+            (
+                str(root),
+                episode_id,
+                # JSON string: Scenario objects do not pickle; the worker
+                # revalidates (cheap, once per episode).
+                sc.model_dump_json(),
+                name,
+                str(cache) if cache is not None else None,
+            )
+            for episode_id, sc in jobs
+        ]
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=workers
+        ) as pool:
+            for episode_windows, hit in pool.map(_build_episode_job, ctx_args):
                 if hit:
                     cache_hits += 1
                 else:
