@@ -17,7 +17,12 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import sys
 from pathlib import Path
+
+# Make `src.*` importable regardless of caller environment (PYTHONPATH,
+# cwd, or direct `python3 scripts/...` invocation which puts scripts/ first).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import torch
 
