@@ -242,3 +242,49 @@ STEP6_CLOSURE_CONFIG = IncidentConfig(
     duration_s=None,             # stays closed for the rest of the episode
     announce_lead_s=10.0,        # announce at t=40s so planner can react
 )
+
+
+def configs_for_scenario(scenario, *, include_step6_default: bool = True) -> list[IncidentConfig]:
+    """Build the incident schedule from UI-selected closures.
+
+    Edges already closed in the scenario contract (``open_by_default=False``,
+    i.e. the user-selected incident roads) close at t=0 with no advance
+    notice — the planner routed around them from the start. The STEP6 E23@50s
+    demo closure is appended unless E23 itself is UI-closed (then the t=0
+    version wins; no duplicates). Vehicles already on a link when it closes
+    are allowed to clear it while new entry is forbidden (plan Step 6 rule).
+    """
+    closed_ids = [
+        edge.edge_id
+        for edge in scenario.edges
+        if not edge.open_by_default
+    ]
+    configs = [
+        IncidentConfig(
+            incident_id=f"INC_{edge_id}_UI_CLOSURE",
+            edge_id=edge_id,
+            trigger_time_s=0.0,
+            duration_s=None,
+            announce_lead_s=0.0,
+        )
+        for edge_id in closed_ids
+    ]
+    if include_step6_default and STEP6_CLOSURE_CONFIG.edge_id not in closed_ids:
+        configs.append(STEP6_CLOSURE_CONFIG)
+    return configs
+
+
+def closure_schedule(configs) -> list[dict]:
+    """Convert incident configs to frame-annotation schedule entries."""
+    return [
+        {
+            "edge_id": cfg.edge_id,
+            "from_s": float(cfg.trigger_time_s),
+            "to_s": (
+                float(cfg.trigger_time_s + cfg.duration_s)
+                if cfg.duration_s is not None
+                else None
+            ),
+        }
+        for cfg in configs
+    ]

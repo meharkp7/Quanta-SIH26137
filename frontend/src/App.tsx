@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { api, Evidence, DrlDemo, Evaluation, Graph, ReplayFrame, ScenarioSummary, SolveResult, postJson } from "@/api";
+import { api, Evidence, DrlDemo, Evaluation, Graph, ReplayFrame, ReplayResult, ScenarioSummary, SolveResult, postJson } from "@/api";
 import { GeoMap, isGeoGraph, speedBandColor } from "@/GeoMap";
 import { useCountUp, useInView, usePrefersReducedMotion } from "@/hooks";
 
@@ -24,6 +24,7 @@ function App() {
   const [solve, setSolve] = useState<SolveResult | null>(null);
   const [previousSolve, setPreviousSolve] = useState<SolveResult | null>(null);
   const [replay, setReplay] = useState<ReplayFrame[]>([]);
+  const [replayMeta, setReplayMeta] = useState<ReplayResult | null>(null);
   const [frame, setFrame] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -75,7 +76,7 @@ function App() {
 
   async function runReplay() {
     setBusy("replay"); setError("");
-    try { const result = await postJson<{ frames: ReplayFrame[] }>("/api/sumo/replay", { scenario_id: scenarioId, plan: solve?.plan || null, closed_edge_ids: closed }); setReplay(result.frames || []); setFrame(0); setIsPlaying(true); }
+    try { const result = await postJson<ReplayResult>("/api/sumo/replay", { scenario_id: scenarioId, plan: solve?.plan || null, closed_edge_ids: closed }); setReplay(result.frames || []); setReplayMeta(result); setFrame(0); setIsPlaying(true); }
     catch (err) { setError((err as Error).message); } finally { setBusy(""); }
   }
 
@@ -110,7 +111,7 @@ function App() {
         <div className="headline-row reveal" style={{ "--d": "60ms" } as CSSProperties}><div><h1>See the decision.<br /><em>Trust the route.</em></h1><p className="lede">Quanta turns traffic disruption into a validated delivery plan in seconds.</p></div><div className="step-rail"><Step label="Observe" active /><Step label="Predict" /><Step label="Replan" /><Step label="Prove" /></div></div>
         <Card className="map-card reveal lift" style={{ "--d": "120ms" } as CSSProperties}>
           <CardHeader><div><CardTitle><MapPinned size={17} /> City operations map</CardTitle><CardDescription>Directed roads, delivery fleet, and the route selected by the optimizer.</CardDescription></div><Badge key={closed.length ? `closed-${closed.length}` : "clear"} variant={closed.length ? "warning" : "success"} className="badge-pulse">{closed.length ? `${closed.length} ROAD CLOSURE` : "NETWORK CLEAR"}</Badge></CardHeader>
-          <CardContent><NetworkMap graph={graph} routeEdges={activeEdges} closed={closed} movers={activeFrame?.vehicles || []} replayPct={replay.length ? ((frame + 1) / replay.length) * 100 : 0} />{solve?.budget_note && <p className="small-copy budget-note">{solve.budget_note}</p>}<div className="replay-bar"><span className="replay-time">{activeFrame ? `t = ${activeFrame.t.toFixed(0)}s` : "No replay loaded"}</span><input aria-label="SUMO replay timeline" type="range" min="0" max={Math.max(0, replay.length - 1)} value={frame} onChange={(event) => { setIsPlaying(false); setFrame(Number(event.target.value)); }} disabled={!replay.length} /><span className="replay-count">{replay.length ? `${frame + 1} / ${replay.length}` : "—"}</span></div><div className="replay-sub"><button className="replay-toggle" onClick={toggleReplay} disabled={busy === "replay"} aria-label={isPlaying ? "Pause replay" : "Play replay"}>{isPlaying ? <Pause size={13} /> : <Play size={13} />}</button><div className="speed-ctl" role="group" aria-label="Playback speed">{SPEEDS.map((option) => <button key={option} className={speed === option ? "speed-active" : ""} onClick={() => setSpeed(option)}>{option}x</button>)}</div><span className="replay-vehicles">{activeFrame ? `${activeFrame.vehicles.length} vehicles` : "0 vehicles"}</span><span className="replay-hint">Space to play / pause</span></div></CardContent>
+          <CardContent><NetworkMap graph={graph} routeEdges={activeEdges} closed={replay.length ? (activeFrame?.closed || []) : closed} movers={activeFrame?.vehicles || []} replayPct={replay.length ? ((frame + 1) / replay.length) * 100 : 0} />{solve?.budget_note && <p className="small-copy budget-note">{solve.budget_note}</p>}<div className="replay-bar"><span className="replay-time">{activeFrame ? `t = ${activeFrame.t.toFixed(0)}s` : "No replay loaded"}</span><input aria-label="SUMO replay timeline" type="range" min="0" max={Math.max(0, replay.length - 1)} value={frame} onChange={(event) => { setIsPlaying(false); setFrame(Number(event.target.value)); }} disabled={!replay.length} /><span className="replay-count">{replay.length ? `${frame + 1} / ${replay.length}` : "—"}</span></div><div className="replay-sub"><button className="replay-toggle" onClick={toggleReplay} disabled={busy === "replay"} aria-label={isPlaying ? "Pause replay" : "Play replay"}>{isPlaying ? <Pause size={13} /> : <Play size={13} />}</button><div className="speed-ctl" role="group" aria-label="Playback speed">{SPEEDS.map((option) => <button key={option} className={speed === option ? "speed-active" : ""} onClick={() => setSpeed(option)}>{option}x</button>)}</div><span className="replay-vehicles">{activeFrame ? `${activeFrame.vehicles.length} vehicles` : "0 vehicles"}</span><span className="replay-hint">Space to play / pause</span></div>{replayMeta?.incidents?.length ? <div className="incident-banner" role="status"><TrafficCone size={14} /><span>{replayMeta.incidents.map((i) => `${i.edge_id} closes at t=${i.trigger_time_s.toFixed(0)}s`).join(" · ")}</span><small>Enforced in SUMO — new entry forbidden, vehicles on-link clear it</small></div> : null}</CardContent>
         </Card>
         <div className="kpi-grid"><CountKpi icon={<Gauge />} label="Travel time" value={solve ? solve.evaluation.time_s : null} format={(n) => `${n.toFixed(0)} s`} delay="160ms" /><CountKpi icon={<Route />} label="Distance" value={solve ? solve.evaluation.distance_m / 1000 : null} format={(n) => `${n.toFixed(2)} km`} delay="220ms" /><Kpi icon={<CarFront />} label="Completed delivery" value={solve ? `${solve.evaluation.vehicles.reduce((sum, v) => sum + v.order.length, 0)} / ${graph?.requests.length || 5}` : "—"} accent={solve?.evaluation.all_served ? "good" : ""} delay="280ms" /><CountKpi icon={<Activity />} label="Replanning latency" value={solve ? solve.elapsed_s : null} format={(n) => `${n.toFixed(2)} s`} delay="340ms" /></div>
       </section>

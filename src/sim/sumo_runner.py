@@ -94,7 +94,7 @@ def run_episode(
     from .route_builder import RouteBuilder
     from .traci_adaptor import TraciAdapter
     from .sim_state import SimState
-    from .incidents import IncidentManager, STEP6_CLOSURE_CONFIG
+    from .incidents import IncidentManager, configs_for_scenario
 
     output_dir = Path(output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -133,7 +133,7 @@ def run_episode(
     sim_state.load_route_cargo(route_plan)
 
     incident_mgr = IncidentManager(
-        configs=[STEP6_CLOSURE_CONFIG],
+        configs=configs_for_scenario(scenario),
         edge_mapping=exporter.edge_mapping,
     )
 

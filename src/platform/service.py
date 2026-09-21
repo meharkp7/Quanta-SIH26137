@@ -286,43 +286,213 @@ class PlatformService:
         """Run the fixture in headless SUMO and return map frames for the UI."""
         _ensure_sumo_env()
         from src.sim.fcd_replay import parse_fcd
-        from src.sim.fixture import fixture_plan
         from src.sim.sumo_runner import run_episode
 
         output = PROJECT_ROOT / "artifacts" / "demo_sumo_ui"
         output.mkdir(parents=True, exist_ok=True)
         scenario = self._scenario(scenario_id, closed_edge_ids)
-        executable_plan = fixture_plan(scenario)
+        from src.routing.validator import evaluate_scenario as _evaluate_orders
+
         if plan:
+            orders = {
+                vehicle_id: list(stops)
+                for vehicle_id, stops in plan.items()
+            }
+            source = "requested plan"
+        else:
+            orders = dict(REFERENCE_ORDERS)
+            source = "reference plan"
+        verdict = _evaluate_orders(scenario, orders)
+        if not verdict.feasible and not plan:
+            # The reference route can break under UI closures (e.g. a closed
+            # road disconnects it). Fall back to a fresh constructive solve
+            # under the same closures instead of crashing SUMO.
+            fallback = self.solve(
+                SolveOptions(
+                    method="constructive",
+                    particles=2,
+                    evaluations=4,
+                    seed=7,
+                    closed_edge_ids=tuple(closed_edge_ids),
+                ),
+                scenario_id=scenario_id,
+            )
+            orders = {
+                vehicle_id: list(stops)
+                for vehicle_id, stops in fallback["plan"].items()
+            }
+            source = "constructive fallback plan"
+            verdict = _evaluate_orders(scenario, orders)
+        if not verdict.feasible:
+            detail = ""
+            try:
+                unserved = list(getattr(verdict, "unserved_request_ids", None) or [])
+                stranded = list(getattr(verdict, "disconnected_legs", None) or [])
+                bits = []
+                if unserved:
+                    bits.append(f"unserved customers: {', '.join(map(str, unserved))}")
+                if stranded:
+                    bits.append(f"disconnected legs: {', '.join(map(str, stranded))}")
+                if bits:
+                    detail = " " + "; ".join(bits) + "."
+            except Exception:
+                detail = ""
+            raise ValueError(
+                f"The {source} is infeasible under the selected closures; "
+                "solve a validated plan first." + detail
+            )
+        from src.sim.incidents import closure_schedule, configs_for_scenario
+
+        incident_configs = configs_for_scenario(scenario)
+        timed = [
+            cfg
+            for cfg in incident_configs
+            if cfg.trigger_time_s > 0
+        ]
+
+        def _build_executable(current_orders):
             evaluator, engine = self._stack(scenario, closed_edge_ids)
             logical_plan = RoutePlan.from_routes(
-                [VehicleRoute.from_sequence(vehicle.vehicle_id, plan.get(vehicle.vehicle_id, ())) for vehicle in scenario.fleet]
+                [VehicleRoute.from_sequence(vehicle.vehicle_id, current_orders.get(vehicle.vehicle_id, ())) for vehicle in scenario.fleet]
             )
             encoded = engine.encoder.encode(logical_plan)
             candidate = engine.evaluate_keys(encoded.keys, repair=True)
             if not candidate.repaired_evaluation.feasible:
                 raise ValueError("The requested replay plan failed independent validation")
             from src.runtime.loop import DemoLoop
-            executable_plan = DemoLoop._to_executable_plan(
+            return DemoLoop._to_executable_plan(
                 candidate.repaired_evaluation,
                 scenario_id=scenario_id,
                 state_version=f"{scenario_id}:replay",
                 route_version=f"ui-replay-{int(time.time())}",
             )
+
+        notes: list[str] = []
+        executable_plan = _build_executable(orders)
+        if timed:
+            # Beat-the-clock gate: a timed incident (e.g. E23 at t=50s) kills
+            # any plan that arrives after the trigger. entry times use
+            # length-proportional splits inside each leg with a 2 s margin.
+            lengths = {
+                edge.edge_id: float(edge.length_m)
+                for edge in scenario.edges
+            }
+
+            def _late_edges(plan) -> list[tuple[str, float, float]]:
+                late = []
+                for route in plan.vehicle_routes:
+                    for leg in route.legs:
+                        total = sum(
+                            lengths.get(eid, 0.0)
+                            for eid in leg.physical_edge_ids
+                        )
+                        cursor = float(leg.departure_time_s)
+                        for eid in leg.physical_edge_ids:
+                            span = (
+                                lengths.get(eid, 0.0) / total
+                                * float(leg.travel_time_s)
+                                if total > 0
+                                else 0.0
+                            )
+                            for cfg in timed:
+                                if (
+                                    eid == cfg.edge_id
+                                    and cursor >= cfg.trigger_time_s - 2.0
+                                ):
+                                    late.append(
+                                        (eid, cursor, cfg.trigger_time_s)
+                                    )
+                            cursor += span
+                return late
+
+            late = _late_edges(executable_plan)
+            if late:
+                beaten = sorted({eid for eid, _, _ in late})
+                extended = tuple(
+                    dict.fromkeys(
+                        list(closed_edge_ids) + beaten
+                    )
+                )
+                retry = self.solve(
+                    SolveOptions(
+                        method="constructive",
+                        particles=2,
+                        evaluations=4,
+                        seed=7,
+                        closed_edge_ids=extended,
+                    ),
+                    scenario_id=scenario_id,
+                )
+                retry_orders = {
+                    vehicle_id: list(stops)
+                    for vehicle_id, stops in retry["plan"].items()
+                }
+                if _evaluate_orders(scenario, retry_orders).feasible:
+                    retry_plan = _build_executable(retry_orders)
+                    if not _late_edges(retry_plan):
+                        executable_plan = retry_plan
+                        orders = retry_orders
+                        notes.append(
+                            "Replay plan rerouted around "
+                            + ", ".join(beaten)
+                            + " to beat the incident clock."
+                        )
+                    else:
+                        raise ValueError(
+                            "The incident clock beats every feasible plan: "
+                            + ", ".join(
+                                f"{eid} needed at t={entry:.0f}s "
+                                f"but closes at t={trig:.0f}s"
+                                for eid, entry, trig in late
+                            )
+                            + ". Choose a different incident."
+                        )
+                else:
+                    raise ValueError(
+                        "The incident clock beats every feasible plan: "
+                        + ", ".join(
+                            f"{eid} needed at t={entry:.0f}s "
+                            f"but closes at t={trig:.0f}s"
+                            for eid, entry, trig in late
+                        )
+                        + ". Choose a different incident."
+                    )
         episode = run_episode(scenario, executable_plan, output, gui=False)
         fcd_path = output / "sumo_output" / "fcd.xml"
         if not fcd_path.is_file():
             raise RuntimeError("SUMO finished but wrote no FCD trace")
-        frames = parse_fcd(fcd_path)
+        from src.sim.incidents import closure_schedule
+
+        schedule = closure_schedule(incident_configs)
+        frames = parse_fcd(
+            fcd_path, closures=tuple(schedule) if schedule else ()
+        )
+        if schedule:
+            incident_bits = ", ".join(
+                f"{item['edge_id']} closes at t={item['from_s']:.0f}s"
+                for item in schedule
+            )
+        else:
+            incident_bits = "no closures scheduled"
         return {
             "mode": "replay",
             "episode": episode.to_dict(),
             "frames": frames,
             "duration_s": frames[-1]["t"] if frames else 0.0,
+            "incidents": [
+                {
+                    "incident_id": cfg.incident_id,
+                    "edge_id": cfg.edge_id,
+                    "trigger_time_s": cfg.trigger_time_s,
+                }
+                for cfg in incident_configs
+            ],
             "message": (
                 "SUMO replay ready. Green/blue dots are delivery vans; "
-                "gray dots are background cars. E23 closes at t=50s."
+                f"gray dots are background cars. {incident_bits}."
+                + (" " + " ".join(notes) if notes else "")
             ),
+            "notes": notes,
         }
 
     def run_sumo(self, *, gui: bool = False) -> dict:

@@ -11,7 +11,7 @@ FIXTURE_CLOSURES = (
 )
 
 
-def parse_fcd(path: Path) -> list[dict]:
+def parse_fcd(path: Path, closures: tuple[dict, ...] | None = None) -> list[dict]:
     """Read SUMO FCD XML into per-second vehicle frames.
 
     Coordinates match the contract graph (meters), so the UI can project
@@ -52,7 +52,7 @@ def parse_fcd(path: Path) -> list[dict]:
                 "closed": [],
             }
         )
-    return apply_closures(frames, FIXTURE_CLOSURES)
+    return apply_closures(frames, FIXTURE_CLOSURES if closures is None else closures)
 
 
 def apply_closures(
