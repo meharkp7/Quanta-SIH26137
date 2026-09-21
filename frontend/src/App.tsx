@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { ToastProvider, ToastContainer, useToast } from "@/components/ui/Toast";
 import { api, CompareResult, Evidence, DrlDemo, Evaluation, Graph, ReplayFrame, ReplayResult, ScenarioSummary, SolveResult, Story, StoryStep, SOLVE_TIMEOUT_MS, postJson } from "@/api";
 import { GeoMap, isGeoGraph, speedBandColor } from "@/GeoMap";
 import { useCountUp, useInView, usePrefersReducedMotion } from "@/hooks";
@@ -82,13 +83,33 @@ function App() {
       const result = await postJson<SolveResult>("/api/solve", { scenario_id: scenarioId, method, particles: large ? 6 : 12, evaluations: large ? 20 : 40, seed: 7, closed_edge_ids: closed }, SOLVE_TIMEOUT_MS);
       setPreviousSolve(solve);
       setSolve(result);
-    } catch (err) { setError((err as Error).message); } finally { setBusy(""); }
+      if (result.cached) {
+        toast({ kind: "info", title: "Solve cached", message: "Identical repeat solve returned instantly", duration: 3000 });
+      } else {
+        toast({ kind: "success", title: "Solve complete", message: `Objective: ${result.evaluation.objective.toFixed(1)}`, duration: 3000 });
+      }
+    } catch (err) {
+      toast({ kind: "error", title: "Solve failed", message: (err as Error).message, duration: 5000 });
+      setError((err as Error).message);
+    } finally { setBusy(""); }
   }
 
   async function runReplay() {
     setBusy("replay"); setError("");
-    try { const result = await postJson<ReplayResult>("/api/sumo/replay", { scenario_id: scenarioId, plan: solve?.plan || null, closed_edge_ids: closed }, SOLVE_TIMEOUT_MS); setReplay(result.frames || []); setReplayMeta(result); setFrame(0); setIsPlaying(true); }
-    catch (err) { setError((err as Error).message); } finally { setBusy(""); }
+    try {
+      const result = await postJson<ReplayResult>("/api/sumo/replay", { scenario_id: scenarioId, plan: solve?.plan || null, closed_edge_ids: closed }, SOLVE_TIMEOUT_MS);
+      setReplay(result.frames || []);
+      setReplayMeta(result);
+      setFrame(0);
+      setIsPlaying(true);
+      toast({ kind: "success", title: "Replay loaded", message: `${result.frames?.length || 0} frames ready`, duration: 3000 });
+      if (result.incidents?.length) {
+        toast({ kind: "info", title: "Incidents active", message: result.incidents.map(i => `${i.edge_id}@${i.trigger_time_s.toFixed(0)}s`).join(", "), duration: 5000 });
+      }
+    } catch (err) {
+      toast({ kind: "error", title: "Replay failed", message: (err as Error).message, duration: 5000 });
+      setError((err as Error).message);
+    } finally { setBusy(""); }
   }
 
   async function openStory() {
@@ -139,12 +160,14 @@ function App() {
         : await postJson<unknown>(endpoint, params, SOLVE_TIMEOUT_MS, controller.signal);
       applyStoryResult(step, payload, params);
       setStepStatus((s) => ({ ...s, [step.id]: "done" }));
+      toast({ kind: "success", title: `Step complete: ${step.title}`, duration: 2500 });
       return true;
     } catch (err) {
       if (autoAbortRef.current) {
         setStepStatus((s) => ({ ...s, [step.id]: "pending" }));
       } else {
         setStepStatus((s) => ({ ...s, [step.id]: "error" }));
+        toast({ kind: "error", title: `Step failed: ${step.title}`, message: (err as Error).message, duration: 5000 });
         setError((err as Error).message);
       }
       return false;
@@ -194,7 +217,13 @@ function App() {
   }, [activeTab]);
 
   if (page === "home") return <Home onStart={() => setPage("simulation")} />;
-  return <div className="app-shell">
+
+  const { push: toast } = useToast();
+
+  return (
+    <ToastProvider>
+      <div className="app-shell">
+        <ToastContainer />
     <header className="topbar">
       <button className="brand-button" onClick={() => setPage("home")}><span className="brand-mark">✦</span><span>QUANTA</span><Badge variant="outline">SIH26137</Badge></button>
       <nav className="nav-tabs"><button className={activeTab === "control" ? "nav-active" : ""} onClick={() => setActiveTab("control")}>Live Control Room</button><button className={activeTab === "forecast" ? "nav-active" : ""} onClick={() => setActiveTab("forecast")}>Forecast</button><button className={activeTab === "replanning" ? "nav-active" : ""} onClick={() => setActiveTab("replanning")}>Replanning</button><button className={activeTab === "evidence" ? "nav-active" : ""} onClick={() => setActiveTab("evidence")}>Evidence</button></nav>
@@ -227,7 +256,9 @@ function App() {
       <section className="bottom-grid"><CompareStrip current={solve} previous={previousSolve} /><Card className="reveal lift" style={{ "--d": "60ms" } as CSSProperties}><CardHeader><CardTitle>Route result</CardTitle><CardDescription>The exact customer order and road path returned by the backend.</CardDescription></CardHeader><CardContent><RouteTable result={solve} />{solve && <><Separator /><div className="route-subhead">Delivery timeline</div><VehicleGantt result={solve} /><div className="route-subhead">Validator report</div><ViolationsPanel evaluation={solve.evaluation} /></>}</CardContent></Card><Card className="reveal lift" style={{ "--d": "120ms" } as CSSProperties}><CardHeader><CardTitle>Convergence</CardTitle><CardDescription>Lower objective is better. This is the optimizer’s actual evaluation trace.</CardDescription></CardHeader><CardContent><Trace values={solve?.trace?.best || []} diversity={solve?.trace?.diversity} traceKey={solve ? `${solve.method}-${solve.evaluations || 0}-${(solve.trace?.best || []).length}` : "empty"} /></CardContent></Card><Card className="timeline-card reveal" style={{ "--d": "180ms" } as CSSProperties}><CardHeader><CardTitle>What happened</CardTitle><CardDescription>A short audit trail for the current run.</CardDescription></CardHeader><CardContent><Timeline solve={solve} replay={replay} /></CardContent></Card></section>
     </main> : activeTab === "forecast" ? <ForecastTab evidence={evidence} graph={graph} /> : activeTab === "replanning" ? <ReplanningTab current={solve} previous={previousSolve} compare={compareResult} /> : <EvidenceTab evidence={evidence} />}
     {storyOpen && <StoryPanel story={story} status={stepStatus} autoPlaying={autoPlaying} onRun={runStoryStep} onAutoPlay={autoPlayStory} onAbort={abortStory} onClose={() => { abortStory(); setStoryOpen(false); }} compare={compareResult} current={solve} />}
-  </div>;
+  </div>
+      </ToastProvider>
+);
 }
 
 function Home({ onStart }: { onStart: () => void }) { return <div className="home-shell"><header className="home-nav"><button className="brand-button"><span className="brand-mark">✦</span><span>QUANTA</span></button><Button variant="outline" size="sm" onClick={onStart}>Open control room <ArrowRight size={14} /></Button></header><main className="home-main"><div className="hero-copy reveal"><Badge variant="outline">SMART ROUTING FOR DYNAMIC CITIES</Badge><h1>When the city changes,<br /><em>the route adapts.</em></h1><p>Quanta is an adaptive dispatch system for delivery fleets. It watches a directed road network, forecasts near-term traffic, and searches for a route that is legal, fast, and ready to execute.</p><div className="hero-actions"><Button size="lg" onClick={onStart}>Launch live simulation <ArrowRight size={17} /></Button><a href="#method">See the method <ChevronRight size={15} /></a></div><div className="hero-proof"><span><CheckCircle2 size={15} /> Independent validation</span><span><CheckCircle2 size={15} /> SUMO execution</span><span><CheckCircle2 size={15} /> QPSO + baselines</span></div><div className="hero-stats"><HeroStat value={4} label="OPTIMIZERS LIVE" /><HeroStat value={3} label="FORECAST HORIZONS" /><HeroStat value={5} label="JOBS IN FIXTURE" /></div></div><div className="hero-visual" aria-hidden="true"><div className="orbital orbital-one" /><div className="orbital orbital-two" /><div className="city-core"><Layers3 size={42} /><span>LIVE<br />NETWORK</span></div><div className="hero-node node-a" /><div className="hero-node node-b" /><div className="hero-node node-c" /><div className="hero-line line-a" /><div className="hero-line line-b" /><div className="hero-line line-c" /><div className="hero-float float-one"><span className="live-dot" /> FORECAST v1</div><div className="hero-float float-two">QPSO <strong>READY</strong></div></div></main><section id="method" className="home-method"><div><span className="eyebrow">THE DECISION LOOP</span><h2>From signal to safe action.</h2></div><div className="method-grid"><ScrollReveal delay="0ms"><Method number="01" icon={<Activity />} title="Observe" text="Traffic, closures, fleet position, and delivery windows enter one causal state." /></ScrollReveal><ScrollReveal delay="90ms"><Method number="02" icon={<Bot />} title="Predict" text="The graph forecaster estimates speed by road and horizon with measurable uncertainty." /></ScrollReveal><ScrollReveal delay="180ms"><Method number="03" icon={<Sparkles />} title="Optimize" text="QPSO searches a route plan, while an independent validator protects feasibility." /></ScrollReveal><ScrollReveal delay="270ms"><Method number="04" icon={<ShieldCheck />} title="Prove" text="SUMO executes the plan so the result can be replayed and inspected." /></ScrollReveal></div></section></div> }
