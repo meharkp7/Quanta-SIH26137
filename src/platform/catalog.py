@@ -67,6 +67,20 @@ SCENARIO_CATALOG = (
         "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_003" / "scenario.json",
         "description": "Real OSM Delhi network (dwarka_sector12-map003, validation split): 1929 edges, 841 nodes, 70 requests, 15 vehicles. Read-only reference; render/solve via the same live service.",
     },
+    {
+        "id": "DELHI_CC",
+        "label": "Delhi — Chandni Chowk (real OSM)",
+        "role": "real Delhi map",
+        "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_001" / "scenario.json",
+        "description": "Real OSM Delhi network (chandni_chowk-map001, train split): 2082 edges, 846 nodes, 50 requests, 8 vehicles. Read-only reference; render/solve via the same live service.",
+    },
+    {
+        "id": "DELHI_NP",
+        "label": "Delhi — Nehru Place (real OSM)",
+        "role": "real Delhi map",
+        "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_004" / "scenario.json",
+        "description": "Real OSM Delhi network (nehru_place-map004, test split): 2137 edges, 843 nodes, 80 requests, 13 vehicles. Read-only reference; render/solve via the same live service.",
+    },
 )
 
 

@@ -122,6 +122,34 @@ class PlatformService:
             "validation": validator_payload(result),
         }
 
+    # Networks above this edge count get a capped optimizer budget so the
+    # UI never hangs on a multi-thousand-edge real-city graph. The cap is
+    # reported back as `budget_note`; callers asking for less keep theirs.
+    LARGE_GRAPH_EDGES = 1000
+    LARGE_GRAPH_PARTICLES = 6
+    LARGE_GRAPH_EVALUATIONS = 24
+
+    def _budget_for(self, scenario_id: str, options: SolveOptions) -> tuple[SolveOptions, str | None]:
+        try:
+            edge_count = len(load_scenario(scenario_id).edges)
+        except Exception:
+            return options, None
+        if edge_count <= self.LARGE_GRAPH_EDGES:
+            return options, None
+        capped = SolveOptions(
+            method=options.method,
+            particles=min(options.particles, self.LARGE_GRAPH_PARTICLES),
+            evaluations=min(options.evaluations, self.LARGE_GRAPH_EVALUATIONS),
+            seed=options.seed,
+            closed_edge_ids=options.closed_edge_ids,
+        )
+        if (capped.particles, capped.evaluations) == (options.particles, options.evaluations):
+            return options, None
+        return capped, (
+            f"Large network ({edge_count} edges): budget capped to "
+            f"{capped.particles} particles x {capped.evaluations} evaluations."
+        )
+
     def solve(
         self,
         options: SolveOptions | None = None,
@@ -138,18 +166,23 @@ class PlatformService:
                 seed=options.seed,
                 closed_edge_ids=options.closed_edge_ids,
             )
+        options, budget_note = self._budget_for(scenario_id, options)
         method = options.method.lower()
         if method == "qpso":
-            return self._solve_swarm(scenario_id, options, algorithm="qpso", include_route_plan=include_route_plan)
-        if method == "pso":
-            return self._solve_swarm(scenario_id, options, algorithm="pso", include_route_plan=include_route_plan)
-        if method == "constructive":
-            return self._solve_constructive(scenario_id, options)
-        if method == "alns":
-            return self._solve_alns(scenario_id, options)
-        if method == "milp":
-            return self._solve_milp(scenario_id, options)
-        raise ValueError(f"Unknown method: {options.method}")
+            result = self._solve_swarm(scenario_id, options, algorithm="qpso", include_route_plan=include_route_plan)
+        elif method == "pso":
+            result = self._solve_swarm(scenario_id, options, algorithm="pso", include_route_plan=include_route_plan)
+        elif method == "constructive":
+            result = self._solve_constructive(scenario_id, options)
+        elif method == "alns":
+            result = self._solve_alns(scenario_id, options)
+        elif method == "milp":
+            result = self._solve_milp(scenario_id, options)
+        else:
+            raise ValueError(f"Unknown method: {options.method}")
+        if budget_note:
+            result["budget_note"] = budget_note
+        return result
 
     def compare(
         self,

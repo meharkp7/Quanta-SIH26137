@@ -8,23 +8,80 @@ from src.contracts.scenario import Scenario
 from src.routing.route_evaluator import RoutePlanEvaluation
 from src.routing.validator import EvaluationResult
 
+# Real-Delhi scenarios carry native OSM projected coordinates (UTM 43N,
+# EPSG:32643 — see the graphml `crs` graph attribute). The fixture scenarios
+# use small synthetic Cartesian coordinates. Convert once per payload so the
+# UI can render real geography on a tile map.
+_SOURCE_CRS = "EPSG:32643"
+_TARGET_CRS = "EPSG:4326"
+
+try:
+    from pyproj import Transformer as _Transformer
+
+    _LATLON = _Transformer.from_crs(_SOURCE_CRS, _TARGET_CRS, always_xy=True)
+except Exception:
+    _LATLON = None
+
+
+def is_geo_scenario(scenario: Scenario) -> bool:
+    """True when node coordinates are real projected metres (UTM 43N)."""
+    try:
+        description = (scenario.coordinate_transform.description or "").lower()
+    except Exception:
+        description = ""
+    if "osm projected" in description:
+        return True
+    # Fallback: fixtures live near the origin; UTM 43N eastings/northings
+    # for Delhi are ~1e5..9e5 / ~1e6..9e6.
+    try:
+        return all(
+            1e5 <= float(node.x_m) <= 9e5 and 1e6 <= float(node.y_m) <= 9e6
+            for node in scenario.nodes
+        )
+    except Exception:
+        return False
+
+
+def to_latlon(x_m: float, y_m: float) -> tuple[float, float] | None:
+    """Convert projected metres to (lat, lon); None if unavailable."""
+    if _LATLON is None:
+        return None
+    try:
+        lon, lat = _LATLON.transform(float(x_m), float(y_m))
+    except Exception:
+        return None
+    return float(lat), float(lon)
+
 
 def scenario_payload(scenario: Scenario, *, closed_edge_ids: Sequence[str] = ()) -> dict:
     closed = set(closed_edge_ids)
+    geo = is_geo_scenario(scenario) and _LATLON is not None
+    nodes = []
+    for node in scenario.nodes:
+        entry: dict = {
+            "id": node.node_id,
+            "x": node.x_m,
+            "y": node.y_m,
+            "kind": str(node.kind),
+            "zone": node.zone_id,
+        }
+        if geo:
+            converted = to_latlon(node.x_m, node.y_m)
+            if converted is not None:
+                entry["lat"], entry["lon"] = converted
+            else:
+                geo = False
+        nodes.append(entry)
     return {
         "scenario_id": scenario.scenario_id,
         "graph_version": scenario.graph_version,
+        "geo": {
+            "available": bool(geo),
+            "crs": _TARGET_CRS,
+            "source_crs": _SOURCE_CRS,
+        },
         "units": scenario.units.model_dump(),
-        "nodes": [
-            {
-                "id": node.node_id,
-                "x": node.x_m,
-                "y": node.y_m,
-                "kind": str(node.kind),
-                "zone": node.zone_id,
-            }
-            for node in scenario.nodes
-        ],
+        "nodes": nodes,
         "edges": [
             {
                 "id": edge.edge_id,

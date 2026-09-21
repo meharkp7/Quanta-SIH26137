@@ -198,3 +198,4 @@ em { color:var(--lime); font-style:normal; }
   .trace-line{stroke-dashoffset:0}
   .gantt-fill{animation:none}
 }
+.geo-map-wrap{height:365px;position:relative;border:1px solid #2a382a;border-radius:6px;overflow:hidden;background:#0b0f0b}.geo-map{height:100%;width:100%;z-index:1}.geo-map-wrap .map-legend{background:rgba(8,11,8,.72);padding:6px 10px;border-radius:5px}.legend-line.geo-fast{background:#22c55e}.legend-line.geo-slow{background:#ef4444}.band-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:baseline}.budget-note{margin:8px 0 0;color:#9aa698}
