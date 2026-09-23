@@ -7,6 +7,11 @@ import numpy as np
 from src.contracts.scenario import Scenario
 from src.learning.scaling import FeatureScaler
 from src.learning.schema import FEATURE_NAMES, HISTORY_MINUTES
+from src.learning.window_cache import (
+    episode_fingerprint,
+    load_episode_windows,
+    save_episode_windows,
+)
 from src.learning.windows import ForecastWindow, assert_window_causal, build_episode_windows
 from src.learning.evaluation import validate_manifest_splits
 
@@ -346,3 +351,153 @@ def write_fixture_tensors(output_dir: Path, dataset: WindowDataset) -> Path:
     np.savez_compressed(path, **{key: np.asarray(value) for key,value in vars(batch).items()},
         feature_names=np.asarray(FEATURE_NAMES), history_minutes=np.asarray([HISTORY_MINUTES]))
     return path
+
+
+def split_episode_ids(manifest: dict) -> dict[str, list[str]]:
+    """Public split-to-episode mapping for either manifest schema."""
+    return _split_episode_ids(manifest)
+
+
+def episode_scenario_map(
+    root: Path,
+    manifest: dict,
+    split_ids: dict[str, list[str]],
+) -> dict[str, str]:
+    """Map every episode ID to its scenario ID without loading windows.
+
+    Prefers the embedded corpus ``episodes`` records; falls back to one
+    small manifest read per episode.
+    """
+    root = Path(root)
+    mapping: dict[str, str] = {}
+    records = manifest.get("episodes")
+    embedded = (
+        {str(r.get("episode_id")): str(r.get("scenario_id", "")) for r in records}
+        if isinstance(records, list)
+        else {}
+    )
+    for name in _SPLIT_NAMES:
+        for episode_id in split_ids.get(name, ()):
+            scenario_id = embedded.get(episode_id, "")
+            if not scenario_id:
+                episode_manifest = json.loads(
+                    (root / "episodes" / episode_id / "episode_manifest.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                scenario_id = str(episode_manifest["scenario_id"])
+            mapping[episode_id] = scenario_id
+    return mapping
+
+
+class EpisodeStream:
+    """O(episode) streaming window reader for thousand-episode corpora.
+
+    ``load_pilot_windows`` materialises every window of every episode
+    (~30 GB on corpus_v2: 15 750 windows), which thrashes a 25 GB machine
+    into swap and gets long runs SIGKILLed. This reader holds one episode
+    at a time: peak memory is a single episode (~9 windows, tens of MB).
+
+    Batches never mix episodes, so every batch shares one map (one E):
+    there is no padding waste (map-bucketing for free). Episode order
+    shuffles per epoch; windows shuffle within each episode.
+    """
+
+    def __init__(
+        self,
+        root: Path | str,
+        split: str,
+        episode_ids,
+        scenarios: dict[str, Scenario],
+        episode_scenario: dict[str, str],
+        *,
+        scaler=None,
+        cache_dir: Path | str | None = None,
+    ) -> None:
+        from src.learning.window_cache import (
+            episode_fingerprint,
+            load_episode_windows,
+            save_episode_windows,
+        )
+
+        if split not in _SPLIT_NAMES:
+            raise ValueError(f"unknown split {split!r}")
+        self.root = Path(root)
+        self.split = split
+        self.episode_ids = tuple(episode_ids)
+        if not self.episode_ids:
+            raise ValueError(f"split {split!r} has no episodes")
+        self.scenarios = scenarios
+        self.episode_scenario = dict(episode_scenario)
+        self.scaler = scaler
+        self.cache = Path(cache_dir) if cache_dir is not None else None
+        self._counts = {eid: len(self._load(eid)) for eid in self.episode_ids}
+
+    def __len__(self) -> int:
+        return sum(self._counts.values())
+
+    @property
+    def num_episodes(self) -> int:
+        return len(self.episode_ids)
+
+    def set_scaler(self, scaler) -> None:
+        self.scaler = scaler
+
+    def _load(self, episode_id: str) -> list[ForecastWindow]:
+        folder = self.root / "episodes" / episode_id
+        scenario_id = self.episode_scenario[episode_id]
+        scenario = self.scenarios[scenario_id]
+        windows = None
+        fingerprint = ""
+        if self.cache is not None:
+            fingerprint = episode_fingerprint(folder)
+            windows = load_episode_windows(self.cache, episode_id, fingerprint)
+        if windows is None:
+            windows = build_episode_windows(folder, scenario, split=self.split)
+            if self.cache is not None:
+                save_episode_windows(self.cache, episode_id, fingerprint, windows)
+        return windows
+
+    def iter_windows(self):
+        """Yield raw windows episode by episode (no scaler applied)."""
+        for episode_id in self.episode_ids:
+            yield from self._load(episode_id)
+
+    def iter_batches(
+        self,
+        batch_size: int,
+        *,
+        shuffle: bool = False,
+        rng=None,
+        stride: int = 1,
+    ):
+        """Yield scaler-applied ForecastBatch objects, one episode at a time.
+
+        ``stride`` keeps every k-th window per episode (ordered, then
+        shuffled): episodes emit ~9 overlapping windows, so stride 3 trains
+        on the same maps/regimes at one third the steps. Validation must
+        always use stride 1.
+        """
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if stride <= 0:
+            raise ValueError("stride must be positive")
+        order = list(self.episode_ids)
+        if shuffle:
+            rng = np.random.default_rng() if rng is None else rng
+            rng.shuffle(order)
+        for episode_id in order:
+            windows = self._load(episode_id)[::stride]
+            if shuffle:
+                assert rng is not None
+                windows = [windows[i] for i in rng.permutation(len(windows))]
+            for start in range(0, len(windows), batch_size):
+                yield WindowDataset(
+                    windows[start:start + batch_size], scaler=self.scaler
+                ).batch()
+
+    def effective_count(self, stride: int = 1) -> int:
+        """Window count seen per epoch under the given stride."""
+        if stride <= 0:
+            raise ValueError("stride must be positive")
+        return sum((count + stride - 1) // stride for count in self._counts.values())

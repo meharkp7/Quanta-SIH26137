@@ -25,14 +25,20 @@ from src.learning.baselines import (
 from src.learning.gnn_transformer import (
     CausalGNNTransformer,
     build_graph_batch,
+    build_graph_batch_cached,
     forecast_loss,
 )
 from src.learning.loader import (
+    EpisodeStream,
     ForecastBatch,
+    episode_scenario_map,
     load_corpus_manifest,
     load_corpus_scenarios,
     load_pilot_windows,
+    split_episode_ids,
 )
+from src.learning.scaling import FeatureScaler
+from src.learning.schema import FEATURE_NAMES
 from src.learning.uncertainty import (
     calibrated_arrays,
     fit_residual_calibration,
@@ -46,10 +52,10 @@ def seed_everything(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def _batch_from_windows(windows):
-    """Use the existing WindowDataset batching contract."""
+def _batch_from_windows(windows, scaler=None):
+    """Use the existing WindowDataset batching contract (with scaler)."""
     from src.learning.loader import WindowDataset
-    return WindowDataset(list(windows)).batch()
+    return WindowDataset(list(windows), scaler=scaler).batch()
 
 
 def _tensor_batch(
@@ -77,8 +83,8 @@ def _scenario_subset(scenarios, batch):
 
 
 def _forward_batch(model, batch, scenarios, device):
-    """Build sparse graph and run one mini-batch."""
-    graph = build_graph_batch(
+    """Build sparse graph and run one mini-batch (cached per-map graphs)."""
+    graph = build_graph_batch_cached(
         batch,
         _scenario_subset(scenarios, batch),
         device=device,
@@ -112,7 +118,7 @@ def _iter_batches(dataset, batch_size, *, shuffle=False, rng=None):
             windows[int(i)]
             for i in indices[start:start + batch_size]
         ]
-        yield _batch_from_windows(selected)
+        yield _batch_from_windows(selected, scaler=dataset.scaler)
 
 
 def _supervision_report(dataset):
@@ -235,6 +241,61 @@ def _predict_dataset(
         "targets": targets,
         "masks": masks,
     }
+
+
+def _stream_supervision(stream) -> dict:
+    """Padding-aware supervision coverage without loading the corpus at once."""
+    total_edges = 0
+    speed_valid = [0, 0, 0]
+    traversal_valid = [0, 0, 0]
+    windows = 0
+    for window in stream.iter_windows():
+        windows += 1
+        total_edges += len(window.edge_ids)
+        for index in range(3):
+            speed_valid[index] += int(window.speed_target_mask[:, index].sum())
+            traversal_valid[index] += int(window.traversal_target_mask[:, index].sum())
+    report: dict = {"windows": windows, "edge_instances": total_edges, "horizons": {}}
+    for index, horizon in enumerate((5, 10, 15)):
+        report["horizons"][str(horizon)] = {
+            "speed_valid_count": speed_valid[index],
+            "speed_coverage": float(speed_valid[index] / total_edges) if total_edges else 0.0,
+            "traversal_valid_count": traversal_valid[index],
+            "traversal_coverage": float(traversal_valid[index] / total_edges) if total_edges else 0.0,
+        }
+    return report
+
+
+def _stream_validation_mae(model, stream, scenarios, device_obj, batch_size: int,
+                           total_edges: int = 0):
+    """Streaming validation MAE (identical float64 math to _evaluate)."""
+    sum_abs = np.zeros(3, dtype=np.float64)
+    counts = np.zeros(3, dtype=np.int64)
+    model.eval()
+    with torch.no_grad():
+        for batch in stream.iter_batches(batch_size, shuffle=False):
+            outputs = _forward_batch(model, batch, scenarios, device_obj)
+            pred = outputs["speed_ratio"].detach().cpu().numpy()
+            for horizon in range(3):
+                target = batch.speed_targets[:, :, horizon]
+                mask = batch.speed_target_mask[:, :, horizon]
+                valid = mask & np.isfinite(target) & np.isfinite(pred[:, :, horizon])
+                if np.any(valid):
+                    sum_abs[horizon] += np.abs(
+                        pred[:, :, horizon][valid].astype(np.float64)
+                        - target[valid].astype(np.float64)
+                    ).sum()
+                    counts[horizon] += int(valid.sum())
+    metrics = {}
+    for horizon in range(3):
+        key = str((horizon + 1) * 5)
+        count = int(counts[horizon])
+        metrics[key] = {
+            "mae": float(sum_abs[horizon] / count) if count else None,
+            "count": count,
+            "label_coverage": float(count / total_edges) if total_edges else 0.0,
+        }
+    return metrics
 
 
 def _evaluate(
@@ -421,6 +482,8 @@ def train_forecaster(
     window_cache: str | None = None,
     datasets: dict | None = None,
     manifest_path: Path | None = None,
+    stream: bool = False,
+    stride: int = 1,
 ) -> dict:
     """Train on Step-13 windows and write a reproducible artifact manifest.
 
@@ -428,6 +491,15 @@ def train_forecaster(
     for ``patience`` consecutive epochs (``patience=0`` disables it); the best
     checkpoint is always retained. ``scheduler`` is one of
     ``{"cosine", "plateau", "none"}``.
+
+    ``stream=True`` reads one episode at a time from the on-disk window
+    cache instead of preloading every window (~30 GB on corpus_v2, which
+    thrashes a 25 GB machine into swap and gets long runs SIGKILLed).
+    Batches never mix episodes, so every batch shares one map: zero
+    padding waste. Streaming requires ``final_eval=False`` (finalize with
+    ``scripts/finalize_forecaster.py``) and is incompatible with shared
+    preloaded ``datasets``. ``stride`` keeps every k-th train window per
+    episode (validation always runs full).
     """
     if epochs <= 0:
         raise ValueError("epochs must be positive")
@@ -451,6 +523,10 @@ def train_forecaster(
         raise ValueError("min_delta cannot be negative")
     if grad_clip <= 0.0:
         raise ValueError("grad_clip must be positive")
+    if stride <= 0:
+        raise ValueError("stride must be positive")
+    if stride > 1 and not stream:
+        raise ValueError("stride>1 is only supported with stream=True")
 
     seed_everything(seed)
 
@@ -468,7 +544,44 @@ def train_forecaster(
         f"Loading causal forecast windows from {pilot_dir}...",
         flush=True,
     )
-    if datasets is None:
+    streams: dict | None = None
+    if stream:
+        if datasets is not None:
+            raise ValueError("stream=True is incompatible with shared preloaded datasets")
+        if final_eval:
+            raise ValueError(
+                "stream=True requires final_eval=False (the in-training finale "
+                "concatenates full-split tensors); finalize afterwards with "
+                "scripts/finalize_forecaster.py"
+            )
+        split_ids = split_episode_ids(split_manifest)
+        if not split_ids.get("validation"):
+            raise ValueError(
+                "Forecaster training requires a separate validation split. "
+                "Do not use the ten local training episodes as validation data; "
+                "use them only for format and pipeline smoke tests."
+            )
+        ep_scenarios = episode_scenario_map(pilot_dir, split_manifest, split_ids)
+        cache = Path(window_cache) if window_cache is not None else None
+        streams = {
+            name: EpisodeStream(
+                pilot_dir, name, split_ids[name], scenarios, ep_scenarios,
+                cache_dir=cache,
+            )
+            for name in ("train", "validation", "test")
+            if split_ids.get(name)
+        }
+        print("Fitting scaler (streaming over train episodes)...", flush=True)
+        scaler = FeatureScaler.fit_windows(
+            streams["train"].iter_windows(), FEATURE_NAMES
+        )
+        for stream_obj in streams.values():
+            stream_obj.set_scaler(scaler)
+        train_windows = len(streams["train"])
+        validation_windows = len(streams["validation"])
+        test_windows = len(streams["test"]) if "test" in streams else 0
+        supervision = {name: _stream_supervision(s) for name, s in streams.items()}
+    elif datasets is None:
         # Fresh load (parallel builds + optional NPZ cache, either schema).
         datasets = load_pilot_windows(
             pilot_dir, cache_dir=window_cache, manifest_path=manifest_path
@@ -482,18 +595,19 @@ def train_forecaster(
                 flush=True,
             )
 
-    if "validation" not in datasets:
-        raise ValueError(
-            "Forecaster training requires a separate validation split. "
-            "Do not use the ten local training episodes as validation data; "
-            "use them only for format and pipeline smoke tests."
-        )
+    if streams is None:
+        if "validation" not in datasets:
+            raise ValueError(
+                "Forecaster training requires a separate validation split. "
+                "Do not use the ten local training episodes as validation data; "
+                "use them only for format and pipeline smoke tests."
+            )
 
-    train_windows = len(datasets["train"])
-    validation_windows = len(datasets["validation"])
-    test_windows = len(datasets.get("test", ()))
+        train_windows = len(datasets["train"])
+        validation_windows = len(datasets["validation"])
+        test_windows = len(datasets.get("test", ()))
 
-    supervision = {name: _supervision_report(dataset) for name, dataset in datasets.items()}
+        supervision = {name: _supervision_report(dataset) for name, dataset in datasets.items()}
 
     print(
         "Windows loaded: "
@@ -536,6 +650,10 @@ def train_forecaster(
         (train_windows + batch_size - 1)
         // batch_size
     )
+    if streams is not None:
+        steps_per_epoch = (
+            streams["train"].effective_count(stride) + batch_size - 1
+        ) // batch_size
 
     print(
         f"Training on {device_obj} | "
@@ -551,12 +669,18 @@ def train_forecaster(
         running_traversal = 0.0
         count = 0
 
-        for batch in _iter_batches(
-            datasets["train"],
-            batch_size,
-            shuffle=True,
-            rng=rng,
-        ):
+        if streams is not None:
+            batch_iter = streams["train"].iter_batches(
+                batch_size, shuffle=True, rng=rng, stride=stride
+            )
+        else:
+            batch_iter = _iter_batches(
+                datasets["train"],
+                batch_size,
+                shuffle=True,
+                rng=rng,
+            )
+        for batch in batch_iter:
             optimizer.zero_grad(set_to_none=True)
 
             outputs = _forward_batch(
@@ -589,14 +713,31 @@ def train_forecaster(
                 losses["traversal"].detach().cpu()
             )
             count += 1
+            if count == 1 or count % 500 == 0:
+                print(
+                    f"Epoch {epoch:03d}/{epochs:03d} | "
+                    f"step {count}/{steps_per_epoch} | "
+                    f"loss={float(losses['total'].detach().cpu()):.6f}",
+                    flush=True,
+                )
 
-        val_metrics, _ = _evaluate(
-            model,
-            datasets["validation"],
-            scenarios,
-            device_obj,
-            batch_size=batch_size,
-        )
+        if streams is not None:
+            val_metrics = _stream_validation_mae(
+                model,
+                streams["validation"],
+                scenarios,
+                device_obj,
+                batch_size,
+                total_edges=supervision["validation"]["edge_instances"],
+            )
+        else:
+            val_metrics, _ = _evaluate(
+                model,
+                datasets["validation"],
+                scenarios,
+                device_obj,
+                batch_size=batch_size,
+            )
 
         val_values = [
             metric["mae"]
@@ -680,6 +821,12 @@ def train_forecaster(
     if not final_eval:
         # Screening mode: skip the expensive full-corpus eval/baselines/
         # calibration. Selection reads best val MAE from training_curve.json.
+        # Streamed runs finalize later via scripts/finalize_forecaster.py.
+        screening_scaler = (
+            scaler if streams is not None else datasets["train"].scaler
+        )
+        if screening_scaler is not None:
+            screening_scaler.save(output_dir / "scaler.json")
         manifest = {
             "artifact": "forecaster_v1_screening",
             "architecture": model.config,
@@ -696,6 +843,8 @@ def train_forecaster(
                 "scheduler": scheduler,
                 "grad_clip": grad_clip,
                 "batch_size": batch_size,
+                "stream": streams is not None,
+                "stride": stride,
             },
             "early_stopping": {
                 "enabled": bool(patience),
@@ -790,13 +939,13 @@ def train_forecaster(
     baseline_metrics = {}
 
     train_batch = _batch_from_windows(
-        datasets["train"].windows
+        datasets["train"].windows, scaler=datasets["train"].scaler
     )
     temporal = TemporalOnlyForecaster().fit(train_batch)
     persistence = PersistenceForecaster()
 
     for name, dataset in datasets.items():
-        batch = _batch_from_windows(dataset.windows)
+        batch = _batch_from_windows(dataset.windows, scaler=dataset.scaler)
 
         baseline_metrics[name] = {
             "persistence": masked_speed_metrics(
@@ -964,6 +1113,18 @@ def main() -> int:
         default=None,
         help="Optional explicit corpus manifest; useful for a named smoke subset.",
     )
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Stream one episode at a time (O(episode) RAM, no padding waste); "
+        "requires --no-final-eval, finalize with scripts/finalize_forecaster.py.",
+    )
+    parser.add_argument(
+        "--stride",
+        type=int,
+        default=1,
+        help="Train on every k-th window per episode (stream only).",
+    )
     args = parser.parse_args()
 
     print(
@@ -976,9 +1137,20 @@ def main() -> int:
                 width=args.width,
                 batch_size=args.batch_size,
                 device=args.device,
+                lr=args.lr,
+                weight_decay=args.weight_decay,
+                dropout=args.dropout,
+                heads=args.heads,
+                layers=args.layers,
+                scheduler=args.scheduler,
+                patience=args.patience,
+                min_delta=args.min_delta,
+                grad_clip=args.grad_clip,
                 final_eval=not args.no_final_eval,
                 window_cache=args.window_cache,
                 manifest_path=args.manifest,
+                stream=args.stream,
+                stride=args.stride,
             ),
             indent=2,
         )

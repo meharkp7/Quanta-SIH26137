@@ -1,4 +1,4 @@
-import { useCallback, useReducer, useEffect, useRef } from "react";
+import React, { useCallback, useReducer, useEffect, useRef } from "react";
 
 export type ToastKind = "info" | "success" | "warning" | "error";
 
@@ -67,8 +67,6 @@ export function useToast() {
   if (!ctx) throw new Error("useToast must be used within ToastProvider");
   return ctx;
 }
-
-import React from "react";
 
 function ToastItem({ toast, onClose }: { toast: Toast; onClose: (id: string) => void }) {
   const icons: Record<ToastKind, React.ReactNode> = {

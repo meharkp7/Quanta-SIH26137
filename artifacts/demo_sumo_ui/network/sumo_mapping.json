@@ -53,6 +53,6 @@
       "E27_0"
     ]
   },
-  "sumo_home": "C:\\Program Files (x86)\\Eclipse\\Sumo",
+  "sumo_home": "/Library/Frameworks/EclipseSUMO.framework/Versions/1.27.1/EclipseSUMO",
   "net_file": "net.xml"
 }

@@ -70,6 +70,19 @@ class InitialSolutionConfig:
     # None means evaluate every insertion candidate.
     max_candidates_per_insertion: int | None = None
 
+    # Bounded scanning for large real-city networks (e.g. the ~2000-edge
+    # Delhi OSM graphs). When set, one insertion round stops evaluating
+    # further (customer, vehicle, position) candidates once this many
+    # FEASIBLE candidates have been found. Selection still takes the
+    # best-scoring candidate among those seen. None (default) keeps the
+    # exhaustive scan used by the fixtures and tests.
+    feasible_candidates_per_round: int | None = None
+
+    # Hard cap on evaluated trials in one insertion round regardless of
+    # feasibility (None = unbounded). Protects large graphs from long
+    # scans when feasible insertions are scarce.
+    max_trials_per_round: int | None = None
+
     # Planning snapshot. Requests whose release is later than this time are
     # not inserted unless explicitly allowed.
     planning_time_s: TimeS = 0.0
@@ -142,6 +155,13 @@ class InitialSolutionBuilder:
                 raise ValueError(
                     "max_candidates_per_insertion must be at least 1 or None"
                 )
+
+        for name, value in (
+            ("feasible_candidates_per_round", self.config.feasible_candidates_per_round),
+            ("max_trials_per_round", self.config.max_trials_per_round),
+        ):
+            if value is not None and value < 1:
+                raise ValueError(f"{name} must be at least 1 or None")
 
         self._requests = tuple(
             self._scenario_requests()
@@ -325,13 +345,23 @@ class InitialSolutionBuilder:
         planning_time_s: TimeS = 0.0,
     ) -> list[InsertionCandidate]:
         candidates: list[InsertionCandidate] = []
+        target = self.config.feasible_candidates_per_round
+        trial_cap = self.config.max_trials_per_round
+        bounded = target is not None or trial_cap is not None
+        feasible_seen = 0
+        trials = 0
 
         ordered_customers = self._order_customers(
             remaining
         )
 
+        stop = False
         for customer_id in ordered_customers:
+            if stop:
+                break
             for vehicle_route in route_plan.vehicle_routes:
+                if stop:
+                    break
                 positions = range(
                     len(vehicle_route.customer_ids) + 1
                 )
@@ -345,6 +375,7 @@ class InitialSolutionBuilder:
                     )
 
                     self._last_attempt_count += 1
+                    trials += 1
                     evaluation = self.evaluator.evaluate(
                         candidate_plan,
                         planning_time_s=planning_time_s,
@@ -377,6 +408,22 @@ class InitialSolutionBuilder:
                             vehicle_evaluation=vehicle_evaluation,
                         )
                     )
+
+                    if bounded:
+                        if feasible:
+                            feasible_seen += 1
+                        if (
+                            target is not None
+                            and feasible_seen >= target
+                        ):
+                            stop = True
+                            break
+                        if (
+                            trial_cap is not None
+                            and trials >= trial_cap
+                        ):
+                            stop = True
+                            break
 
         if self.config.max_candidates_per_insertion is not None:
             candidates.sort(
