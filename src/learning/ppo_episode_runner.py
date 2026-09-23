@@ -26,6 +26,10 @@ from typing import Any
 import numpy as np
 
 from src.learning.ppo_env import TrafficRoutingPPOEnv
+from src.learning.ppo_forecast import (
+    PPOForecastSignal,
+    coerce_ppo_forecast_signal,
+)
 from src.learning.ppo_policy_state_runtime import (
     PPOPolicyStateRuntime,
 )
@@ -88,12 +92,12 @@ class PPOEpisodeRunner:
     # Forecast / uncertainty
     # ------------------------------------------------------------------
 
-    def _forecast_features(self) -> np.ndarray:
+    def _forecast_signal(self) -> PPOForecastSignal:
         """
         Obtain the current causal forecast.
 
         If no neural forecaster is configured, use the explicitly supported
-        persistence-pilot representation: a zero feature vector.
+        zero baseline. It is for pipeline testing only, not a prediction.
 
         The final neural forecaster can be injected later without changing
         the rollout orchestration.
@@ -102,46 +106,9 @@ class PPOEpisodeRunner:
         provider = self.env.forecast_provider
 
         if provider is None:
-            return np.zeros(
-                12,
-                dtype=np.float32,
-            )
-
-        values = np.asarray(
-            tuple(
-                float(value)
-                for value in provider(
-                    float(self.env.simulator.sim_time_s)
-                )
-            ),
-            dtype=np.float32,
-        )
-
-        if values.shape != (12,):
-            raise ValueError(
-                "forecast_provider must return exactly 12 features "
-                f"for PPO, got shape={values.shape}"
-            )
-
-        if not np.all(np.isfinite(values)):
-            raise ValueError(
-                "forecast_provider returned non-finite values"
-            )
-
-        return values
-
-    @staticmethod
-    def _uncertainty_features() -> np.ndarray:
-        """
-        Development uncertainty representation.
-
-        The current environment exposes no uncertainty provider, so this
-        remains explicitly zero-valued rather than fabricating uncertainty.
-        """
-
-        return np.zeros(
-            6,
-            dtype=np.float32,
+            return PPOForecastSignal.zero_baseline()
+        return coerce_ppo_forecast_signal(
+            provider(float(self.env.simulator.sim_time_s))
         )
 
     # ------------------------------------------------------------------
@@ -283,6 +250,7 @@ class PPOEpisodeRunner:
             # Build next causal policy state
             # ----------------------------------------------------------
 
+            forecast_signal = self._forecast_signal()
             next_structured = (
                 self.state_runtime.advance(
                     observation_time_s=float(
@@ -297,11 +265,13 @@ class PPOEpisodeRunner:
                         None,
                     ),
                     forecast_features=(
-                        self._forecast_features()
+                        forecast_signal.forecast_features
                     ),
                     uncertainty_features=(
-                        self._uncertainty_features()
+                        forecast_signal.uncertainty_features
                     ),
+                    forecast_version=forecast_signal.forecaster_version,
+                    uncertainty_version=forecast_signal.forecaster_version,
                     decision_context=decision_context,
                 )
             )

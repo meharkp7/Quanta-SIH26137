@@ -78,6 +78,7 @@ from src.runtime.scope_actions import (
 )
 
 from src.learning.action_mask import ActionMask
+from src.learning.ppo_forecast import PPOForecastSignal, coerce_ppo_forecast_signal
 
 try:
     from src.learning.ppo_runtime import (
@@ -766,7 +767,7 @@ class TrafficRoutingPPOEnv(gym.Env):
         job_impacts: Sequence[JobImpact] = (),
         forecast_provider: Callable[
             [float],
-            Sequence[float],
+            PPOForecastSignal | Sequence[float],
         ]
         | None = None,
         affected_vehicle_provider: Callable[
@@ -1790,7 +1791,11 @@ class TrafficRoutingPPOEnv(gym.Env):
         if apply_route_plan is not None:
             try:
                 applied = bool(
-                    apply_route_plan(candidate_plan)
+                    apply_route_plan(
+                        candidate_plan,
+                        commitments=commitments,
+                        planning_time_s=self._sim_time_s,
+                    )
                 )
             except Exception:
                 logger = __import__("logging").getLogger(__name__)
@@ -2024,9 +2029,9 @@ class TrafficRoutingPPOEnv(gym.Env):
         if self.forecast_provider:
             forecast_summary = tuple(
                 float(value)
-                for value in self.forecast_provider(
-                    self._sim_time_s
-                )
+                for value in coerce_ppo_forecast_signal(
+                    self.forecast_provider(self._sim_time_s)
+                ).forecast_features
             )
 
         state = getattr(

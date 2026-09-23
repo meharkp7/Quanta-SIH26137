@@ -124,18 +124,123 @@ def _build_episode_job(args) -> tuple[list, bool]:
     return episode_windows, hit
 
 
+_SPLIT_NAMES = ("train", "validation", "test")
+
+
+def load_corpus_manifest(
+    root: Path,
+    manifest_path: Path | None = None,
+) -> tuple[dict, Path]:
+    """Load either the legacy or current Delhi corpus index.
+
+    The current real-SUMO corpus is indexed by ``corpus_manifest_1615.json``.
+    Older generated pilots use ``corpus_manifest.json``.  This function keeps
+    the data-format decision in one place and never combines the two indices.
+    """
+    root = Path(root)
+    if manifest_path is not None:
+        candidate = (
+            manifest_path
+            if manifest_path.is_absolute()
+            else root / manifest_path
+        )
+        candidates = (candidate,)
+    else:
+        candidates = (
+            root / "corpus_manifest_1615.json",
+            root / "corpus_manifest.json",
+        )
+    path = next((item for item in candidates if item.is_file()), None)
+    if path is None:
+        raise FileNotFoundError(
+            "No corpus manifest found. Expected one of: "
+            + ", ".join(str(item) for item in candidates)
+        )
+    return json.loads(path.read_text(encoding="utf-8")), path
+
+
+def _split_episode_ids(manifest: dict) -> dict[str, list[str]]:
+    """Return an explicit split-to-episode mapping for either schema."""
+    if isinstance(manifest.get("episodes"), list):
+        result = {name: [] for name in _SPLIT_NAMES}
+        for record in manifest["episodes"]:
+            split = str(record.get("split", ""))
+            episode_id = str(record.get("episode_id", ""))
+            if split not in result:
+                raise ValueError(f"Unknown episode split {split!r}")
+            if not episode_id:
+                raise ValueError("Episode record has no episode_id")
+            result[split].append(episode_id)
+        return result
+    return {
+        name: [str(item) for item in manifest.get(name, ())]
+        for name in _SPLIT_NAMES
+    }
+
+
+def _validate_splits(manifest: dict, split_ids: dict[str, list[str]]) -> None:
+    """Validate membership without requiring a test split in Delhi-1615."""
+    canonical = {
+        **manifest,
+        **split_ids,
+        "split_episode_counts": {
+            name: len(split_ids[name]) for name in _SPLIT_NAMES
+        },
+    }
+    validate_manifest_splits(canonical)
+
+
+def load_corpus_scenarios(root: Path, manifest: dict) -> dict[str, Scenario]:
+    """Resolve scenario files from either legacy or Delhi-1615 metadata."""
+    root = Path(root)
+    scenarios: dict[str, Scenario] = {}
+    legacy_paths = manifest.get("scenario_files", {})
+    if legacy_paths:
+        for scenario_id, relative_path in legacy_paths.items():
+            scenarios[str(scenario_id)] = Scenario.model_validate_json(
+                (root / str(relative_path)).read_text(encoding="utf-8")
+            )
+        return scenarios
+
+    map_records = manifest.get("map_records", {})
+    if not isinstance(map_records, dict) or not map_records:
+        raise ValueError("Corpus has neither scenario_files nor map_records")
+    for record in map_records.values():
+        scenario_id = str(record.get("scenario_id", ""))
+        relative_path = record.get("scenario_path")
+        if not scenario_id or not relative_path:
+            raise ValueError("Delhi map record is missing scenario_id or scenario_path")
+        path = root / str(relative_path)
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"Scenario file for {scenario_id!r} is missing: {path}"
+            )
+        scenarios[scenario_id] = Scenario.model_validate_json(
+            path.read_text(encoding="utf-8")
+        )
+    return scenarios
+
+
 def load_pilot_windows(
     pilot_dir: Path,
     scenario: Scenario | None = None,
     *,
     cache_dir: Path | str | None = None,
+    manifest_path: Path | None = None,
 ) -> dict:
-    """Load causal windows, optionally via the per-episode NPZ window cache.
+    """Build causal windows from the legacy pilot or Delhi-1615 corpus.
 
-    ``cache_dir`` (e.g. ``<corpus>/.window_cache``) turns repeat loads from
-    ~1 h into minutes on thousand-episode corpora. Cached windows are
-    validated by source-file fingerprint; misses and corrupt entries rebuild
-    transparently. The scaler is always fit fresh on training data.
+    Supports either manifest schema (``corpus_manifest.json`` or
+    ``corpus_manifest_1615.json``). A current Delhi corpus intentionally has
+    no test split; the returned mapping then contains ``train`` and
+    ``validation`` only — callers must not silently treat training episodes
+    as a test set.
+
+    ``cache_dir`` enables the per-episode NPZ window cache (repeat loads in
+    minutes on thousand-episode corpora). Episode builds run in a process
+    pool (GIL-bound CSV parsing; ordered map keeps episode order
+    deterministic) and the scaler fits streaming so no dense batch ever
+    materializes. The scaler is always fit fresh on training data.
     """
     from src.learning.window_cache import (
         episode_fingerprint,
@@ -145,25 +250,33 @@ def load_pilot_windows(
 
     root = Path(pilot_dir)
     cache = Path(cache_dir) if cache_dir is not None else None
-    split = json.loads((root / "corpus_manifest.json").read_text(encoding="utf-8"))
-    names = ("train", "validation", "test")
-    validate_manifest_splits(split)
-    all_ids = [eid for name in names for eid in split[name]]
+    split, _manifest_path = load_corpus_manifest(root, manifest_path)
+    split_ids = _split_episode_ids(split)
+    _validate_splits(split, split_ids)
+    all_ids = [eid for name in _SPLIT_NAMES for eid in split_ids[name]]
     if len(all_ids) != len(set(all_ids)):
         raise ValueError("Episode leakage across splits")
-    scenarios = {}
-    for sid, relative_path in split.get("scenario_files", {}).items():
-        scenarios[sid] = Scenario.model_validate_json((root / relative_path).read_text(encoding="utf-8"))
+    has_embedded_scenarios = bool(
+        split.get("scenario_files") or split.get("map_records")
+    )
+    scenarios = (
+        load_corpus_scenarios(root, split)
+        if has_embedded_scenarios
+        else {}
+    )
+    fingerprints = split.get("map_fingerprints") or {}
     datasets, graph_owners = {}, {}
     cache_hits, cache_misses = 0, 0
     import concurrent.futures
     import os
 
-    for name in names:
+    for name in _SPLIT_NAMES:
+        if not split_ids[name]:
+            continue
         # Manifest parsing is cheap and stays serial (split validation,
         # leakage checks). Only the heavy CSV->window build parallelizes.
         jobs = []
-        for episode_id in split[name]:
+        for episode_id in split_ids[name]:
             folder = root / "episodes" / episode_id
             manifest = json.loads(
                 (folder / "episode_manifest.json").read_text(encoding="utf-8")
@@ -175,17 +288,14 @@ def load_pilot_windows(
                 raise ValueError(
                     "Episode manifest disagrees with split assignment"
                 )
-            if split.get("map_disjoint"):
-                key = split["map_fingerprints"][sc.scenario_id]
+            if fingerprints and split.get("map_disjoint"):
+                key = fingerprints[sc.scenario_id]
                 if key in graph_owners and graph_owners[key] != name:
                     raise ValueError("Base map leakage across splits")
                 graph_owners[key] = name
             jobs.append((episode_id, sc))
 
         windows = []
-        # Process pool: episode builds are GIL-bound CPython (csv + loops),
-        # threads measured 1.00x. Ordered map preserves episode order, so
-        # downstream batching/shuffling stays deterministic.
         workers = max(1, (os.cpu_count() or 4) // 2)
         ctx_args = [
             (
@@ -208,7 +318,10 @@ def load_pilot_windows(
                 else:
                     cache_misses += 1
                 windows.extend(episode_windows)
-        datasets[name] = WindowDataset(windows)
+        if windows:
+            datasets[name] = WindowDataset(windows)
+    if "train" not in datasets:
+        raise ValueError("Corpus contains no usable training windows")
     if cache is not None:
         print(
             f"Window cache: {cache_hits} hits, {cache_misses} misses "

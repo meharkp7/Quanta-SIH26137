@@ -13,11 +13,13 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import time
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src.platform.service import PlatformService, SolveOptions
@@ -38,6 +40,15 @@ app = FastAPI(
         "runtime loop, shortest-path reference, solver comparisons, and SUMO replay."
     ),
     version="0.4.0",
+)
+
+# CORS for local frontend development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for demo purposes
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 SolveMethod = Literal["constructive", "qpso", "pso", "alns", "milp"]
@@ -92,6 +103,16 @@ class ForecasterTrainRequest(BaseModel):
     device: str = Field(default="cpu")
     scheduler: str = Field(default="cosine")
     patience: int = Field(default=25, ge=0, le=200)
+    final_eval: bool = Field(
+        default=True,
+        description="False skips the memory-heavy in-training finale; "
+        "finalize with scripts/finalize_forecaster.py instead.",
+    )
+    stream: bool = Field(
+        default=True,
+        description="Stream one episode at a time (O(episode) RAM, no padding "
+        "waste). Required for thousand-episode corpora.",
+    )
 
 
 class ReplayRequest(BaseModel):
@@ -210,6 +231,136 @@ def demo_drl() -> dict:
     if not drl:
         raise HTTPException(status_code=404, detail="drl_demo is not present")
     return drl
+
+
+@app.get("/api/demo/story")
+def demo_story() -> dict:
+    """Scripted closed-loop demo narrative using only existing capabilities.
+
+    Each step carries an optional ``action`` (``{http_method, endpoint,
+    params}``) with parameters verified against the live backend at small
+    demo budgets. The frontend executes actions through the normal
+    solve/replay/compare/evidence state — never a parallel universe.
+    """
+    budget = {"particles": 6, "evaluations": 12, "seed": 7}
+    steps = [
+        {
+            "id": "baseline",
+            "title": "Solve a clean baseline",
+            "caption": (
+                "QPSO searches the open S3_BASE network at a small demo "
+                "budget. The result lands in the normal route view with an "
+                "independent validator report — note the objective value, it "
+                "is the 'before' for step 4."
+            ),
+            "action": {
+                "http_method": "POST",
+                "endpoint": "/api/solve",
+                "params": {
+                    "scenario_id": "S3_BASE",
+                    "method": "qpso",
+                    **budget,
+                    "closed_edge_ids": [],
+                },
+            },
+        },
+        {
+            "id": "replay-incident",
+            "title": "Watch E23 close at t=50s",
+            "caption": (
+                "The SUMO replay enforces the fixture incident: E23 closes at "
+                "t=50s. Clearing rule — vehicles already on the link clear "
+                "it, new entry is forbidden. Scrub the timeline and watch "
+                "the per-frame closure state flip."
+            ),
+            "action": {
+                "http_method": "POST",
+                "endpoint": "/api/sumo/replay",
+                "params": {
+                    "scenario_id": "S3_BASE",
+                    "plan": None,
+                    "closed_edge_ids": [],
+                },
+            },
+        },
+        {
+            "id": "compare",
+            "title": "Compare optimizers",
+            "caption": (
+                "Same network, same small budget, three methods "
+                "(QPSO / PSO / ALNS). The compare strip shows feasibility, "
+                "objective, and latency side by side — QPSO is the default "
+                "because it wins here, not by declaration."
+            ),
+            "action": {
+                "http_method": "POST",
+                "endpoint": "/api/compare",
+                "params": {
+                    "scenario_id": "S3_BASE",
+                    "methods": ["qpso", "pso", "alns"],
+                    **budget,
+                    "closed_edge_ids": [],
+                },
+            },
+        },
+        {
+            "id": "detour",
+            "title": "Close E12 and re-solve",
+            "caption": (
+                "E12 (N1→N2) is now a hard closure. The solver must detour "
+                "around it — the compare strip shows the cost delta against "
+                "the step-1 baseline, and the map overlays the previous "
+                "route in cyan dashed for a before/after view."
+            ),
+            "action": {
+                "http_method": "POST",
+                "endpoint": "/api/solve",
+                "params": {
+                    "scenario_id": "S3_BASE",
+                    "method": "qpso",
+                    **budget,
+                    "closed_edge_ids": ["E12"],
+                },
+            },
+        },
+        {
+            "id": "replay-closed",
+            "title": "Replay with incident state",
+            "caption": (
+                "Replay the incident world and scrub the timeline: each "
+                "frame carries its own closure list, the incident banner "
+                "names the enforced schedule, and closure markers track the "
+                "scrubber. (SUMO replays the open network here — closing "
+                "E12 or E23 outright leaves no feasible episode, which the "
+                "validator reports instead of faking one.)"
+            ),
+            "action": {
+                "http_method": "POST",
+                "endpoint": "/api/sumo/replay",
+                "params": {
+                    "scenario_id": "S3_BASE",
+                    "plan": None,
+                    "closed_edge_ids": [],
+                },
+            },
+        },
+        {
+            "id": "evidence",
+            "title": "Evidence checkpoint",
+            "caption": (
+                "Close the loop with real numbers: the evidence tab shows "
+                "measured forecast error, the honest baseline comparison, "
+                "and uncertainty coverage from saved artifacts — DEMO "
+                "labeled where v2 training is still pending."
+            ),
+            "action": {
+                "http_method": "GET",
+                "endpoint": "/api/evidence",
+                "params": {},
+            },
+        },
+    ]
+    return {"scenario_id": "S3_BASE", "steps": steps}
 
 
 @app.get("/api/scenarios")
@@ -362,11 +513,263 @@ def forecaster_train(request: ForecasterTrainRequest | None = None) -> dict:
             device=request.device,
             scheduler=request.scheduler,
             patience=request.patience,
+            final_eval=request.final_eval,
+            stream=request.stream,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Training Dashboard (read-only, non-blocking, with 5s in-memory cache)
+# ──────────────────────────────────────────────────────────────────────
+
+class _TrainingCache:
+    """Tiny in-memory TTL cache for training artifacts."""
+
+    def __init__(self, ttl_seconds: float = 5.0):
+        self._ttl = ttl_seconds
+        self._data: dict[str, tuple[float, dict]] = {}
+
+    def get(self, key: str) -> dict | None:
+        entry = self._data.get(key)
+        if entry is None:
+            return None
+        ts, value = entry
+        if time.time() - ts > self._ttl:
+            self._data.pop(key, None)
+            return None
+        return value
+
+    def set(self, key: str, value: dict) -> None:
+        self._data[key] = (time.time(), value)
+
+    def clear(self) -> None:
+        self._data.clear()
+
+
+_training_cache = _TrainingCache(ttl_seconds=5.0)
+
+# Candidate training artifact directories (in priority order)
+_TRAINING_ARTIFACT_DIRS = [
+    PROJECT_ROOT / "artifacts" / "forecaster_v2",
+    PROJECT_ROOT / "artifacts" / "forecaster_mps_pilot",
+    PROJECT_ROOT / "artifacts" / "step13_forecaster_v1",
+]
+
+# Max points to return in the status endpoint for loss curves
+_MAX_CURVE_POINTS = 100
+
+
+def _find_latest_training_dir() -> Path | None:
+    """Return the most recently modified training artifact directory."""
+    for d in _TRAINING_ARTIFACT_DIRS:
+        if d.is_dir() and (d / "training_curve.json").is_file():
+            return d
+    return None
+
+
+def _read_json_cached(cache_key: str, path: Path) -> dict | list | None:
+    """Read JSON from disk with TTL caching."""
+    cached = _training_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        _training_cache.set(cache_key, data)
+        return data
+    except Exception:
+        return None
+
+
+def _read_training_curve(dir_path: Path) -> list[dict] | None:
+    return _read_json_cached(f"curve:{dir_path}", dir_path / "training_curve.json")
+
+
+def _read_training_status(dir_path: Path) -> dict | None:
+    return _read_json_cached(f"status:{dir_path}", dir_path / "training_status.json")
+
+
+def _read_manifest(dir_path: Path) -> dict | None:
+    return _read_json_cached(f"manifest:{dir_path}", dir_path / "manifest.json")
+
+
+def _estimate_time_remaining(curve: list[dict], total_epochs: int, started_at: float | None) -> dict | None:
+    """Estimate remaining time based on epochs completed so far."""
+    if not curve or started_at is None:
+        return None
+    epochs_done = len(curve)
+    if epochs_done == 0:
+        return None
+    elapsed = time.time() - started_at
+    if elapsed <= 0:
+        return None
+    secs_per_epoch = elapsed / epochs_done
+    remaining_epochs = max(0, total_epochs - epochs_done)
+    est_remaining_secs = secs_per_epoch * remaining_epochs
+    return {
+        "epochs_completed": epochs_done,
+        "epochs_remaining": remaining_epochs,
+        "elapsed_seconds": round(elapsed, 1),
+        "estimated_remaining_seconds": round(est_remaining_secs, 1),
+        "estimated_completion_timestamp": round(time.time() + est_remaining_secs, 1),
+        "seconds_per_epoch": round(secs_per_epoch, 2),
+    }
+
+
+def _compute_early_stopping(curve: list[dict], patience: int) -> dict:
+    """Compute early stopping status from curve."""
+    if not curve or patience <= 0:
+        return {"enabled": bool(patience), "patience": patience, "epochs_since_improvement": 0, "stopped_early": False}
+    # Find best validation MAE and its epoch
+    best_val = float("inf")
+    best_epoch = 0
+    for row in curve:
+        val = row.get("validation_speed_mae")
+        if val is not None and val < best_val:
+            best_val = val
+            best_epoch = row.get("epoch", 0)
+    epochs_since = len(curve) - best_epoch
+    stopped_early = epochs_since >= patience
+    return {
+        "enabled": True,
+        "patience": patience,
+        "best_epoch": best_epoch,
+        "best_validation_mae": best_val if best_val != float("inf") else None,
+        "epochs_since_improvement": epochs_since,
+        "stopped_early": stopped_early,
+    }
+
+
+def _build_status_payload() -> dict:
+    """Build the rich training status payload."""
+    # Find the active or latest training directory
+    training_dir = _find_latest_training_dir()
+    if training_dir is None:
+        return {
+            "state": "no_active_training",
+            "message": "No training runs found in artifacts/",
+            "active_training": False,
+        }
+
+    curve = _read_training_curve(training_dir)
+    status = _read_training_status(training_dir)
+    manifest = _read_manifest(training_dir)
+
+    if curve is None:
+        return {
+            "state": "error",
+            "message": f"training_curve.json not found in {training_dir}",
+            "active_training": False,
+        }
+
+    # Determine if training is currently running
+    is_running = False
+    started_at = None
+    config = {}
+    pid = None
+    if status:
+        is_running = status.get("state") == "running" and status.get("alive", False)
+        started_at = status.get("started_at")
+        config = status.get("config", {})
+        pid = status.get("pid")
+
+    # Also check manifest for config if status doesn't have it
+    if not config and manifest:
+        config = manifest.get("hyperparameters", {})
+
+    total_epochs = config.get("epochs", 350)
+    patience = config.get("patience", 30)
+    device = config.get("device", "mps")
+
+    # Last N points for curves (for sparklines)
+    curve_points = curve[-_MAX_CURVE_POINTS:] if len(curve) > _MAX_CURVE_POINTS else curve
+    epochs = [row["epoch"] for row in curve_points]
+    train_loss = [row["train_loss"] for row in curve_points]
+    train_speed_loss = [row["train_speed_loss"] for row in curve_points]
+    train_traversal_loss = [row["train_traversal_loss"] for row in curve_points]
+    val_mae = [row["validation_speed_mae"] for row in curve_points]
+    lrs = [row["lr"] for row in curve_points]
+
+    # Best validation MAE and epoch
+    best_val = float("inf")
+    best_epoch = 0
+    for row in curve:
+        val = row.get("validation_speed_mae")
+        if val is not None and val < best_val:
+            best_val = val
+            best_epoch = row.get("epoch", 0)
+
+    early_stopping = _compute_early_stopping(curve, patience)
+    eta = _estimate_time_remaining(curve, total_epochs, started_at)
+
+    # Model config summary
+    model_config = {
+        "width": config.get("width", manifest.get("architecture", {}).get("width") if manifest else 64),
+        "heads": config.get("heads", manifest.get("architecture", {}).get("heads") if manifest else 4),
+        "layers": config.get("layers", manifest.get("architecture", {}).get("layers") if manifest else 2),
+        "dropout": config.get("dropout", manifest.get("architecture", {}).get("dropout") if manifest else 0.1),
+        "batch_size": config.get("batch_size", 4),
+        "lr": config.get("lr", 0.001),
+        "weight_decay": config.get("weight_decay", 0.0001),
+        "scheduler": config.get("scheduler", "cosine"),
+        "device": device,
+    }
+
+    return {
+        "state": "running" if is_running else "completed",
+        "active_training": is_running,
+        "training_dir": str(training_dir),
+        "pid": pid,
+        "current_epoch": len(curve),
+        "total_epochs": total_epochs,
+        "progress_pct": round((len(curve) / total_epochs) * 100, 1) if total_epochs else 0,
+        "best_val_mae": best_val if best_val != float("inf") else None,
+        "best_epoch": best_epoch,
+        "early_stopping": early_stopping,
+        "eta": eta,
+        "device": device,
+        "model_config": model_config,
+        "curves": {
+            "epochs": epochs,
+            "train_loss": train_loss,
+            "train_speed_loss": train_speed_loss,
+            "train_traversal_loss": train_traversal_loss,
+            "val_mae": val_mae,
+            "learning_rates": lrs,
+        },
+        "last_update": time.time(),
+    }
+
+
+@app.get("/api/training/status")
+def training_status() -> dict:
+    """Live-ish training progress (cached for 5s to avoid disk thrashing)."""
+    return _build_status_payload()
+
+
+@app.get("/api/training/history")
+def training_history() -> dict:
+    """Full training_curve.json for charting (cached for 5s)."""
+    training_dir = _find_latest_training_dir()
+    if training_dir is None:
+        return {
+            "state": "no_active_training",
+            "message": "No training runs found in artifacts/",
+            "curve": [],
+        }
+    curve = _read_training_curve(training_dir)
+    if curve is None:
+        raise HTTPException(status_code=404, detail="training_curve.json not found")
+    return {
+        "state": "ok",
+        "training_dir": str(training_dir),
+        "curve": curve,
+    }
 
 
 if STATIC_DIR.is_dir():

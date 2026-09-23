@@ -59,6 +59,31 @@ class SolveOptions:
 class PlatformService:
     """Load fixtures, validate, solve, compare, and launch SUMO."""
 
+    # In-memory solve cache: identical repeat solves (e.g. repeat demo
+    # clicks) return instantly with `cached: true`. Capped at 128 entries
+    # (FIFO eviction), no persistence.
+    SOLVE_CACHE_MAX = 128
+    _solve_cache: dict[tuple, dict] = {}
+
+    @classmethod
+    def _cache_key(
+        cls,
+        scenario_id: str,
+        options: "SolveOptions",
+    ) -> tuple:
+        return (
+            scenario_id,
+            options.method.lower(),
+            options.particles,
+            options.evaluations,
+            options.seed,
+            tuple(sorted(options.closed_edge_ids)),
+        )
+
+    @classmethod
+    def solve_cache_info(cls) -> dict:
+        return {"entries": len(cls._solve_cache), "max_entries": cls.SOLVE_CACHE_MAX}
+
     def project_meta(self) -> dict:
         return {
             "title": "Quanta — Adaptive Quantum-Inspired Vehicle Routing",
@@ -168,6 +193,12 @@ class PlatformService:
                 closed_edge_ids=options.closed_edge_ids,
             )
         options, budget_note = self._budget_for(scenario_id, options)
+        if not include_route_plan:
+            hit = self._solve_cache.get(self._cache_key(scenario_id, options))
+            if hit is not None:
+                replay = dict(hit)
+                replay["cached"] = True
+                return replay
         method = options.method.lower()
         if method == "qpso":
             result = self._solve_swarm(scenario_id, options, algorithm="qpso", include_route_plan=include_route_plan)
@@ -183,6 +214,14 @@ class PlatformService:
             raise ValueError(f"Unknown method: {options.method}")
         if budget_note:
             result["budget_note"] = budget_note
+        result["cached"] = False
+        # Cache only plain JSON-friendly solve payloads (the runtime loop
+        # uses include_route_plan=True with live objects — never cached).
+        if not include_route_plan:
+            key = self._cache_key(scenario_id, options)
+            if len(self._solve_cache) >= self.SOLVE_CACHE_MAX and key not in self._solve_cache:
+                self._solve_cache.pop(next(iter(self._solve_cache)))
+            self._solve_cache[key] = dict(result)
         return result
 
     def compare(

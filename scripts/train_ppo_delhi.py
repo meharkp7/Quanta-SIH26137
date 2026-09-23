@@ -115,11 +115,34 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def load_delhi_corpus(corpus_dir: Path, *, split: str = "train") -> list[DelhiEpisodeSpec]:
-    manifest_path = corpus_dir / "corpus_manifest.json"
-    if not manifest_path.is_file():
+def load_delhi_corpus(
+    corpus_dir: Path,
+    *,
+    split: str = "train",
+    manifest_path: Path | None = None,
+) -> list[DelhiEpisodeSpec]:
+    # The current Delhi corpus uses a count-qualified manifest name. Keep the
+    # original name as a fallback so older generated corpora remain runnable.
+    if manifest_path is not None:
+        candidate = (
+            manifest_path
+            if manifest_path.is_absolute()
+            else corpus_dir / manifest_path
+        )
+        manifest_candidates = (candidate,)
+    else:
+        manifest_candidates = (
+            corpus_dir / "corpus_manifest_1615.json",
+            corpus_dir / "corpus_manifest.json",
+        )
+    manifest_path = next(
+        (path for path in manifest_candidates if path.is_file()),
+        None,
+    )
+    if manifest_path is None:
         raise FileNotFoundError(
-            f"No corpus_manifest.json found at {manifest_path}"
+            "No Delhi corpus manifest found. Expected one of: "
+            + ", ".join(str(path) for path in manifest_candidates)
         )
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -422,8 +445,18 @@ def run_smoke_test(specs, corpus_dir: Path, seed: int, output_dir: Path, step_le
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--corpus-dir", type=Path, default=Path("corpus_delhi"))
+    parser.add_argument(
+        "--corpus-dir",
+        type=Path,
+        default=Path("artifacts/delhi_2280"),
+        help="Delhi corpus directory containing corpus_manifest_1615.json",
+    )
     parser.add_argument("--split", default="train")
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="Optional explicit manifest for a deliberately small smoke subset.",
+    )
     parser.add_argument("--episodes", type=int, default=1000)
     parser.add_argument("--max-steps", type=int, default=10)
     parser.add_argument("--seed", type=int, default=26137)
@@ -444,7 +477,11 @@ def main() -> int:
 
     corpus_dir = args.corpus_dir.resolve()
     output_dir = args.output_dir.resolve()
-    specs = load_delhi_corpus(corpus_dir, split=args.split)
+    specs = load_delhi_corpus(
+        corpus_dir,
+        split=args.split,
+        manifest_path=args.manifest,
+    )
     print(
         f"Loaded {len(specs)} {args.split}-split episodes from {corpus_dir}",
         flush=True,
