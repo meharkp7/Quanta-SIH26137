@@ -1,11 +1,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import App from "./workspace/WorkspaceApp";
 import { ToastProvider } from "./components/ui/Toast";
 import "./index.css";
+import "./workspace/styles.css";
 
-// ToastProvider must wrap the whole app: App calls useToast() at its top level
-// (before the home/simulation early return), so the provider has to live above it.
+// Keep shared notification support available to workspace components.
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ToastProvider>

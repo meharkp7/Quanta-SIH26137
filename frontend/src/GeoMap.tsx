@@ -75,9 +75,10 @@ export function speedBandColor(speedMps: number, maxSpeed: number): string {
   return "#ef4444";
 }
 
-export function GeoMap({ graph, routeEdges, previousRouteEdges, closed, incidents, scenarioId, movers = [], trip, vtrip, selectedVehicle, onPickEdge, onPickVehicle }: {
+export function GeoMap({ graph, routeEdges, routePalette, previousRouteEdges, closed, incidents, scenarioId, movers = [], trip, vtrip, selectedVehicle, onPickEdge, onPickVehicle }: {
   graph: Graph;
   routeEdges: Set<string>;
+  routePalette?: Map<string, string>;
   previousRouteEdges?: Set<string>;
   closed: string[];
   incidents?: ReplayIncident[];
@@ -277,7 +278,7 @@ export function GeoMap({ graph, routeEdges, previousRouteEdges, closed, incident
           if (!a || !b || a.lat == null || b.lat == null) return null;
           const isRoute = routeEdges.has(edge.id);
           const isClosed = (previewClosed ? previewClosed.has(edge.id) : closedSet.has(edge.id)) || !edge.open;
-          const color = edgeColor(edge.id, edge.speed_mps, isClosed, isRoute);
+          const color = !isClosed && isRoute && routePalette?.has(edge.id) ? routePalette.get(edge.id)! : edgeColor(edge.id, edge.speed_mps, isClosed, isRoute);
           return (
             <Polyline
               key={edge.id}

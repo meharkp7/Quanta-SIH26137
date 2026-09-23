@@ -1,3 +1,4 @@
+import { identityHeaders } from './workspace/supabase';
 export type ScenarioSummary = { id: string; label: string; role: string; description: string; available: boolean };
 export type GraphNode = { id: string; x: number; y: number; kind: string; zone: string; lat?: number; lon?: number };
 export type GraphEdge = { id: string; from: string; to: string; length_m: number; speed_mps: number; road_class: string; open: boolean; free_flow_s: number };
@@ -19,7 +20,7 @@ export async function api<T>(path: string, options?: RequestInit, timeoutMs?: nu
     : external || controller.signal;
   const timer = timeoutMs ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
-    const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options, signal });
+    const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...identityHeaders(), ...options?.headers }, signal });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error((payload as { detail?: string }).detail || response.statusText);
     return payload as T;
