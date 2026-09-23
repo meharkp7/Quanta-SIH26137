@@ -87,6 +87,75 @@ def _road_class_value(road_class: object) -> float:
     }.get(str(road_class).split(".")[-1].lower(), 0.0)
 
 
+def build_static_graph(scenario: Scenario) -> dict:
+    """Precompute the map-level graph once (topology never changes per map).
+
+    Returns zero-based single-block numpy arrays in scenario edge order:
+    ``static`` [E, 6], ``edge_ids``, ``src``/``dst`` [N], ``weight`` [N].
+    Per-batch assembly (offsets/tiling) is then vectorized tensor arithmetic
+    instead of per-step Python dict building over thousands of edges.
+    """
+    edges = {str(edge.edge_id): edge for edge in scenario.edges}
+    nodes = {str(node.node_id): node for node in scenario.nodes}
+    edge_ids = tuple(str(edge.edge_id) for edge in scenario.edges)
+    count = len(edge_ids)
+    static = np.zeros((count, 6), dtype=np.float32)
+    for position, edge_id in enumerate(edge_ids):
+        edge = edges[edge_id]
+        head = nodes[str(edge.from_node)]
+        tail = nodes[str(edge.to_node)]
+        static[position] = (
+            float(edge.length_m) / 100.0,
+            float(edge.speed_limit_mps) / 10.0,
+            float(edge.lane_count),
+            _road_class_value(edge.road_class),
+            (float(tail.x_m) - float(head.x_m)) / 100.0,
+            (float(tail.y_m) - float(head.y_m)) / 100.0,
+        )
+    outgoing: dict[str, list[str]] = {}
+    for edge_id in edge_ids:
+        outgoing.setdefault(str(edges[edge_id].from_node), []).append(edge_id)
+    position_of = {edge_id: index for index, edge_id in enumerate(edge_ids)}
+    sources: list[int] = []
+    targets: list[int] = []
+    for target_position, target_id in enumerate(edge_ids):
+        for source_id in outgoing.get(str(edges[target_id].from_node), ()):
+            if source_id == target_id:
+                continue
+            sources.append(position_of[source_id])
+            targets.append(target_position)
+        sources.append(target_position)
+        targets.append(target_position)
+    src = np.asarray(sources, dtype=np.int64)
+    dst = np.asarray(targets, dtype=np.int64)
+    degree = np.bincount(dst, minlength=count).astype(np.float32)
+    weight = (1.0 / np.maximum(degree[dst], 1.0)).astype(np.float32)
+    return {
+        "edge_ids": edge_ids,
+        "static": static,
+        "src": src,
+        "dst": dst,
+        "weight": weight,
+    }
+
+
+_GRAPH_CACHE: dict[tuple[str, str], dict] = {}
+
+
+def get_static_graph(scenario: Scenario) -> dict:
+    """Module-level per-map graph cache (built once, reused every step)."""
+    key = (str(scenario.scenario_id), str(scenario.graph_version))
+    entry = _GRAPH_CACHE.get(key)
+    if entry is None:
+        entry = build_static_graph(scenario)
+        _GRAPH_CACHE[key] = entry
+    return entry
+
+
+def clear_graph_cache() -> None:
+    _GRAPH_CACHE.clear()
+
+
 def build_graph_batch(
     batch: ForecastBatch,
     scenarios: Mapping[str, Scenario],
@@ -220,6 +289,50 @@ def build_graph_batch(
             device=device,
         ),
         edge_counts=tuple(edge_counts),
+    )
+
+
+def build_graph_batch_cached(
+    batch: ForecastBatch,
+    scenarios: Mapping[str, Scenario],
+    *,
+    device=None,
+) -> GraphBatch:
+    """Fast path: assemble the batch graph from cached per-map statics.
+
+    Valid only when every sample shares one scenario AND the batch edge
+    order matches scenario order (always true for streamed single-episode
+    batches). Anything else falls back to :func:`build_graph_batch`.
+    """
+    scenario_ids = tuple(batch.scenario_ids)
+    if len(set(scenario_ids)) != 1:
+        return build_graph_batch(batch, scenarios, device=device)
+    scenario = scenarios[scenario_ids[0]]
+    entry = get_static_graph(scenario)
+    b, _, e, _ = batch.features.shape
+    if e != len(entry["edge_ids"]):
+        return build_graph_batch(batch, scenarios, device=device)
+    for bi in range(b):
+        if tuple(str(v) for v in batch.edge_ids_by_sample[bi][:e]) != entry["edge_ids"]:
+            return build_graph_batch(batch, scenarios, device=device)
+    offsets = (np.arange(b, dtype=np.int64) * e)[:, None]
+    n = entry["src"].shape[0]
+    src = (entry["src"][None, :] + offsets).reshape(-1)
+    dst = (entry["dst"][None, :] + offsets).reshape(-1)
+    return GraphBatch(
+        adjacency=None,
+        static_features=torch.as_tensor(
+            np.broadcast_to(entry["static"][None, :, :], (b, e, 6)).copy(),
+            dtype=torch.float32,
+            device=device,
+        ),
+        edge_index=torch.as_tensor(
+            np.stack((src, dst), axis=0), dtype=torch.long, device=device
+        ),
+        edge_weight=torch.as_tensor(
+            np.tile(entry["weight"], b), dtype=torch.float32, device=device
+        ),
+        edge_counts=tuple([e] * b),
     )
 
 

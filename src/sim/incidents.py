@@ -249,10 +249,12 @@ def configs_for_scenario(scenario, *, include_step6_default: bool = True) -> lis
 
     Edges already closed in the scenario contract (``open_by_default=False``,
     i.e. the user-selected incident roads) close at t=0 with no advance
-    notice — the planner routed around them from the start. The STEP6 E23@50s
-    demo closure is appended unless E23 itself is UI-closed (then the t=0
-    version wins; no duplicates). Vehicles already on a link when it closes
-    are allowed to clear it while new entry is forbidden (plan Step 6 rule).
+    notice — the planner routed around them from the start. While any UI
+    closure exists it is the ONLY incident; the STEP6 E23@50s demo closure
+    runs only when nothing was selected, so a user-picked road is never
+    second to a hardcoded demo blockage. Vehicles already on a link when it
+    closes are allowed to clear it while new entry is forbidden (plan Step 6
+    rule).
     """
     closed_ids = [
         edge.edge_id
@@ -269,7 +271,8 @@ def configs_for_scenario(scenario, *, include_step6_default: bool = True) -> lis
         )
         for edge_id in closed_ids
     ]
-    if include_step6_default and STEP6_CLOSURE_CONFIG.edge_id not in closed_ids:
+    # Demo clock only when the user picked no incident at all.
+    if include_step6_default and not closed_ids:
         configs.append(STEP6_CLOSURE_CONFIG)
     return configs
 

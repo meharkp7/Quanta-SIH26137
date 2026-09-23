@@ -113,6 +113,10 @@ class ForecasterTrainRequest(BaseModel):
         description="Stream one episode at a time (O(episode) RAM, no padding "
         "waste). Required for thousand-episode corpora.",
     )
+    stride: int = Field(
+        default=1, ge=1, le=9,
+        description="Train on every k-th window per episode (stream only).",
+    )
 
 
 class ReplayRequest(BaseModel):
@@ -515,6 +519,7 @@ def forecaster_train(request: ForecasterTrainRequest | None = None) -> dict:
             patience=request.patience,
             final_eval=request.final_eval,
             stream=request.stream,
+            stride=request.stride,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc

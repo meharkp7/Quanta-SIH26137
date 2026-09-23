@@ -202,6 +202,40 @@ em { color:var(--lime); font-style:normal; }
   .gantt-fill{animation:none}
 }
 .geo-map-wrap{height:365px;position:relative;border:1px solid #2a382a;border-radius:6px;overflow:hidden;background:#0b0f0b}.geo-map{height:100%;width:100%;z-index:1}.geo-map-wrap .map-legend{background:rgba(8,11,8,.72);padding:6px 10px;border-radius:5px}.legend-line.geo-fast{background:#22c55e}.legend-line.geo-slow{background:#ef4444}.band-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:baseline}.budget-note{margin:8px 0 0;color:#9aa698}
+/* Trip dispatcher: From/To controls above the operations map. */
+.trip-dispatch{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding:8px 10px;border:1px solid #2a382a;border-radius:6px;background:rgba(12,17,12,.72)}
+.trip-dispatch-label{display:inline-flex;align-items:center;gap:6px;color:var(--lime);font:10px "DM Mono",monospace;text-transform:uppercase;letter-spacing:.06em}
+.trip-dispatch select{color:#eaf1e8;background:#111812;border:1px solid #3e4d3e;border-radius:5px;padding:7px 8px;outline:0;max-width:250px;font-size:12px}
+.trip-dispatch select:focus{border-color:var(--lime)}
+.trip-arrow{display:inline-flex;color:#7e8d7c}
+.trip-swap{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;color:#9aa698;background:#111812;border:1px solid #3e4d3e;border-radius:5px;cursor:pointer;transition:.15s}
+.trip-swap:hover{color:var(--lime);border-color:var(--lime)}
+.trip-status{color:#38bdf8;font:11px "DM Mono",monospace}
+/* Dispatched trip rendering (SVG map + geo map share these). */
+.map-trip-line{stroke:#38bdf8;stroke-width:5;opacity:.95;fill:none;filter:url(#glow);pointer-events:none}
+.trip-dot{fill:#e0f2fe;stroke:#38bdf8;stroke-width:3;filter:url(#glow);pointer-events:none}
+.trip-dot-halo{fill:none;stroke:#38bdf8;stroke-width:2;transform-box:fill-box;transform-origin:center;animation:closure-ping 1.4s ease-out infinite;pointer-events:none}
+.legend-line.trip{background:#38bdf8}
+.legend-line.geo-traffic{background:linear-gradient(90deg,#16a34a,#eab308,#dc2626)}
+.legend-off{opacity:.55}
+/* Blue car marker for the dispatched trip (both map flavours). */
+.trip-car-icon{background:none!important;border:none!important;padding:0}
+.trip-car{display:block;transform-origin:50% 50%;filter:drop-shadow(0 0 5px rgba(56,189,248,.85))}
+.trip-car svg{display:block}
+.trip-car-svg{filter:url(#glow)}
+/* Incident picker: click any road to toggle it as the incident. */
+.incident-box{display:flex;flex-direction:column;gap:8px}
+.incident-hint{margin:0;color:#7e8d7c;font-size:10px;line-height:1.55}
+.closure-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.closure-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:3px 6px;background:#2a1414;border:1px solid #7f1d1d;border-radius:4px;color:#fca5a5;font:10px "DM Mono",monospace}
+.closure-chip em{font-style:normal;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.closure-chip button{display:inline-flex;padding:0;background:none;border:0;color:#fca5a5;cursor:pointer}
+.chip-clear{padding:2px 7px;background:none;border:1px solid #3e4d3e;border-radius:4px;color:#9aa698;font:10px "DM Mono",monospace;cursor:pointer}
+.chip-clear:hover{color:var(--lime);border-color:var(--lime)}
+.map-hit{stroke:transparent;stroke-width:12;fill:none;pointer-events:stroke;cursor:crosshair}
+.map-hit:hover{stroke:rgba(56,189,248,.28)}
+.geo-map .road-hit{cursor:crosshair}
+.geo-map path.road-hit:hover{stroke-width:5!important;opacity:1!important}
 
 /* ---- Guided demo story overlay ---- */
 .story-overlay{position:fixed;inset:0;z-index:30;background:rgba(4,6,4,.55);display:flex;justify-content:flex-end}
@@ -383,4 +417,85 @@ em { color:var(--lime); font-style:normal; }
   .toast {
     min-width: 0;
   }
+}
+
+/* ── Fleet vehicles as blue cars ─────────────────────────────────────── */
+.legend-dot { background: #38bdf8; }           /* fleet cars (was lime dots) */
+.legend-line.vtrip { background: #f472b6; }     /* re-route path swatch */
+
+.fleet-car-icon { background: none !important; border: none !important; padding: 0; }
+.fleet-car {
+  display: block;
+  transform-origin: 50% 50%;
+  cursor: pointer;
+  filter: drop-shadow(0 0 4px rgba(56, 189, 248, .7));
+}
+.fleet-car svg { display: block; }
+.fleet-car.selected { filter: drop-shadow(0 0 6px #fbbf24) drop-shadow(0 0 4px rgba(56, 189, 248, .8)); }
+
+.fleet-car-svg { cursor: pointer; }
+.fleet-car-svg:hover { filter: drop-shadow(0 0 4px #38bdf8); }
+.fleet-car-svg.selected { filter: drop-shadow(0 0 5px #fbbf24); }
+
+/* Re-routed fleet vehicle path (magenta dashed, distinct from the trip) */
+.map-vtrip-line {
+  stroke: #f472b6;
+  stroke-width: 3.5;
+  stroke-dasharray: 8 6;
+  fill: none;
+  opacity: .95;
+  pointer-events: none;
+}
+
+/* ── Per-vehicle re-dispatch panel (under the trip dispatcher) ───────── */
+.veh-dispatch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid #3e4d3e;
+  border-left: 3px solid #f472b6;
+  border-radius: 6px;
+  background: rgba(17, 12, 16, .78);
+}
+.veh-dispatch select {
+  color: #eaf1e8;
+  background: #111812;
+  border: 1px solid #3e4d3e;
+  border-radius: 5px;
+  padding: 7px 8px;
+  outline: 0;
+  max-width: 250px;
+  font-size: 12px;
+}
+.veh-dispatch select:focus { border-color: #f472b6; }
+.veh-from { color: #9aa698; font: 10px "DM Mono", monospace; white-space: nowrap; }
+
+/* ── Auto re-plan status chip ────────────────────────────────────────── */
+.auto-plan-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px dashed #425628;
+  border-radius: 6px;
+  background: rgba(213, 255, 44, .05);
+  color: var(--lime);
+  font: 10px "DM Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.auto-plan-chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lime);
+  animation: auto-plan-pulse 1s ease-in-out infinite;
+}
+@keyframes auto-plan-pulse {
+  0%, 100% { opacity: .25; transform: scale(.7); }
+  50% { opacity: 1; transform: scale(1.1); }
 }

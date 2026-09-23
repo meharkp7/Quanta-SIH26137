@@ -37,8 +37,13 @@ export async function api<T>(path: string, options?: RequestInit, timeoutMs?: nu
 export const SOLVE_TIMEOUT_MS = 150000;
 
 export const postJson = <T,>(path: string, body: unknown, timeoutMs?: number, signal?: AbortSignal) => api<T>(path, { method: "POST", body: JSON.stringify(body), ...(signal ? { signal } : {}) }, timeoutMs);
-export type ReplayFrame = { t: number; vehicles: { id: string; x: number; y: number; kind?: string; stopped?: boolean }[]; closed?: string[] };
+export type ReplayFrame = {
+  t: number;
+  vehicles: { id: string; x: number; y: number; lat?: number; lon?: number; kind?: string; stopped?: boolean }[];
+  closed?: string[];
+};
 export type ReplayIncident = { incident_id: string; edge_id: string; trigger_time_s: number };
-export type ReplayResult = { frames: ReplayFrame[]; incidents?: ReplayIncident[]; message?: string };
+export type ReplayResult = { frames: ReplayFrame[]; incidents?: ReplayIncident[]; message?: string; mode?: string };
 export type Evidence = { available: boolean; artifact?: string; model_mae?: number | null; temporal_baseline_mae?: number | null; uncertainty?: { validation?: { actual_coverage?: number }; test?: { actual_coverage?: number }; nominal_coverage?: number }; test_metrics?: Record<string, { mae?: number; rmse?: number }>; training_cutoff_s?: number; split_policy?: string; reason?: string; demo?: boolean; provenance?: string; step14_demo?: { corridor_cost_delta_s?: number; reroute_proof?: string; fifo_holds?: boolean } | null; step9?: { milp_certified_objective?: number; detail?: string } | null; data_audit?: { headline?: string } | null };
+export type PathResult = { method: string; exact: boolean; feasible: boolean; source?: string; target?: string; node_ids?: string[]; edge_ids?: string[]; distance_m?: number; time_s?: number; congestion_s?: number; elapsed_s?: number; error?: string };
 export type DrlDemo = { action: string; scope?: string; job_id?: string; vehicle_id?: string; reason?: string; provenance?: string; demo?: boolean };

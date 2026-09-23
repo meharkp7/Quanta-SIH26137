@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2026-09-14T18:08:30.269843+05:30 by Eclipse SUMO sumo 1.27.1
+<!-- generated on 2026-09-24T02:34:35.652108+05:30 by Eclipse SUMO sumo 1.27.1
 <sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
 
     <input>
-        <net-file value="C:/Users/Harleen Kaur/Desktop/sih2026/Quanta_SIH26137/artifacts/demo_sumo_ui/network/net.xml"/>
-        <route-files value="C:/Users/Harleen Kaur/Desktop/sih2026/Quanta_SIH26137/artifacts/demo_sumo_ui/routes/vehicles.rou.xml"/>
+        <net-file value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/network/net.xml"/>
+        <route-files value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/routes/vehicles.rou.xml"/>
     </input>
 
     <output>
-        <fcd-output value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\sumo_output\fcd.xml"/>
-        <tripinfo-output value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\sumo_output\tripinfo.xml"/>
+        <fcd-output value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/sumo_output/fcd.xml"/>
+        <tripinfo-output value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/sumo_output/tripinfo.xml"/>
     </output>
 
     <time>
@@ -26,13 +26,13 @@
 
     <report>
         <no-warnings value="false"/>
-        <log value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\sumo_output\sumo.log"/>
+        <log value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/sumo_output/sumo.log"/>
         <duration-log.disable value="true"/>
         <no-step-log value="true"/>
     </report>
 
     <traci_server>
-        <remote-port value="60558"/>
+        <remote-port value="57439"/>
     </traci_server>
 
     <random_number>
@@ -43,8 +43,8 @@
 -->
 
 <tripinfos xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tripinfo_file.xsd">
-    <tripinfo id="bg_0" depart="4.00" departLane="E01_0" departPos="4.60" departSpeed="10.30" departDelay="4.00" arrival="47.00" arrivalLane="E34_0" arrivalPos="100.00" arrivalSpeed="9.99" duration="43.00" routeLength="395.40" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="3.98" rerouteNo="1" devices="tripinfo_bg_0 routing_bg_0 fcd_bg_0" vType="background_car" speedFactor="1.03" vaporized=""/>
-    <tripinfo id="bg_1" depart="0.00" departLane="E10_0" departPos="4.60" departSpeed="10.00" departDelay="0.00" arrival="64.00" arrivalLane="E45_0" arrivalPos="100.00" arrivalSpeed="9.45" duration="64.00" routeLength="595.40" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="4.67" rerouteNo="1" devices="tripinfo_bg_1 routing_bg_1 fcd_bg_1" vType="background_car" speedFactor="1.02" vaporized=""/>
-    <tripinfo id="V1" depart="0.00" departLane="E01_0" departPos="5.10" departSpeed="10.00" departDelay="0.00" arrival="113.00" arrivalLane="E10_0" arrivalPos="100.00" arrivalSpeed="11.16" duration="113.00" routeLength="694.90" waitingTime="2.00" waitingCount="1" stopTime="38.00" timeLoss="0.04" rerouteNo="0" devices="tripinfo_V1 fcd_V1" vType="delivery_van" speedFactor="1.12" vaporized=""/>
-    <tripinfo id="V2" depart="2.00" departLane="E01_0" departPos="5.10" departSpeed="10.48" departDelay="2.00" arrival="134.00" arrivalLane="E10_0" arrivalPos="100.00" arrivalSpeed="10.48" duration="132.00" routeLength="694.90" waitingTime="0.00" waitingCount="0" stopTime="56.00" timeLoss="1.80" rerouteNo="0" devices="tripinfo_V2 fcd_V2" vType="delivery_van" speedFactor="1.05" vaporized=""/>
+    <tripinfo id="bg_0" depart="3.00" departLane="E01_0" departPos="4.60" departSpeed="4.24" departDelay="3.00" arrival="48.00" arrivalLane="E34_0" arrivalPos="100.00" arrivalSpeed="9.45" duration="45.00" routeLength="395.40" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="5.73" rerouteNo="1" devices="tripinfo_bg_0 routing_bg_0 fcd_bg_0" vType="background_car" speedFactor="1.03" vaporized=""/>
+    <tripinfo id="bg_1" depart="0.00" departLane="E10_0" departPos="4.60" departSpeed="10.15" departDelay="0.00" arrival="60.00" arrivalLane="E45_0" arrivalPos="100.00" arrivalSpeed="10.15" duration="60.00" routeLength="595.40" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="0.86" rerouteNo="1" devices="tripinfo_bg_1 routing_bg_1 fcd_bg_1" vType="background_car" speedFactor="1.02" vaporized=""/>
+    <tripinfo id="V1" depart="0.00" departLane="E01_0" departPos="5.10" departSpeed="11.16" departDelay="0.00" arrival="114.00" arrivalLane="E10_0" arrivalPos="100.00" arrivalSpeed="11.16" duration="114.00" routeLength="694.90" waitingTime="0.00" waitingCount="0" stopTime="38.00" timeLoss="0.04" rerouteNo="0" devices="tripinfo_V1 fcd_V1" vType="delivery_van" speedFactor="1.12" vaporized=""/>
+    <tripinfo id="V2" depart="1.00" departLane="E01_0" departPos="5.10" departSpeed="5.66" departDelay="1.00" arrival="136.00" arrivalLane="E10_0" arrivalPos="100.00" arrivalSpeed="10.48" duration="135.00" routeLength="694.90" waitingTime="0.00" waitingCount="0" stopTime="55.00" timeLoss="4.02" rerouteNo="0" devices="tripinfo_V2 fcd_V2" vType="delivery_van" speedFactor="1.05" vaporized=""/>
 </tripinfos>

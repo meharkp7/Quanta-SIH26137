@@ -33,11 +33,16 @@ from src.optim.references import (
 from src.platform.catalog import PROJECT_ROOT, list_scenarios, load_scenario
 from src.platform.serialize import (
     evaluation_payload,
+    is_geo_scenario,
     plan_orders,
     scenario_payload,
+    to_latlon,
     validator_payload,
 )
-from src.routing.initial_solution import InitialSolutionBuilder
+from src.routing.initial_solution import (
+    InitialSolutionBuilder,
+    InitialSolutionConfig,
+)
 from src.routing.path_builder import DirectedPathBuilder, PathNotFoundError
 from src.routing.route_encoding import Step7RouteEngine
 from src.routing.route_evaluator import RouteEvaluator
@@ -45,6 +50,41 @@ from src.routing.route_plan import RoutePlan, VehicleRoute
 from src.routing.validator import evaluate_scenario, shortest_directed_path
 
 REFERENCE_ORDERS = {"V1": ["J1", "J2", "J3"], "V2": ["J4", "J5"]}
+
+
+@dataclass(frozen=True)
+class MockEpisodeResult:
+    """Honest kinematic stand-in for a SUMO episode on large/geo networks.
+
+    The committed plan is still the solver's validator-approved plan; only
+    the microscopic lane/signal execution (SUMO) is replaced by a summary
+    of what the plan would deliver when run to completion on the open
+    network. `mode` is always "kinematic_mock" so callers can label it.
+    """
+
+    scenario_id: str
+    duration_s: float
+    total_steps: int
+    delivered_count: int
+    pending_count: int
+    teleport_events: int
+    mode: str = "kinematic_mock"
+
+    def to_dict(self) -> dict:
+        return {
+            "scenario_id": self.scenario_id,
+            "total_steps": self.total_steps,
+            "duration_s": self.duration_s,
+            "delivered_count": self.delivered_count,
+            "pending_count": self.pending_count,
+            "teleport_events": self.teleport_events,
+            "mode": self.mode,
+            "summary": (
+                f"Kinematic mock of {self.duration_s:.0f}s: all "
+                f"{self.delivered_count} deliveries complete on the open "
+                "network; SUMO executes the 5-job fixture only."
+            ),
+        }
 
 
 @dataclass(frozen=True)
@@ -154,6 +194,58 @@ class PlatformService:
     LARGE_GRAPH_EDGES = 1000
     LARGE_GRAPH_PARTICLES = 6
     LARGE_GRAPH_EVALUATIONS = 24
+
+    # Large real-city graphs (the ~2000-edge Delhi OSM maps) previously
+    # spent ~135 s per solve in exhaustive constructive insertion scanning
+    # — every customer x vehicle x position got a full plan re-evaluation.
+    # Bounded scanning keeps the same evaluator/validator truth but stops
+    # each insertion round after a handful of feasible candidates, cutting
+    # the initial build to a few seconds. Small fixtures and the step-4
+    # acceptance tests keep the exhaustive default (config=None).
+    INITIAL_FEASIBLE_TARGET = 8
+    INITIAL_TRIALS_CAP = 300
+
+    @classmethod
+    def is_mock_scenario(cls, scenario_or_id) -> bool:
+        """True when the network runs on the kinematic mock, not SUMO.
+
+        SUMO execution (replay + loop) is reserved for the small step-3
+        fixture; large or geo-projected graphs get the mock.
+        """
+        scenario = (
+            load_scenario(scenario_or_id)
+            if isinstance(scenario_or_id, str)
+            else scenario_or_id
+        )
+        return (
+            len(scenario.edges) > cls.LARGE_GRAPH_EDGES
+            or is_geo_scenario(scenario)
+        )
+
+    @classmethod
+    def _initial_config(cls, scenario) -> InitialSolutionConfig:
+        if cls.is_mock_scenario(scenario):
+            return InitialSolutionConfig(
+                feasible_candidates_per_round=cls.INITIAL_FEASIBLE_TARGET,
+                max_trials_per_round=cls.INITIAL_TRIALS_CAP,
+            )
+        return InitialSolutionConfig()
+
+    @classmethod
+    def _initial_builder(cls, scenario, evaluator) -> InitialSolutionBuilder:
+        return InitialSolutionBuilder(
+            scenario, evaluator, config=cls._initial_config(scenario)
+        )
+
+    def mock_episode(self, scenario, duration_s: float) -> MockEpisodeResult:
+        return MockEpisodeResult(
+            scenario_id=scenario.scenario_id,
+            duration_s=float(duration_s),
+            total_steps=max(1, int(duration_s)),
+            delivered_count=len(scenario.requests),
+            pending_count=0,
+            teleport_events=0,
+        )
 
     def _budget_for(self, scenario_id: str, options: SolveOptions) -> tuple[SolveOptions, str | None]:
         try:
@@ -323,14 +415,28 @@ class PlatformService:
         plan: dict[str, list[str]] | None = None,
         closed_edge_ids: Sequence[str] = (),
     ) -> dict:
-        """Run the fixture in headless SUMO and return map frames for the UI."""
+        """Return map frames for the UI.
+
+        The small step-3 fixture runs in headless SUMO. Large or
+        geo-projected networks (the Delhi OSM maps) are served by an honest
+        kinematic mock: vehicles play back the validator-approved directed
+        paths in lat/lon, closures are enforced per frame, and no SUMO or
+        external key is involved.
+        """
+        scenario = self._scenario(scenario_id, closed_edge_ids)
+        if self.is_mock_scenario(scenario):
+            return self._mock_replay(
+                scenario,
+                scenario_id=scenario_id,
+                plan=plan,
+                closed_edge_ids=closed_edge_ids,
+            )
         _ensure_sumo_env()
         from src.sim.fcd_replay import parse_fcd
         from src.sim.sumo_runner import run_episode
 
         output = PROJECT_ROOT / "artifacts" / "demo_sumo_ui"
         output.mkdir(parents=True, exist_ok=True)
-        scenario = self._scenario(scenario_id, closed_edge_ids)
         from src.routing.validator import evaluate_scenario as _evaluate_orders
 
         if plan:
@@ -535,6 +641,274 @@ class PlatformService:
             "notes": notes,
         }
 
+    def _mock_replay(
+        self,
+        scenario: Scenario,
+        *,
+        scenario_id: str,
+        plan: dict[str, list[str]] | None = None,
+        closed_edge_ids: Sequence[str] = (),
+    ) -> dict:
+        """Kinematic mock episode for large/geo networks (no SUMO, no keys).
+
+        Vehicles play back the independent validator's directed paths on the
+        real graph: per-leg travel time is split across its edges by
+        free-flow proportion, waits/services become stops at nodes, and the
+        result is sampled into <=600 frames carrying x/y metres plus lat/lon
+        for the tile map. One deterministic mid-run road blockage is picked
+        from used edges whose entries all finish before the trigger, so the
+        "vehicles already on the link clear it" rule holds and the plan
+        stays legal. UI-selected closures are enforced from t=0.
+        """
+        notes: list[str] = []
+        fleet_ids = [vehicle.vehicle_id for vehicle in scenario.fleet]
+
+        if plan:
+            orders = {
+                vid: [str(x) for x in plan.get(vid, [])]
+                for vid in fleet_ids
+            }
+            source = "requested plan"
+        else:
+            fallback = self.solve(
+                SolveOptions(
+                    method="constructive",
+                    particles=2,
+                    evaluations=4,
+                    seed=7,
+                    closed_edge_ids=tuple(closed_edge_ids),
+                ),
+                scenario_id=scenario_id,
+            )
+            orders = {
+                vid: [str(x) for x in fallback["plan"].get(vid, [])]
+                for vid in fleet_ids
+            }
+            source = "constructive plan"
+        verdict = evaluate_scenario(
+            scenario, orders, closed_edge_ids=closed_edge_ids
+        )
+        if not verdict.feasible:
+            detail = ""
+            try:
+                unserved = list(getattr(verdict, "unserved_request_ids", None) or [])
+                stranded = list(getattr(verdict, "disconnected_legs", None) or [])
+                bits = []
+                if unserved:
+                    bits.append(f"unserved customers: {', '.join(map(str, unserved))}")
+                if stranded:
+                    bits.append(f"disconnected legs: {', '.join(map(str, stranded))}")
+                if bits:
+                    detail = " " + "; ".join(bits) + "."
+            except Exception:
+                detail = ""
+            raise ValueError(
+                f"The {source} is infeasible under the selected closures; "
+                "solve a validated plan first." + detail
+            )
+
+        geo = is_geo_scenario(scenario)
+        node_pos: dict[str, tuple[float, float, float | None, float | None]] = {}
+        for node in scenario.nodes:
+            lat = lon = None
+            if geo:
+                converted = to_latlon(node.x_m, node.y_m)
+                if converted is not None:
+                    lat, lon = converted
+            node_pos[str(node.node_id)] = (
+                float(node.x_m), float(node.y_m), lat, lon
+            )
+        edge_ff = {
+            str(edge.edge_id): float(edge.free_flow_time_s)
+            for edge in scenario.edges
+        }
+        edge_ends = {
+            str(edge.edge_id): (str(edge.from_node), str(edge.to_node))
+            for edge in scenario.edges
+        }
+
+        # --- per-vehicle timeline: (t0, t1, kind, payload) segments ---
+        timelines: dict[str, list[tuple[float, float, str, str]]] = {}
+        entries: dict[str, list[float]] = {}
+        durations: dict[str, float] = {}
+        depot_of = {
+            vehicle.vehicle_id: str(vehicle.depot_node_id)
+            for vehicle in scenario.fleet
+        }
+        for vid in fleet_ids:
+            veh = verdict.vehicles.get(vid)
+            segments: list[tuple[float, float, str, str]] = []
+            cursor = 0.0
+
+            def _drive(leg, start: float) -> float:
+                edge_ids = [str(e) for e in leg.edge_ids]
+                weights = [edge_ff.get(e, 1.0) for e in edge_ids]
+                total = sum(weights)
+                at = start
+                for eid, w in zip(edge_ids, weights):
+                    span = (
+                        float(leg.travel_time_s) * (w / total)
+                        if total > 0
+                        else float(leg.travel_time_s) / max(1, len(edge_ids))
+                    )
+                    if span > 0:
+                        segments.append((at, at + span, "edge", eid))
+                        entries.setdefault(eid, []).append(at)
+                        at += span
+                return at
+
+            if veh is not None:
+                leg_iter = iter(veh.legs)
+                for jid in veh.customer_order:
+                    leg = next(leg_iter, None)
+                    if leg is None:
+                        break
+                    cursor = _drive(leg, cursor)
+                    start = float(veh.service_starts_s.get(jid, cursor))
+                    end = float(veh.service_ends_s.get(jid, start))
+                    stop_end = max(end, cursor, start)
+                    segments.append((cursor, stop_end, "stop", str(leg.to_node)))
+                    cursor = stop_end
+                for leg in leg_iter:  # final depot return (or empty)
+                    cursor = _drive(leg, cursor)
+                    if leg.edge_ids:
+                        segments.append(
+                            (cursor, cursor, "stop", str(leg.to_node))
+                        )
+            timelines[vid] = segments
+            durations[vid] = cursor if veh is not None else 0.0
+
+        duration = max(durations.values(), default=0.0)
+        if duration < 1.0:
+            duration = 60.0
+
+        def _locate(vid: str, t: float) -> tuple[float, float, float | None, float | None, bool]:
+            segments = timelines[vid]
+            if not segments:
+                x, y, lat, lon = node_pos[depot_of[vid]]
+                return x, y, lat, lon, True
+            for t0, t1, kind, payload in segments:
+                if t0 <= t < t1:
+                    if kind == "stop":
+                        x, y, lat, lon = node_pos[payload]
+                        return x, y, lat, lon, True
+                    frm, to = edge_ends.get(payload, (payload, payload))
+                    fx, fy, flat, flon = node_pos[frm]
+                    tx, ty, tlat, tlon = node_pos[to]
+                    frac = (t - t0) / (t1 - t0) if t1 > t0 else 1.0
+                    lat = (
+                        flat + (tlat - flat) * frac
+                        if flat is not None and tlat is not None
+                        else None
+                    )
+                    lon = (
+                        flon + (tlon - flon) * frac
+                        if flon is not None and tlon is not None
+                        else None
+                    )
+                    return (
+                        fx + (tx - fx) * frac,
+                        fy + (ty - fy) * frac,
+                        lat,
+                        lon,
+                        False,
+                    )
+            t0, t1, kind, payload = segments[-1]
+            if kind == "edge":
+                payload = edge_ends.get(payload, (payload, payload))[1]
+            x, y, lat, lon = node_pos[payload]
+            return x, y, lat, lon, True
+
+        # --- mid-run blockage demo: only when the user picked no incident.
+        # A user-selected road IS the incident (enforced from t=0 above) —
+        # no extra hardcoded blockage is ever stacked on top of it.
+        closed0 = [str(e) for e in closed_edge_ids]
+        trigger = min(60.0, max(15.0, duration * 0.35))
+        timed: dict | None = None
+        closed0_set = set(closed0)
+        candidates: list[tuple[float, str]] = []
+        if not closed0:
+            for eid, ets in entries.items():
+                if eid in closed0_set:
+                    continue
+                if not ets or max(ets) >= trigger - 1.0:
+                    continue  # someone would enter after the blockage
+                candidates.append((abs(max(ets) - (trigger - 5.0)), eid))
+            if candidates:
+                candidates.sort(key=lambda item: (item[0], item[1]))
+                timed = {
+                    "incident_id": "INC_MOCK_SCHEDULED_BLOCKAGE",
+                    "edge_id": candidates[0][1],
+                    "trigger_time_s": trigger,
+                }
+        incidents = [
+            {
+                "incident_id": f"INC_UI_CLOSURE_{eid}",
+                "edge_id": eid,
+                "trigger_time_s": 0.0,
+            }
+            for eid in sorted(closed0_set)
+        ]
+        if timed:
+            incidents.append(timed)
+
+        # --- sample frames ---
+        step = max(1.0, duration / 600.0)
+        count = int(duration / step) + 1
+        frames: list[dict] = []
+        for k in range(count):
+            t = min(k * step, duration)
+            vehicles = []
+            for vid in fleet_ids:
+                x, y, lat, lon, stopped = _locate(vid, t)
+                entry: dict = {
+                    "id": vid,
+                    "x": round(x, 1),
+                    "y": round(y, 1),
+                    "kind": "delivery",
+                    "stopped": stopped,
+                }
+                if lat is not None and lon is not None:
+                    entry["lat"] = round(lat, 6)
+                    entry["lon"] = round(lon, 6)
+                vehicles.append(entry)
+            frame_closed = list(closed0)
+            if timed and t >= trigger:
+                frame_closed.append(timed["edge_id"])
+            frames.append({"t": round(t, 1), "vehicles": vehicles, "closed": frame_closed})
+
+        if timed:
+            incident_bits = (
+                f"{timed['edge_id']} blocks at t={trigger:.0f}s "
+                "(vehicles already on it clear it)"
+            )
+        elif closed0:
+            incident_bits = (
+                f"selected incident: {len(closed0)} road(s) blocked from "
+                "t=0 — no extra blockage added"
+            )
+        else:
+            incident_bits = "no mid-run blockage candidate on the plan"
+        notes.append(
+            f"Kinematic mock (no SUMO): {len(fleet_ids)} vans replay the "
+            f"validator-approved plan over {duration:.0f}s on the real "
+            f"{len(scenario.edges)}-edge graph; {incident_bits}."
+        )
+        return {
+            "mode": "kinematic_mock",
+            "episode": self.mock_episode(scenario, duration).to_dict(),
+            "frames": frames,
+            "duration_s": duration,
+            "incidents": incidents,
+            "message": (
+                "Mock replay ready: vehicles follow the validated directed "
+                "paths in lat/lon on the real road graph; road blockages are "
+                "enforced per frame. SUMO executes only the 5-job fixture, "
+                "and no external map key is used."
+            ),
+            "notes": notes,
+        }
+
     def run_sumo(self, *, gui: bool = False) -> dict:
         output = PROJECT_ROOT / "artifacts" / "demo_sumo"
         output.mkdir(parents=True, exist_ok=True)
@@ -623,7 +997,7 @@ class PlatformService:
         dimension = engine.encoder.dimension
         population: list[tuple[float, ...]] = []
         try:
-            initial = InitialSolutionBuilder(scenario, evaluator).build()
+            initial = self._initial_builder(scenario, evaluator).build()
             if initial.complete:
                 encoded = engine.encoder.encode(initial.route_plan)
                 population.append(encoded.keys)
@@ -698,7 +1072,7 @@ class PlatformService:
         scenario = self._scenario(scenario_id, options.closed_edge_ids)
         evaluator, _engine = self._stack(scenario, options.closed_edge_ids)
         started = time.perf_counter()
-        initial = InitialSolutionBuilder(scenario, evaluator).build()
+        initial = self._initial_builder(scenario, evaluator).build()
         elapsed = time.perf_counter() - started
         return {
             "method": "CONSTRUCTIVE",
@@ -732,7 +1106,7 @@ class PlatformService:
         scenario = self._scenario(scenario_id, options.closed_edge_ids)
         evaluator, engine = self._stack(scenario, options.closed_edge_ids)
         c2i, i2c, v2i, i2v = self._id_maps(scenario)
-        initial = InitialSolutionBuilder(scenario, evaluator).build()
+        initial = self._initial_builder(scenario, evaluator).build()
         try:
             engine.encoder.encode(initial.route_plan)
             start_routes = {
@@ -834,7 +1208,7 @@ class PlatformService:
         elapsed = time.perf_counter() - started
         _c2i, i2c, _v2i, i2v = self._id_maps(scenario)
         if result.route is None:
-            evaluation = InitialSolutionBuilder(scenario, evaluator).build().evaluation
+            evaluation = self._initial_builder(scenario, evaluator).build().evaluation
         else:
             orders = {vehicle.vehicle_id: [] for vehicle in scenario.fleet}
             for vehicle_int, customers in result.route.vehicles:
@@ -1041,6 +1415,9 @@ class PlatformService:
         device: str = "cpu",
         scheduler: str = "cosine",
         patience: int = 25,
+        final_eval: bool = True,
+        stream: bool = True,
+        stride: int = 1,
     ) -> dict:
         if epochs <= 0:
             raise ValueError("epochs must be positive")
@@ -1050,6 +1427,10 @@ class PlatformService:
             raise ValueError("batch_size must be positive")
         if scheduler not in ("cosine", "plateau", "none"):
             raise ValueError("scheduler must be cosine, plateau or none")
+        if stride <= 0:
+            raise ValueError("stride must be positive")
+        if stride > 1 and not stream:
+            raise ValueError("stride>1 requires stream=True")
         corpus = self.FORECASTER_CORPUS_DIR
         if not (corpus / "corpus_manifest.json").is_file():
             raise ValueError(f"corpus_v2 manifest is missing at {corpus}")
@@ -1084,6 +1465,17 @@ class PlatformService:
             "--device", device,
             "--window-cache", str(cache_dir),
         ]
+        if not final_eval:
+            # Screening mode: skip the memory-heavy in-training final eval
+            # (full-split [N,E,H] concats). Artifacts are finalized afterwards
+            # with scripts/finalize_forecaster.py (streamed, O(batch) peak).
+            command.append("--no-final-eval")
+        if stream:
+            # O(episode) RAM + zero padding waste; incompatible with the
+            # in-training finale (see above).
+            command.append("--stream")
+        if stride > 1:
+            command.extend(["--stride", str(stride)])
         log_handle = open(log_path, "ab")
         process = subprocess.Popen(
             command,
@@ -1115,9 +1507,13 @@ class PlatformService:
                 "device": device,
                 "scheduler": scheduler,
                 "patience": patience,
+                "final_eval": final_eval,
+                "stream": stream,
+                "stride": stride,
             },
             "command": command,
             "already_running": False,
+            "final_eval": final_eval,
         }
         (output / self.FORECASTER_STATUS_FILE).write_text(
             json.dumps(status, indent=2), encoding="utf-8"

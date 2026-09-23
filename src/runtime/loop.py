@@ -134,7 +134,26 @@ class DemoLoop:
             f"Plan committed as {route_version} against {state_version}; execution prefix is empty at t=0.0s."
         )
         sumo_episode = None
-        if execute_sumo:
+        if execute_sumo and self.service.is_mock_scenario(scenario_id):
+            # Large/geo networks (Delhi OSM) are not SUMO fixtures; show the
+            # honest kinematic stand-in instead of hanging on a simulator
+            # run the map was never exported for.
+            duration = max(
+                (
+                    float(veh.get("elapsed_s", 0.0))
+                    for veh in checked["validation"].get("vehicles", {}).values()
+                ),
+                default=60.0,
+            )
+            episode = self.service.mock_episode(scenario, duration)
+            sumo_episode = episode.to_dict()
+            notes.append(
+                f"Mock execution (kinematic, no SUMO): the validator-approved "
+                f"plan plays out on the real graph over {episode.duration_s:.0f}s — "
+                f"{episode.delivered_count} deliveries complete, no teleports. "
+                "SUMO runs the 5-job fixture only."
+            )
+        elif execute_sumo:
             from src.sim.sumo_runner import run_episode
             output = output_dir or (PROJECT_ROOT / "artifacts" / "step10_complete_loop")
             output.mkdir(parents=True, exist_ok=True)

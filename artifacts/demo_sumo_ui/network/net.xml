@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2026-09-14T18:08:29.735638+05:30 by Eclipse SUMO netconvert 1.27.1
+<!-- generated on 2026-09-24T02:34:34.640797+05:30 by Eclipse SUMO netconvert 1.27.1
 <netconvertConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
 
     <input>
-        <node-files value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\network\nodes.nod.xml"/>
-        <edge-files value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\network\edges.edg.xml"/>
-        <connection-files value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\network\connections.con.xml"/>
+        <node-files value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/network/nodes.nod.xml"/>
+        <edge-files value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/network/edges.edg.xml"/>
+        <connection-files value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/network/connections.con.xml"/>
     </input>
 
     <output>
-        <output-file value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\network\net.xml"/>
+        <output-file value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/network/net.xml"/>
     </output>
 
     <processing>
@@ -23,7 +23,7 @@
     </junctions>
 
     <report>
-        <log value="C:\Users\Harleen Kaur\Desktop\sih2026\Quanta_SIH26137\artifacts\demo_sumo_ui\network\netconvert.log"/>
+        <log value="/Users/meharkapoor7/Quanta-SIH26137/artifacts/demo_sumo_ui/network/netconvert.log"/>
     </report>
 
 </netconvertConfiguration>
@@ -37,7 +37,7 @@
         <lane id="E01_0" index="0" speed="10.00" length="100.00" shape="0.00,-1.60 97.60,-1.60"/>
     </edge>
     <edge id="E10" from="N1" to="N0" priority="1" length="100.00">
-        <lane id="E10_0" index="0" speed="10.00" length="100.00" shape="97.60,1.60 0.00,1.60"/>
+        <lane id="E10_0" index="0" speed="10.00" length="100.00" shape="97.60,1.60 -0.00,1.60"/>
     </edge>
     <edge id="E12" from="N1" to="N2" priority="1" length="100.00">
         <lane id="E12_0" index="0" speed="10.00" length="100.00" shape="109.18,-1.60 192.42,-1.60"/>
@@ -64,7 +64,7 @@
         <lane id="E62_0" index="0" speed="10.00" length="150.00" shape="151.43,93.56 196.06,4.29"/>
     </edge>
 
-    <junction id="N0" type="priority" x="0.00" y="0.00" incLanes="E10_0" intLanes="" shape="0.00,0.00 0.00,3.20 0.00,0.00">
+    <junction id="N0" type="priority" x="0.00" y="0.00" incLanes="E10_0" intLanes="" shape="-0.00,0.00 -0.00,3.20 -0.00,0.00">
         <request index="0" response="0" foes="0"/>
     </junction>
     <junction id="N1" type="priority" x="100.00" y="0.00" incLanes="E51_0 E01_0" intLanes="" shape="104.10,8.21 106.97,6.78 106.42,4.79 106.62,4.09 107.15,3.60 108.01,3.30 109.18,3.20 109.18,-3.20 97.60,-3.20 97.60,3.20 100.10,3.76 101.23,4.45 102.27,5.43 103.23,6.68">

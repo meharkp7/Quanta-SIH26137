@@ -1,8 +1,8 @@
 {
   "scenario_id": "S3_BASE",
-  "total_steps": 135,
-  "sim_end_time_s": 135.0,
-  "wall_clock_s": 1.52,
+  "total_steps": 137,
+  "sim_end_time_s": 137.0,
+  "wall_clock_s": 1.313,
   "delivered_count": 5,
   "failed_count": 0,
   "pending_count": 0,
@@ -47,15 +47,15 @@
       "state": "delivered",
       "assigned_vehicle_id": "V1",
       "service_start_s": 12.0,
-      "service_end_s": 24.0,
+      "service_end_s": 22.0,
       "was_late": false
     },
     {
       "request_id": "J2",
       "state": "delivered",
       "assigned_vehicle_id": "V1",
-      "service_start_s": 37.0,
-      "service_end_s": 47.0,
+      "service_start_s": 35.0,
+      "service_end_s": 46.0,
       "was_late": false
     },
     {
@@ -78,8 +78,8 @@
       "request_id": "J5",
       "state": "delivered",
       "assigned_vehicle_id": "V2",
-      "service_start_s": 104.0,
-      "service_end_s": 114.0,
+      "service_start_s": 105.0,
+      "service_end_s": 115.0,
       "was_late": false
     }
   ]
