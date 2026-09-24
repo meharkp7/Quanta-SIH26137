@@ -35,6 +35,7 @@ dist/
 # Environment / secrets
 .env
 .env.*
+!.env.example
 
 # Large traffic datasets and generated artifacts
 /data/raw/
@@ -49,6 +50,7 @@ dist/
 artifacts/causal_sumo_pilot/
 artifacts/causal_sumo_pilot_repro/
 artifacts/step12_sumo_windows/
+/artifacts/demo_sumo_ui/
 
 # Regenerable training episodes and tensor exports
 /artifacts/step11_training_*/
@@ -74,3 +76,5 @@ delhi_pilot_out/
 # Frontend build outputs and deps
 frontend/node_modules/
 frontend/dist/
+/artifacts/demo_sumo_ui/
+/artifacts/demo_sumo_ui/

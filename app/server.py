@@ -16,14 +16,17 @@ import json
 import time
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src.platform.service import PlatformService, SolveOptions
 from src.runtime.loop import DemoLoop
+from app.auth import config, verify_company
+from app.workspace import router as workspace_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -42,10 +45,41 @@ app = FastAPI(
     version="0.4.0",
 )
 
+app.include_router(workspace_router)
+
+
+@app.middleware("http")
+async def company_access(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and request.method != "OPTIONS":
+        # Public reads contain only catalog/demo data, never a company's saved records.
+        public_read = request.method == "GET" and path.startswith((
+            "/api/health", "/api/meta", "/api/scenarios", "/api/evidence", "/api/demo/"))
+        company = request.headers.get("x-company-id", "")
+        token = request.headers.get("authorization", "")
+        demo_allowed = config("QUANTA_ALLOW_DEMO", "true").lower() == "true"
+        demo_compute = path in ("/api/solve", "/api/compare", "/api/path", "/api/validate", "/api/sumo/replay") or path.startswith("/api/workspace/")
+        configured = bool(config("SUPABASE_URL"))
+        try:
+            if token or company:
+                role = await run_in_threadpool(verify_company, token, company)
+                if request.method == "POST" and role == "viewer":
+                    raise HTTPException(403, "Viewers can inspect saved results. A dispatcher or owner can run computations.")
+                if ("/train" in path or path in ("/api/sumo", "/api/loop")) and role != "owner":
+                    raise HTTPException(403, "Only company owners may use this operation.")
+            elif configured and not public_read:
+                if not (demo_allowed and demo_compute and request.headers.get("x-quanta-demo") == "true"):
+                    raise HTTPException(401, "Sign in or enter the demo workspace.")
+            elif not configured and path.startswith("/api/workspace/") and not demo_allowed:
+                raise HTTPException(401, "Company authentication is required.")
+        except HTTPException as exc:
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    return await call_next(request)
+
 # CORS for local frontend development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for demo purposes
+    allow_origins=config("QUANTA_ALLOWED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:8765").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -791,6 +825,13 @@ def index() -> FileResponse:
     if not index_path.is_file():
         raise HTTPException(status_code=500, detail="UI index.html is missing")
     return FileResponse(index_path)
+
+
+@app.get("/{path:path}", include_in_schema=False)
+def frontend_route(path: str) -> FileResponse:
+    if path.startswith(("api/", "assets/", "static/")) or "." in path.rsplit("/", 1)[-1]:
+        raise HTTPException(404, "Not found")
+    return index()
 
 
 def main() -> None:
