@@ -499,3 +499,7 @@ em { color:var(--lime); font-style:normal; }
   0%, 100% { opacity: .25; transform: scale(.7); }
   50% { opacity: 1; transform: scale(1.1); }
 }
+
+.legend-line.geo-mid{background:#a3e635}
+.legend-line.geo-nodata{background:#64748b}
+.legend-dot.ep-bg{background:#38bdf8}

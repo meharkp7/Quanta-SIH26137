@@ -40,7 +40,7 @@ export const SOLVE_TIMEOUT_MS = 150000;
 export const postJson = <T,>(path: string, body: unknown, timeoutMs?: number, signal?: AbortSignal) => api<T>(path, { method: "POST", body: JSON.stringify(body), ...(signal ? { signal } : {}) }, timeoutMs);
 export type ReplayFrame = {
   t: number;
-  vehicles: { id: string; x: number; y: number; lat?: number; lon?: number; kind?: string; stopped?: boolean }[];
+  vehicles: { id: string; x: number; y: number; lat?: number; lon?: number; kind?: string; stopped?: boolean; heading?: number }[];
   closed?: string[];
 };
 export type ReplayIncident = { incident_id: string; edge_id: string; trigger_time_s: number };
@@ -48,3 +48,32 @@ export type ReplayResult = { frames: ReplayFrame[]; incidents?: ReplayIncident[]
 export type Evidence = { available: boolean; artifact?: string; model_mae?: number | null; temporal_baseline_mae?: number | null; uncertainty?: { validation?: { actual_coverage?: number }; test?: { actual_coverage?: number }; nominal_coverage?: number }; test_metrics?: Record<string, { mae?: number; rmse?: number }>; training_cutoff_s?: number; split_policy?: string; reason?: string; demo?: boolean; provenance?: string; step14_demo?: { corridor_cost_delta_s?: number; reroute_proof?: string; fifo_holds?: boolean } | null; step9?: { milp_certified_objective?: number; detail?: string } | null; data_audit?: { headline?: string } | null };
 export type PathResult = { method: string; exact: boolean; feasible: boolean; source?: string; target?: string; node_ids?: string[]; edge_ids?: string[]; distance_m?: number; time_s?: number; congestion_s?: number; elapsed_s?: number; error?: string };
 export type DrlDemo = { action: string; scope?: string; job_id?: string; vehicle_id?: string; reason?: string; provenance?: string; demo?: boolean };
+// ── Episode Explorer (recorded corpus playback) ────────────────────────────
+export type EpisodeSummary = { episode_id: string; scenario_id: string; split: string; regime: string; event_type: string | null; event_count: number; seed: number; duration_s: number; interval_s: number };
+export type EpisodeList = { scenario_id: string; split: string; regime: string; total: number; episodes: EpisodeSummary[] };
+export type EpisodeEvent = { event_id: string; event_type: string; generation_time_s: number; reveal_time_s: number; effect_start_s: number; effect_end_s: number; affected_parent_road_ids: string[]; severity?: number };
+export type EpisodeRuntimeEvent = { event_id: string; event_type: string; timestamp_s: number };
+export type EpisodeDetail = {
+  episode_id: string; scenario_id: string; split: string; regime: string; seed: number;
+  backend: string; interval_s: number; duration_s: number; warmup_s: number;
+  horizons_s: number[]; manifest: Record<string, unknown>;
+  events: EpisodeEvent[]; runtime_events: EpisodeRuntimeEvent[];
+  edge_ids: string[]; times: number[];
+};
+export type EpisodeVehicle = { id: string; edge: string; pct: number; kind: "fleet" | "bg" };
+export type EpisodeFrameSummary = {
+  total: number; reporting: number; observed_count: number; closed: number;
+  mean_ratio: number | null; mean_observed_mps: number | null; fleet: number; bg: number;
+};
+export type EpisodeFrame = {
+  episode_id: string; t: number;
+  observed: (number | null)[]; ratio: (number | null)[]; closed: number[];
+  vehicles: EpisodeVehicle[]; summary: EpisodeFrameSummary;
+};
+export type EpisodeForecastIssue = {
+  issued_at_s: number; target_times_s: number[];
+  pred_mean: (number | null)[]; pred_p10: (number | null)[]; pred_p90: (number | null)[];
+  truth_mean: (number | null)[]; valid_edges: number[];
+  forecast_version: string; target_kind: string; target_unit: string;
+};
+export type EpisodeForecasts = { episode_id: string; issues: EpisodeForecastIssue[]; model_version: string | null };

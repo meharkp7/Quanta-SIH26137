@@ -27,6 +27,7 @@ from src.platform.service import PlatformService, SolveOptions
 from src.runtime.loop import DemoLoop
 from app.auth import config, verify_company
 from app.workspace import router as workspace_router
+from app import episodes as episodes_api
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -54,7 +55,7 @@ async def company_access(request: Request, call_next):
     if path.startswith("/api/") and request.method != "OPTIONS":
         # Public reads contain only catalog/demo data, never a company's saved records.
         public_read = request.method == "GET" and path.startswith((
-            "/api/health", "/api/meta", "/api/scenarios", "/api/evidence", "/api/demo/"))
+            "/api/health", "/api/meta", "/api/scenarios", "/api/evidence", "/api/demo/", "/api/episodes"))
         company = request.headers.get("x-company-id", "")
         token = request.headers.get("authorization", "")
         demo_allowed = config("QUANTA_ALLOW_DEMO", "true").lower() == "true"
@@ -425,6 +426,60 @@ def closeable_edges(scenario_id: str) -> dict:
         }
     except Exception as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/episodes")
+def list_episodes(
+    scenario_id: str = "",
+    split: str = "",
+    regime: str = "",
+    with_events: bool = False,
+    limit: int = 100,
+) -> dict:
+    """Index the recorded corpus episodes (list endpoint, cached manifest)."""
+    try:
+        return episodes_api.list_episodes(
+            scenario_id=scenario_id,
+            split=split,
+            regime=regime,
+            with_events=with_events,
+            limit=limit,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/episodes/{episode_id}")
+def episode_detail(episode_id: str) -> dict:
+    """Manifest + events + canonical edge order for one recorded episode."""
+    try:
+        return episodes_api.episode_detail(episode_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/episodes/{episode_id}/frame")
+def episode_frame(episode_id: str, t: int = 0) -> dict:
+    """Observed speeds, closures, and vehicles at time ``t`` (snapped to the step)."""
+    try:
+        return episodes_api.episode_frame(episode_id, t)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/episodes/{episode_id}/forecasts")
+def episode_forecasts(episode_id: str) -> dict:
+    """Issued forecasts with network-level pred vs truth aggregates per target."""
+    try:
+        return episodes_api.episode_forecasts(episode_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/api/validate")

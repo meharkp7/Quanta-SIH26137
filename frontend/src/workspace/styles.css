@@ -1925,6 +1925,34 @@ small {
   min-height: 28px;
   padding: 4px 8px;
 }
+.w-episode {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 18px;
+  border-top: 1px solid #e6ebf2;
+  color: #8e9cb3;
+  font-size: 10px;
+}
+.w-episode .w-button {
+  font-size: 10px;
+  min-height: 31px;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+.w-episode > select {
+  font-size: 10px;
+  min-height: 28px;
+  padding: 4px 8px;
+  max-width: 360px;
+}
+.w-episode > input {
+  flex: 1;
+  min-width: 35px;
+}
+.w-episode > span {
+  white-space: nowrap;
+}
 .w-map-footnote {
   font-size: 9px;
   color: #a0adbe;
@@ -3322,6 +3350,13 @@ small {
   .w-playback > span {
     font-size: 9px;
   }
+  .w-episode {
+    gap: 8px;
+    padding-inline: 13px;
+  }
+  .w-episode > select {
+    max-width: 230px;
+  }
 }
 @media (max-width: 1000px) {
   .w-breadcrumb {
@@ -3936,6 +3971,12 @@ small {
   }
   .w-playback > span {
     display: none;
+  }
+  .w-episode > span {
+    display: none;
+  }
+  .w-episode > select {
+    max-width: 210px;
   }
   .w-route-list .w-tag {
     font-size: 9px;

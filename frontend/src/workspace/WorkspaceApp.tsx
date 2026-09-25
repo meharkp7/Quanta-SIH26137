@@ -22,6 +22,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MonitorPlay,
   Plus,
   Route as RouteIcon,
   Search,
@@ -63,6 +64,7 @@ const navigation = [
     label: "Operations",
     items: [
       ["/app/live", "Live operations", Activity],
+      ["/control-room", "Control room", MonitorPlay],
       ["/app/shortest-path", "Shortest path", RouteIcon],
       ["/app/simulations", "Simulations", FlaskConical],
     ],
@@ -354,6 +356,12 @@ function AppRoutes() {
         <Route path="/auth/callback" element={<Onboarding />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/documentation" element={<Documentation publicPage />} />
+        {/* Control room = the workspace simulation map (Operations): the
+            Leaflet fleet map fed by recorded Delhi episodes (road truth +
+            fleet movement). Renders inside the normal workspace Shell. */}
+        <Route path="/control-room" element={<Shell />}>
+          <Route index element={<Operations controlRoom />} />
+        </Route>
         <Route path="/app" element={<Shell />}>
           <Route index element={<Dashboard />} />
           <Route path="scenarios" element={<ScenarioList />} />

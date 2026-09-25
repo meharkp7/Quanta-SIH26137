@@ -4,11 +4,17 @@ from app.server import app
 
 
 def test_server_exposes_current_core_routes():
-    paths = {route.path for route in app.routes}
+    # FastAPI >= 0.140 keeps a lazy `_IncludedRouter` entry (no `.path`) in
+    # app.routes for include_router()'d sub-routers — skip wrapper objects.
+    paths = {route.path for route in app.routes if hasattr(route, "path")}
     assert "/api/health" in paths
     assert "/api/meta" in paths
     assert "/api/scenarios" in paths
     assert "/api/scenarios/{scenario_id}/closeable-edges" in paths
+    assert "/api/episodes" in paths
+    assert "/api/episodes/{episode_id}" in paths
+    assert "/api/episodes/{episode_id}/frame" in paths
+    assert "/api/episodes/{episode_id}/forecasts" in paths
     assert "/api/validate" in paths
     assert "/api/solve" in paths
     assert "/api/compare" in paths

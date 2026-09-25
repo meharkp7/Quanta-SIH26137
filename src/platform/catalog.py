@@ -81,6 +81,55 @@ SCENARIO_CATALOG = (
         "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_004" / "scenario.json",
         "description": "Real OSM Delhi network (nehru_place-map004, test split): 2137 edges, 843 nodes, 80 requests, 13 vehicles. Read-only reference; render/solve via the same live service.",
     },
+    {
+        "id": "DELHI_CNP",
+        "label": "Delhi — Connaught Place (real OSM)",
+        "role": "real Delhi map",
+        "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_000" / "scenario.json",
+        "description": "Real OSM Delhi network (connaught_place-map000, train split): 4778 edges, 2033 nodes, 40 requests, 9 vehicles. Read-only reference; render/solve via the same live service.",
+    },
+    {
+        "id": "DELHI_KB",
+        "label": "Delhi — Karol Bagh (real OSM)",
+        "role": "real Delhi map",
+        "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_002" / "scenario.json",
+        "description": "Real OSM Delhi network (karol_bagh-map002, train split): 5465 edges, 2064 nodes, 60 requests, 8 vehicles. Read-only reference; render/solve via the same live service.",
+    },
+    {
+        "id": "DELHI_SK",
+        "label": "Delhi — Saket (real OSM)",
+        "role": "real Delhi map",
+        "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_005" / "scenario.json",
+        "description": "Real OSM Delhi network (saket-map005, train split): 8510 edges, 3382 nodes, 40 requests, 5 vehicles. Read-only reference; render/solve via the same live service.",
+    },
+    {
+        "id": "DELHI_HK",
+        "label": "Delhi — Hauz Khas (real OSM)",
+        "role": "real Delhi map",
+        "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_006" / "scenario.json",
+        "description": "Real OSM Delhi network (hauz_khas-map006, train split): 5439 edges, 2251 nodes, 50 requests, 11 vehicles. Read-only reference; render/solve via the same live service.",
+    },
+    {
+        "id": "DELHI_OK",
+        "label": "Delhi — Okhla (real OSM)",
+        "role": "real Delhi map",
+        "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_007" / "scenario.json",
+        "description": "Real OSM Delhi network (okhla-map007, train split): 3336 edges, 1266 nodes, 60 requests, 10 vehicles. Read-only reference; render/solve via the same live service.",
+    },
+    {
+        "id": "DELHI_PT",
+        "label": "Delhi — Pitampura (real OSM)",
+        "role": "real Delhi map",
+        "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_008" / "scenario.json",
+        "description": "Real OSM Delhi network (pitampura-map008, validation split): 6881 edges, 2645 nodes, 70 requests, 9 vehicles. Read-only reference; render/solve via the same live service.",
+    },
+    {
+        "id": "DELHI_MT",
+        "label": "Delhi — Model Town (real OSM)",
+        "role": "real Delhi map",
+        "path": PROJECT_ROOT / "artifacts" / "corpus_v2" / "maps" / "map_009" / "scenario.json",
+        "description": "Real OSM Delhi network (model_town-map009, test split): 8644 edges, 3310 nodes, 80 requests, 17 vehicles. Read-only reference; render/solve via the same live service.",
+    },
 )
 
 

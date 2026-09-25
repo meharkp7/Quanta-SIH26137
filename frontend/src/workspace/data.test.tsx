@@ -5,6 +5,7 @@ import {
   generateNetwork,
   parseCsv,
   requestBody,
+  seedDrafts,
   validateDraft,
 } from "./data";
 
@@ -53,5 +54,24 @@ describe("workspace input boundaries", () => {
       ),
     ).toBe(true);
     expect(graph.requests.every((r) => nodes.has(r.node))).toBe(true);
+  });
+  it("keeps every seeded scenario, including the pre-filled fleet input demo, valid", () => {
+    const seeds = seedDrafts();
+    expect(seeds.length).toBeGreaterThanOrEqual(4);
+    for (const draft of seeds) expect(validateDraft(draft)).toBeNull();
+    const demo = seeds.find((d) => d.name === "Fleet input demo")!;
+    expect(demo.graph.fleet).toEqual([
+      { id: "TRK-01", capacity: 100, depot: "N0" },
+      { id: "TRK-02", capacity: 80, depot: "N0" },
+      { id: "VAN-03", capacity: 60, depot: "N0" },
+    ]);
+    expect(demo.graph.requests).toHaveLength(9);
+    // The demo fleet and delivery sheet are shared with public/demo/*, so a
+    // CSV imported over this scenario must reference only existing nodes.
+    const nodes = new Set(demo.graph.nodes.map((n) => n.id));
+    expect(demo.graph.requests.every((r) => nodes.has(r.node))).toBe(true);
+    const totalDemand = demo.graph.requests.reduce((s, r) => s + r.demand, 0);
+    const totalCapacity = demo.graph.fleet.reduce((s, v) => s + v.capacity, 0);
+    expect(totalDemand).toBeLessThanOrEqual(totalCapacity);
   });
 });
