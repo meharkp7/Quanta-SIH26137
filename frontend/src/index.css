@@ -503,3 +503,28 @@ em { color:var(--lime); font-style:normal; }
 .legend-line.geo-mid{background:#a3e635}
 .legend-line.geo-nodata{background:#64748b}
 .legend-dot.ep-bg{background:#38bdf8}
+
+/* ── HERE integration: live-traffic toggle + place search ─────────────── */
+.live-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;position:relative}
+.live-toggle input{position:absolute;width:1px;height:1px;opacity:0;margin:0}
+.live-toggle-track{position:relative;width:34px;height:18px;flex:none;border-radius:9px;background:#22301f;border:1px solid #3e4d3e;transition:background .15s,border-color .15s}
+.live-toggle-track i{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#8aa08a;transition:left .15s,background .15s}
+.live-toggle input:checked + .live-toggle-track{background:rgba(190,242,100,.18);border-color:var(--lime)}
+.live-toggle input:checked + .live-toggle-track i{left:18px;background:var(--lime)}
+.live-toggle input:disabled + .live-toggle-track{opacity:.45}
+.live-toggle input:focus-visible + .live-toggle-track{outline:2px solid var(--lime);outline-offset:2px}
+.live-toggle em{font-style:normal;font-size:11px;color:#cfe0cc}
+
+.here-search{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding:8px 10px;border:1px solid #2a382a;border-radius:6px;background:rgba(12,17,12,.72)}
+.here-search input{color:#eaf1e8;background:#111812;border:1px solid #3e4d3e;border-radius:5px;padding:7px 8px;outline:0;min-width:240px;flex:1;font-size:12px}
+.here-search input:focus{border-color:var(--lime)}
+.here-search > button{background:#1b241b;border:1px solid #3e4d3e;color:#eaf1e8;border-radius:5px;padding:7px 10px;font-size:12px;cursor:pointer}
+.here-search > button:disabled{opacity:.5;cursor:default}
+.here-results{display:flex;flex-direction:column;gap:4px;width:100%}
+.here-result{display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:12px;color:#cfe0cc;border-top:1px dashed #2a382a;padding-top:5px}
+.here-result > span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:72%}
+.here-pick{display:flex;gap:4px;flex:none}
+.here-pick button{background:#1b241b;border:1px solid #3e4d3e;color:var(--lime);border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer}
+.here-pick button:hover{border-color:var(--lime)}
+.here-note{font-style:normal;font-size:11px;color:#f0c66a}
+.here-hint{font-size:11px;color:#7e8d7c}

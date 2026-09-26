@@ -1,0 +1,278 @@
+import { useMemo, useRef, useState } from "react";
+import {
+  Bell,
+  CheckCircle2,
+  Clock,
+  Download,
+  FileText,
+  MapPin,
+  Route,
+  Truck,
+  Upload,
+} from "lucide-react";
+import type { SolveResult } from "@/api";
+import { useQuanta, scenarioOptions, LIMITS } from "./store";
+import { Box, Btn, Field, Loader, Pill, Select, Stat, Status, fmtClock, fmtEta, fmtHours, fmtKm, revealStyle, SectionHead, parseOrdersCsv } from "./ui";
+import { ConvergenceChart } from "./charts";
+import { MapPanel, routesFromSolve } from "./map";
+import { FleetPanel } from "./Fleet";
+import { buildPdf, downloadBlob } from "./pdf";
+
+type Stop = { job: string; start_s: number; window_ok?: boolean; latest_s?: number };
+
+const METHOD_LABELS: Record<string, string> = {
+  qpso: "QPSO (Recommended)",
+  pso: "PSO (Classical)",
+  alns: "ALNS (Adaptive)",
+  constructive: "Constructive baseline",
+  milp: "MILP (Exact)",
+};
+
+// Section 2 — DASHBOARD / LIVE OPERATIONS.
+export function Dashboard() {
+  const { scenarios, scenarioId, setScenarioId, graph, graphLoading, config, patch, solve, runSolve, solving, solveNote, scopes } = useQuanta();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [ordersNote, setOrdersNote] = useState("");
+  const [fleetOpen, setFleetOpen] = useState(false);
+
+  const routes = useMemo(() => routesFromSolve(solve), [solve]);
+  const stops = solve ? solve.evaluation.vehicles.reduce((sum, v) => sum + v.order.length, 0) : null;
+  const onTime = useMemo(() => {
+    if (!solve) return null;
+    const all = solve.evaluation.vehicles.flatMap((v) => (v.stops as unknown as Stop[]) || []);
+    if (!all.length) return null;
+    const ok = all.filter((s) => s.window_ok !== false).length;
+    return Math.round((ok / all.length) * 100);
+  }, [solve]);
+  const feasible = solve?.evaluation.feasible ?? null;
+
+  // CSV orders → the backend snapshot's `requests` (1–200 deliveries).
+  function onFile(file: File | undefined) {
+    if (!file || !graph) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = parseOrdersCsv(String(reader.result || ""), file.name, graph.nodes.map((n) => n.id), graph.requests.map((r) => r.node));
+      if ("error" in result) {
+        setOrdersNote("");
+        patch({ orders: null });
+        window.alert(result.error);
+        return;
+      }
+      patch({ orders: result });
+      setOrdersNote(result.note);
+    };
+    reader.readAsText(file);
+  }
+
+  function downloadPlan() {
+    const lines = [];
+    lines.push({ text: `Scenario: ${scenarioId}`, size: 10 });
+    lines.push({ text: `Optimizer: ${METHOD_LABELS[config.method] || config.method}`, size: 10 });
+    lines.push({ text: `Generated: ${new Date().toLocaleString()}`, size: 10 });
+    lines.push({ text: `Fleet size: ${config.fleetSize} vehicles - capacity ${config.capacity} load units`, size: 10 });
+    lines.push({ text: `Road closures active: ${config.closed.length ? config.closed.join(", ") : "none"}`, size: 10 });
+    lines.push({ text: `Deliveries in plan: ${graph?.requests.length ?? 0}`, size: 10 });
+    lines.push({ text: "", size: 8 });
+    if (solve) {
+      lines.push({ text: "SUMMARY", bold: true, size: 12, gap: 6 });
+      lines.push({ text: `Objective: ${solve.evaluation.objective.toFixed(1)}`, size: 10 });
+      lines.push({ text: `Total travel time: ${fmtHours(solve.evaluation.time_s)}`, size: 10 });
+      lines.push({ text: `Total distance: ${fmtKm(solve.evaluation.distance_m)}`, size: 10 });
+      lines.push({ text: `Validator: ${solve.evaluation.feasible ? "FEASIBLE - every constraint passed" : "INFEASIBLE - see violations"}`, size: 10 });
+      lines.push({ text: `Solve time: ${fmtClock(solve.elapsed_s || 0)}`, size: 10 });
+      lines.push({ text: "", size: 8 });
+      lines.push({ text: "VEHICLE ROUTES", bold: true, size: 12, gap: 6 });
+      lines.push({ text: "Vehicle    Stops   Distance      ETA      Status", bold: true, size: 9.5 });
+      for (const vehicle of solve.evaluation.vehicles) {
+        const late = (vehicle.stops as unknown as Stop[]).filter((s) => s.window_ok === false).length;
+        const status = !vehicle.feasible ? "Delayed" : late > 0 ? `${late} late` : "On time";
+        lines.push({
+          text: `${vehicle.id.padEnd(10)} ${String(vehicle.order.length).padStart(5)}   ${fmtKm(vehicle.distance_m || 0).padStart(9)}   ${fmtEta(vehicle.elapsed_s || 0).padStart(7)}   ${status}`,
+          size: 9.5,
+        });
+      }
+      if (solve.evaluation.violations?.length) {
+        lines.push({ text: "", size: 8 });
+        lines.push({ text: "VALIDATOR VIOLATIONS", bold: true, size: 12, gap: 6 });
+        for (const violation of solve.evaluation.violations) lines.push({ text: `- ${violation.name}: ${violation.detail}`, size: 9.5 });
+      }
+    } else {
+      lines.push({ text: "No solve has been run yet - open the dashboard and press Solve Routes.", size: 10 });
+    }
+    lines.push({ text: "", size: 8 });
+    lines.push({ text: "Generated by Quanta Fleet Routing Intelligence (SIH26137).", size: 8.5 });
+    downloadBlob(buildPdf("QUANTA - Fleet Action Plan", lines), `quanta-action-plan-${scenarioId || "plan"}.pdf`);
+  }
+
+  return (
+    <div className="q-section">
+      <SectionHead
+        n={2}
+        title="DASHBOARD / LIVE OPERATIONS"
+        sub="Monitor fleet in real-time and optimize routes"
+        right={
+          <div className="q-ops-bar">
+            <Pill tone="green" dot>Live Operations</Pill>
+            <span className="q-ops-date">{new Date().toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })} · {new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
+            <Btn kind="ghost" onClick={() => setFleetOpen(true)} title="See every vehicle in this scenario and whether it is moving">
+              <Truck size={15} /> Fleet · {(config.fleetSize || graph?.fleet.length || 0)}
+            </Btn>
+            <button className="q-icon-btn" aria-label="Notifications"><Bell size={16} /></button>
+            <span className="q-avatar">A</span>
+          </div>
+        }
+      />
+
+      <FleetPanel open={fleetOpen} onClose={() => setFleetOpen(false)} />
+
+      <div className="q-dash-grid" style={revealStyle(60)}>
+        <Box
+          title={<><Route size={15} /> Optimized city map</>}
+          action={<span className="q-badge">{solve ? `${routes.length} routes live` : "awaiting solve"}</span>}
+          className="q-map-box"
+        >
+          <MapPanel graph={graph} routes={routes} closed={config.closed} height={402} />
+          {graphLoading && <Loader label="Loading network…" />}
+        </Box>
+
+        <Box title="Optimization Controls" className="q-controls-box">
+          <Field label="Scenario">
+            <Select
+              ariaLabel="Scenario"
+              value={scenarioId}
+              onChange={(value) => setScenarioId(value)}
+              options={scenarioOptions(scenarios)}
+            />
+          </Field>
+          <div className="q-field-row">
+            <Field label="Fleet size">
+              <input
+                className="q-input-plain"
+                aria-label="Fleet size"
+                type="number"
+                min={LIMITS.fleet[0]}
+                max={LIMITS.fleet[1]}
+                value={config.fleetSize || ""}
+                onChange={(e) => patch({ fleetSize: Math.max(LIMITS.fleet[0], Math.min(LIMITS.fleet[1], Number(e.target.value) || 1)) })}
+              />
+            </Field>
+            <Field label="Vehicle capacity" hint={graph?.fleet.length ? `map default: ${Math.max(1, ...graph.fleet.map((v) => Math.round(v.capacity)))} · load units` : undefined}>
+              <input
+                className="q-input-plain"
+                aria-label="Vehicle capacity"
+                type="number"
+                min={1}
+                value={config.capacity || ""}
+                onChange={(e) => patch({ capacity: Math.max(1, Number(e.target.value) || 1) })}
+              />
+            </Field>
+          </div>
+          <Field label="Upload Orders (CSV)" hint="columns: id, node, demand, earliest_s, latest_s">
+            <div className="q-file">
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,text/csv"
+                aria-label="Upload orders CSV"
+                onChange={(e) => onFile(e.target.files?.[0])}
+              />
+              <span className="q-file-btn"><Upload size={14} /> Choose file</span>
+              {config.orders ? (
+                <span className="q-file-name"><FileText size={13} /> {config.orders.fileName} <CheckCircle2 size={14} className="q-ok" /></span>
+              ) : (
+                <span className="q-file-name muted">orders_delhi.csv</span>
+              )}
+            </div>
+            {ordersNote && <em className="q-field-hint">{ordersNote}</em>}
+            {config.orders && (
+              <button className="q-link" onClick={() => { patch({ orders: null }); setOrdersNote(""); }}>Clear uploaded orders</button>
+            )}
+          </Field>
+          <Field label="Algorithm">
+            <Select
+              ariaLabel="Algorithm"
+              value={config.method}
+              onChange={(value) => patch({ method: value })}
+              options={Object.entries(METHOD_LABELS).map(([value, label]) => ({ value, label }))}
+            />
+          </Field>
+          <Btn full disabled={solving || !graph} onClick={() => void runSolve()}>
+            {solving ? solveNote || "Solving…" : "Solve Routes"}
+          </Btn>
+          <p className="q-hint">
+            {config.closed.length > 0 && `${config.closed.length} closure(s) applied · `}
+            {scopes.length > 0 && config.congestionScope && `${config.congestionPct}% congestion in scope · `}
+            solves run on the backend snapshot (`/api/workspace/solve`) and are validated independently.
+          </p>
+        </Box>
+      </div>
+
+      <div className="q-kpis" style={revealStyle(120)}>
+        <Stat icon={<Truck />} value={config.fleetSize || graph?.fleet.length || 0} label="Vehicles deployed" />
+        <Stat icon={<MapPin />} value={stops ?? graph?.requests.length ?? 0} label="Total stops" tone="blue" />
+        <Stat icon={<Route />} value={solve ? fmtKm(solve.evaluation.distance_m) : "—"} label="Total distance" tone="amber" />
+        <Stat icon={<Clock />} value={solve ? fmtHours(solve.evaluation.time_s) : "—"} label="Est. total time" tone="lime" />
+        <Stat icon={<CheckCircle2 />} value={onTime != null ? `${onTime}%` : "—"} label="On-time ETA" tone="green" />
+      </div>
+
+      <div className="q-dash-lower" style={revealStyle(180)}>
+        <Box
+          title="Vehicle Routes (Live)"
+          action={solve ? <Pill tone={feasible ? "green" : "red"} dot>{feasible ? "All routes feasible" : "Validator issues"}</Pill> : undefined}
+        >
+          {solve ? (
+            <table className="q-table">
+              <thead>
+                <tr>
+                  <th>Vehicle</th>
+                  <th>Stops</th>
+                  <th>Distance (km)</th>
+                  <th>ETA</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {solve.evaluation.vehicles.map((vehicle) => {
+                  const late = (vehicle.stops as unknown as Stop[]).filter((s) => s.window_ok === false).length;
+                  const tone = !vehicle.feasible ? "red" : late > 0 ? "amber" : "green";
+                  const label = !vehicle.feasible ? "Delayed" : late > 0 ? `${late} late` : "En route";
+                  return (
+                    <tr key={vehicle.id}>
+                      <td className="q-mono">{vehicle.id}</td>
+                      <td>{vehicle.order.length}</td>
+                      <td>{((vehicle.distance_m || 0) / 1000).toFixed(1)}</td>
+                      <td>{fmtEta(vehicle.elapsed_s)}</td>
+                      <td><Status tone={tone}>{label}</Status></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <p className="q-empty">Press <strong>Solve Routes</strong> to plan the fleet — every route is checked by the independent validator.</p>
+          )}
+        </Box>
+
+        <Box title="Algorithm Convergence" action={solve ? <span className="q-badge">{solve.method}</span> : undefined}>
+          <ConvergenceChart
+            values={solve?.trace?.best || []}
+            mean={solve?.trace?.mean}
+            meanLabel="population mean"
+            label={`${solve?.method || "optimizer"} best-so-far`}
+          />
+        </Box>
+      </div>
+
+      <div className="q-dash-actions" style={revealStyle(240)}>
+        <Btn kind="primary" onClick={downloadPlan}>
+          <Download size={16} /> Download PDF Action Plan
+        </Btn>
+        <span className="q-hint">
+          {solve
+            ? `Last solve: ${solve.method} · objective ${solve.evaluation.objective.toFixed(0)} · ${fmtClock(solve.elapsed_s || 0)}${solve.budget_note ? ` · ${solve.budget_note}` : ""}`
+            : "The action plan exports the current scenario, optimizer settings and every vehicle route."}
+        </span>
+      </div>
+    </div>
+  );
+}
