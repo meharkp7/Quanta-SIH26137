@@ -29,6 +29,7 @@ from src.runtime.loop import DemoLoop
 from app.auth import config, verify_company
 from app.workspace import router as workspace_router
 from app import episodes as episodes_api
+from app import assistant as assistant_api
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -141,6 +142,15 @@ class LoopRequest(SolveRequest):
 
 class SumoRequest(BaseModel):
     gui: bool = True
+
+
+class AssistantAskRequest(BaseModel):
+    message: str = Field(min_length=1, description="Free-form question about the current experiment.")
+    context: dict = Field(
+        default_factory=dict,
+        description="Live page state (section, solve, compare, whatif, forecast, fleet); "
+        "free-form, the assistant computes its facts from it.",
+    )
 
 
 class ForecasterTrainRequest(BaseModel):
@@ -613,6 +623,34 @@ def here_route(request: HereRouteRequest) -> dict:
         )
     except Exception as exc:
         raise _bad_request(exc) from exc
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Experiment assistant (locally computed grounded facts + optional Groq)
+# ──────────────────────────────────────────────────────────────────────
+
+@app.post("/api/assistant/ask")
+def assistant_ask(request: AssistantAskRequest) -> dict:
+    """Crisp, plain-language answer built from facts computed off ``context``.
+
+    Groq writes the answer when ``GROQ_API_KEY`` is configured and the call
+    succeeds; a missing key, timeout or upstream error falls back to the same
+    facts rendered locally, so this route never hard-fails on the network.
+    ``source`` reports which path answered (``"groq"`` or ``"local"``).
+    """
+    message = request.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="message must not be empty")
+    try:
+        return assistant_api.ask(message[: assistant_api.MAX_MESSAGE_CHARS], request.context)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/assistant/status")
+def assistant_status() -> dict:
+    """Whether Groq is configured (checked locally — no probe)."""
+    return assistant_api.status()
 
 
 @app.post("/api/loop")
