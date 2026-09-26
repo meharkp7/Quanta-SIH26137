@@ -31,6 +31,7 @@ from src.optim.references import (
     SnapshotMILPReference,
 )
 from src.platform.catalog import PROJECT_ROOT, list_scenarios, load_scenario
+from src.platform.here_feed import HereFeed
 from src.platform.serialize import (
     evaluation_payload,
     is_geo_scenario,
@@ -94,6 +95,10 @@ class SolveOptions:
     evaluations: int = 40
     seed: int = 7
     closed_edge_ids: tuple[str, ...] = ()
+    # Opt-in HERE live-traffic overlay: strict, so a solve that asked for
+    # live speeds fails loudly (no key / no pyproj / no network) instead of
+    # quietly solving on stale free-flow speeds.
+    live_traffic: bool = False
 
 
 class PlatformService:
@@ -104,6 +109,10 @@ class PlatformService:
     # (FIFO eviction), no persistence.
     SOLVE_CACHE_MAX = 128
     _solve_cache: dict[tuple, dict] = {}
+
+    def __init__(self, here: HereFeed | None = None) -> None:
+        """``here`` is the optional HERE live layer (injectable for tests)."""
+        self.here = here or HereFeed()
 
     @classmethod
     def _cache_key(
@@ -118,6 +127,9 @@ class PlatformService:
             options.evaluations,
             options.seed,
             tuple(sorted(options.closed_edge_ids)),
+            # Live-traffic solves are a different result: same inputs on
+            # static free-flow speeds must not replay a live-speed answer.
+            bool(options.live_traffic),
         )
 
     @classmethod
@@ -167,10 +179,31 @@ class PlatformService:
     def list_scenarios(self) -> list[dict]:
         return list_scenarios()
 
-    def graph(self, scenario_id: str = "S3_BASE", closed_edge_ids: Sequence[str] = ()) -> dict:
-        scenario = self._scenario(scenario_id, closed_edge_ids)
+    def graph(
+        self,
+        scenario_id: str = "S3_BASE",
+        closed_edge_ids: Sequence[str] = (),
+        *,
+        live_traffic: bool = False,
+    ) -> dict:
+        """Graph payload; ``live_traffic`` overlays HERE speeds leniently.
+
+        A read-only view never fails because of HERE: no key, no pyproj, or
+        no network comes back as ``here_traffic.reason`` while the static
+        graph stays fully usable.
+        """
+        meta: dict = {}
+        scenario = self._scenario(
+            scenario_id,
+            closed_edge_ids,
+            live_traffic=live_traffic,
+            strict=False,
+            meta_out=meta,
+        )
         payload = scenario_payload(scenario, closed_edge_ids=closed_edge_ids)
         payload["reference_plan"] = REFERENCE_ORDERS
+        if live_traffic:
+            payload["here_traffic"] = meta
         return payload
 
     def validate(
@@ -178,15 +211,26 @@ class PlatformService:
         scenario_id: str = "S3_BASE",
         plan: dict[str, list[str]] | None = None,
         closed_edge_ids: Sequence[str] = (),
+        *,
+        live_traffic: bool = False,
     ) -> dict:
-        scenario = self._scenario(scenario_id, closed_edge_ids)
+        meta: dict = {}
+        scenario = self._scenario(
+            scenario_id,
+            closed_edge_ids,
+            live_traffic=live_traffic,
+            meta_out=meta,
+        )
         orders = plan or REFERENCE_ORDERS
         result = evaluate_scenario(scenario, orders, closed_edge_ids=closed_edge_ids)
-        return {
+        payload = {
             "scenario_id": scenario.scenario_id,
             "plan": orders,
             "validation": validator_payload(result),
         }
+        if live_traffic:
+            payload["here_traffic"] = meta
+        return payload
 
     # Networks above this edge count get a capped optimizer budget so the
     # UI never hangs on a multi-thousand-edge real-city graph. The cap is
@@ -260,6 +304,7 @@ class PlatformService:
             evaluations=min(options.evaluations, self.LARGE_GRAPH_EVALUATIONS),
             seed=options.seed,
             closed_edge_ids=options.closed_edge_ids,
+            live_traffic=options.live_traffic,
         )
         if (capped.particles, capped.evaluations) == (options.particles, options.evaluations):
             return options, None
@@ -283,6 +328,7 @@ class PlatformService:
                 evaluations=options.particles,
                 seed=options.seed,
                 closed_edge_ids=options.closed_edge_ids,
+                live_traffic=options.live_traffic,
             )
         options, budget_note = self._budget_for(scenario_id, options)
         if not include_route_plan:
@@ -306,6 +352,14 @@ class PlatformService:
             raise ValueError(f"Unknown method: {options.method}")
         if budget_note:
             result["budget_note"] = budget_note
+        if options.live_traffic:
+            # The solve already ran on the overlaid graph (strict — it would
+            # have raised otherwise). This re-read hits the feed's 60 s
+            # cache and reports what actually matched, for the UI.
+            _overlaid, live_meta = self.here.apply(
+                load_scenario(scenario_id), strict=False
+            )
+            result["here_traffic"] = live_meta
         result["cached"] = False
         # Cache only plain JSON-friendly solve payloads (the runtime loop
         # uses include_route_plan=True with live objects — never cached).
@@ -325,6 +379,7 @@ class PlatformService:
         seed: int = 7,
         closed_edge_ids: Sequence[str] = (),
         methods: Sequence[str] = ("constructive", "qpso", "pso", "alns"),
+        live_traffic: bool = False,
     ) -> dict:
         rows = []
         traces = {}
@@ -337,6 +392,7 @@ class PlatformService:
                         evaluations=evaluations,
                         seed=seed,
                         closed_edge_ids=tuple(closed_edge_ids),
+                        live_traffic=live_traffic,
                     ),
                     scenario_id=scenario_id,
                 )
@@ -379,8 +435,16 @@ class PlatformService:
         target: str,
         scenario_id: str = "S3_BASE",
         closed_edge_ids: Sequence[str] = (),
+        *,
+        live_traffic: bool = False,
     ) -> dict:
-        scenario = self._scenario(scenario_id, closed_edge_ids)
+        meta: dict = {}
+        scenario = self._scenario(
+            scenario_id,
+            closed_edge_ids,
+            live_traffic=live_traffic,
+            meta_out=meta,
+        )
         started = time.perf_counter()
         try:
             path = DirectedPathBuilder(
@@ -394,8 +458,9 @@ class PlatformService:
                 "feasible": False,
                 "error": str(exc),
                 "elapsed_s": time.perf_counter() - started,
+                **({"here_traffic": meta} if live_traffic else {}),
             }
-        return {
+        payload = {
             "method": "dijkstra",
             "exact": True,
             "feasible": True,
@@ -408,6 +473,9 @@ class PlatformService:
             "congestion_s": path.congestion_delay_s,
             "elapsed_s": time.perf_counter() - started,
         }
+        if live_traffic:
+            payload["here_traffic"] = meta
+        return payload
 
     def replay_sumo(
         self,
@@ -960,23 +1028,84 @@ class PlatformService:
             for edge in scenario.edges
         ]
 
-    def _scenario(self, scenario_id: str, closed_edge_ids: Sequence[str] = ()) -> Scenario:
+    # ── HERE integration (optional; src/data/here_api.py + here_feed) ────
+
+    def here_status(self) -> dict:
+        """Configuration status only — no key produces a clear reason, not a probe."""
+        return self.here.status()
+
+    def here_geocode(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+        at: tuple[float, float] | None = None,
+    ) -> dict:
+        """Address/place search through HERE Geocoding v1."""
+        return self.here.geocode(query, limit=limit, at=at)
+
+    def here_traffic(
+        self,
+        scenario_id: str = "S3_BASE",
+        closed_edge_ids: Sequence[str] = (),
+    ) -> dict:
+        """Live-overlay status for a scenario; a read never fails on HERE."""
+        scenario = self._scenario(scenario_id, closed_edge_ids)
+        _overlaid, meta = self.here.apply(scenario, strict=False)
+        return dict(meta)
+
+    def here_route(
+        self,
+        source: str,
+        target: str,
+        scenario_id: str = "S3_BASE",
+        closed_edge_ids: Sequence[str] = (),
+        *,
+        transport_mode: str = "car",
+    ) -> dict:
+        """HERE v8's own traffic-enabled drive time between two graph nodes."""
+        scenario = self._scenario(scenario_id, closed_edge_ids)
+        return self.here.route(
+            scenario, source, target, transport_mode=transport_mode
+        )
+
+    def _scenario(
+        self,
+        scenario_id: str,
+        closed_edge_ids: Sequence[str] = (),
+        *,
+        live_traffic: bool = False,
+        strict: bool = True,
+        meta_out: dict | None = None,
+    ) -> Scenario:
+        """Load a scenario, apply closures, then (optionally) HERE speeds.
+
+        ``strict`` decides the failure mode for the live overlay: solve /
+        validate / path demand real live data and raise; read-only views
+        pass ``strict=False`` and report ``here_traffic.reason`` instead.
+        ``meta_out`` receives that honest status dict for the caller.
+        """
         scenario = load_scenario(scenario_id)
         closed = set(closed_edge_ids)
-        if not closed:
-            return scenario
-        edges = tuple(
-            edge.model_copy(update={"open_by_default": False})
-            if edge.edge_id in closed
-            else edge
-            for edge in scenario.edges
-        )
-        return scenario.model_copy(
-            update={
-                "edges": edges,
-                "graph_version": f"{scenario.graph_version}:closed:{','.join(sorted(closed))}",
-            }
-        )
+        if closed:
+            edges = tuple(
+                edge.model_copy(update={"open_by_default": False})
+                if edge.edge_id in closed
+                else edge
+                for edge in scenario.edges
+            )
+            scenario = scenario.model_copy(
+                update={
+                    "edges": edges,
+                    "graph_version": f"{scenario.graph_version}:closed:{','.join(sorted(closed))}",
+                }
+            )
+        if live_traffic:
+            scenario, meta = self.here.apply(scenario, strict=strict)
+            if meta_out is not None:
+                meta_out.clear()
+                meta_out.update(meta)
+        return scenario
 
     def _stack(
         self,
@@ -1015,7 +1144,11 @@ class PlatformService:
         algorithm: str,
         include_route_plan: bool = False,
     ) -> dict:
-        scenario = self._scenario(scenario_id, options.closed_edge_ids)
+        scenario = self._scenario(
+            scenario_id,
+            options.closed_edge_ids,
+            live_traffic=options.live_traffic,
+        )
         evaluator, engine = self._stack(scenario, options.closed_edge_ids)
         oracle = RouteFitnessOracle(engine, planning_time_s=0.0, repair=True)
         population = self._seed_population(scenario, engine, evaluator, options)
@@ -1069,7 +1202,11 @@ class PlatformService:
         return payload
 
     def _solve_constructive(self, scenario_id: str, options: SolveOptions) -> dict:
-        scenario = self._scenario(scenario_id, options.closed_edge_ids)
+        scenario = self._scenario(
+            scenario_id,
+            options.closed_edge_ids,
+            live_traffic=options.live_traffic,
+        )
         evaluator, _engine = self._stack(scenario, options.closed_edge_ids)
         started = time.perf_counter()
         initial = self._initial_builder(scenario, evaluator).build()
@@ -1103,7 +1240,11 @@ class PlatformService:
         )
 
     def _solve_alns(self, scenario_id: str, options: SolveOptions) -> dict:
-        scenario = self._scenario(scenario_id, options.closed_edge_ids)
+        scenario = self._scenario(
+            scenario_id,
+            options.closed_edge_ids,
+            live_traffic=options.live_traffic,
+        )
         evaluator, engine = self._stack(scenario, options.closed_edge_ids)
         c2i, i2c, v2i, i2v = self._id_maps(scenario)
         initial = self._initial_builder(scenario, evaluator).build()
@@ -1189,7 +1330,11 @@ class PlatformService:
         }
 
     def _solve_milp(self, scenario_id: str, options: SolveOptions) -> dict:
-        scenario = self._scenario(scenario_id, options.closed_edge_ids)
+        scenario = self._scenario(
+            scenario_id,
+            options.closed_edge_ids,
+            live_traffic=options.live_traffic,
+        )
         evaluator, engine = self._stack(scenario, options.closed_edge_ids)
         problem = self._snapshot_problem(scenario, options.closed_edge_ids)
         started = time.perf_counter()
