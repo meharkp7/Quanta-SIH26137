@@ -6,6 +6,18 @@ import type { Graph, ReplayIncident } from "@/api";
 
 export type GeoMover = { id: string; lat: number; lon: number; kind?: string; heading?: number; selected?: boolean };
 
+// Recorded episode truth for one timestep, aligned to the episode's
+// canonical edge_ids: `ratio` is observed_speed / free_flow (null = no
+// sensor reading — sparse by design), `closed` is a recorded SUMO closure
+// (display-only: never entered into the user's closure set so playback
+// cannot fire a re-plan). `dots` are background-trajectory positions.
+export type EpisodeEdgeObs = { ratio: number | null; observed: number | null; closed: boolean };
+export type EpisodeData = {
+  t: number;
+  edgeObs: Map<string, EpisodeEdgeObs>;
+  dots: { id: string; lat: number; lon: number }[];
+};
+
 // Fixture incident schedule used only when the backend reports no schedule
 // (S3_BASE always schedules E23@50s in SUMO). Real Delhi maps have no timed
 // schedule — the preview then covers UI-selected closures from t=0.
@@ -75,7 +87,7 @@ export function speedBandColor(speedMps: number, maxSpeed: number): string {
   return "#ef4444";
 }
 
-export function GeoMap({ graph, routeEdges, routePalette, previousRouteEdges, closed, incidents, scenarioId, movers = [], trip, vtrip, selectedVehicle, onPickEdge, onPickVehicle }: {
+export function GeoMap({ graph, routeEdges, routePalette, previousRouteEdges, closed, incidents, scenarioId, movers = [], trip, vtrip, selectedVehicle, onPickEdge, onPickVehicle, episode }: {
   graph: Graph;
   routeEdges: Set<string>;
   routePalette?: Map<string, string>;
@@ -89,6 +101,7 @@ export function GeoMap({ graph, routeEdges, routePalette, previousRouteEdges, cl
   selectedVehicle?: string | null;
   onPickEdge?: (edgeId: string) => void;
   onPickVehicle?: (vehicleId: string, fromNode: string) => void;
+  episode?: EpisodeData | null;
 }) {
   const nodes = useMemo(() => Object.fromEntries(graph.nodes.map((n) => [n.id, n])), [graph]);
   const maxSpeed = useMemo(
@@ -277,8 +290,31 @@ export function GeoMap({ graph, routeEdges, routePalette, previousRouteEdges, cl
           const a = nodes[edge.from], b = nodes[edge.to];
           if (!a || !b || a.lat == null || b.lat == null) return null;
           const isRoute = routeEdges.has(edge.id);
-          const isClosed = (previewClosed ? previewClosed.has(edge.id) : closedSet.has(edge.id)) || !edge.open;
-          const color = !isClosed && isRoute && routePalette?.has(edge.id) ? routePalette.get(edge.id)! : edgeColor(edge.id, edge.speed_mps, isClosed, isRoute);
+          const epObs = episode?.edgeObs.get(edge.id);
+          // Priority: user/recorded closure > selected route > episode
+          // observed ratio > default free-flow band. Episode closures render
+          // like any closure but are display-only (epObs.closed never lands
+          // in the `closed` prop, so playback can't trigger a re-plan).
+          const isClosed = (previewClosed ? previewClosed.has(edge.id) : closedSet.has(edge.id)) || !edge.open || !!epObs?.closed;
+          const color = !isClosed && isRoute && routePalette?.has(edge.id)
+            ? routePalette.get(edge.id)!
+            : isClosed
+              ? "#ef4444"
+              : isRoute
+                ? "#65d615"
+                : epObs
+                  ? epObs.ratio != null ? speedBandColor(epObs.ratio, 1) : "#64748b"
+                  : edgeColor(edge.id, edge.speed_mps, isClosed, isRoute);
+          // Observed roads read brighter than the static free-flow band so
+          // the recorded data feed is visibly on top; unobserved stay muted.
+          const observed = epObs?.ratio != null;
+          const tooltip = `${edge.id} · ${edge.from} → ${edge.to} · ${edge.speed_mps.toFixed(1)} m/s free flow${
+            epObs
+              ? epObs.ratio != null
+                ? ` · ${Math.round(epObs.ratio * 100)}% of free flow at t=${episode!.t}s${epObs.observed != null ? ` · ${epObs.observed.toFixed(1)} m/s observed` : ""}`
+                : ` · no observation at t=${episode!.t}s`
+              : ""
+          }${epObs?.closed ? " · recorded closure" : ""}`;
           return (
             <Polyline
               key={edge.id}
@@ -287,12 +323,12 @@ export function GeoMap({ graph, routeEdges, routePalette, previousRouteEdges, cl
               positions={[[a.lat, a.lon as number], [b.lat as number, b.lon as number]]}
               pathOptions={{
                 color,
-                weight: isRoute ? 5 : isClosed ? 4 : 2,
-                opacity: isRoute || isClosed ? 0.95 : 0.55,
+                weight: isRoute ? 5 : isClosed ? 4 : observed ? 3 : 2,
+                opacity: isRoute || isClosed ? 0.95 : observed ? 0.95 : epObs ? 0.45 : 0.55,
                 dashArray: isClosed ? "6 5" : undefined,
               }}
             >
-              <Tooltip sticky>{`${edge.id} · ${edge.from} → ${edge.to} · ${edge.speed_mps.toFixed(1)} m/s free flow`}</Tooltip>
+              <Tooltip sticky>{tooltip}</Tooltip>
             </Polyline>
           );
         })}
@@ -341,6 +377,11 @@ export function GeoMap({ graph, routeEdges, routePalette, previousRouteEdges, cl
             <Tooltip>{`Depot ${n.id}`}</Tooltip>
           </CircleMarker>
         ))}
+        {episode?.dots.map((d) => (
+          <CircleMarker key={`ep-dot-${d.id}`} center={[d.lat, d.lon]} radius={3} pathOptions={{ className: "ep-dot", color: "#7dd3fc", fillColor: "#38bdf8", fillOpacity: 0.75, opacity: 0.85 }}>
+            <Tooltip>{`${d.id} · recorded background traffic at t=${episode.t}s`}</Tooltip>
+          </CircleMarker>
+        ))}
         {movers
           .filter((m) => Number.isFinite(m.lat) && Number.isFinite(m.lon))
           .map((m) => (
@@ -371,8 +412,22 @@ export function GeoMap({ graph, routeEdges, routePalette, previousRouteEdges, cl
           ? <span><i className="legend-line geo-traffic" />HERE live traffic</span>
           : <span className="legend-off">HERE layer: add VITE_HERE_API_KEY</span>}
         <span><i className="legend-dot" />Fleet car · click = reroute</span>
-        <span><i className="legend-line geo-fast" />Fast free flow</span>
-        <span><i className="legend-line geo-slow" />Slow free flow</span>
+        {episode ? (
+          <>
+            <span><i className="legend-line geo-fast" />Recorded ≥80% free flow</span>
+            <span><i className="legend-line geo-mid" />Recorded 50–80%</span>
+            <span><i className="legend-line geo-slow" />Recorded &lt;50%</span>
+            <span><i className="legend-line geo-nodata" />No observation at t</span>
+            <span><i className="legend-line closed" />Recorded closure</span>
+            <span><i className="legend-dot ep-bg" />Recorded background traffic</span>
+            <span className="legend-off">episode t={episode.t}s · observed SUMO truth</span>
+          </>
+        ) : (
+          <>
+            <span><i className="legend-line geo-fast" />Fast free flow</span>
+            <span><i className="legend-line geo-slow" />Slow free flow</span>
+          </>
+        )}
       </div>
       <div className="geo-preview">
         <div className="geo-preview-head">

@@ -165,9 +165,43 @@ export function createDraft(
   };
 }
 
+// Pre-filled user input used by the "Fleet input demo" seed and the
+// `public/demo/` sample files: the fleet a dispatcher enters plus the
+// delivery sheet they import as CSV. Node ids (N0–N11) exist in both the
+// default generated network and `public/demo/demo-network.json`, so the
+// demo CSV imports cleanly over either one.
+export const demoFleet: Network["fleet"] = [
+  { id: "TRK-01", capacity: 100, depot: "N0" },
+  { id: "TRK-02", capacity: 80, depot: "N0" },
+  { id: "VAN-03", capacity: 60, depot: "N0" },
+];
+export const demoDeliveries: Delivery[] = [
+  { id: "D001", node: "N1", demand: 20, earliest_s: 0, latest_s: 14400, service_s: 30 },
+  { id: "D002", node: "N2", demand: 35, earliest_s: 0, latest_s: 14400, service_s: 45 },
+  { id: "D003", node: "N3", demand: 15, earliest_s: 7200, latest_s: 14400, service_s: 30 },
+  { id: "D004", node: "N4", demand: 10, earliest_s: 0, latest_s: 14400, service_s: 30 },
+  { id: "D005", node: "N7", demand: 30, earliest_s: 0, latest_s: 14400, service_s: 60 },
+  { id: "D006", node: "N8", demand: 20, earliest_s: 0, latest_s: 14400, service_s: 30 },
+  { id: "D007", node: "N9", demand: 15, earliest_s: 7200, latest_s: 14400, service_s: 30 },
+  { id: "D008", node: "N10", demand: 25, earliest_s: 0, latest_s: 14400, service_s: 45 },
+  { id: "D009", node: "N11", demand: 10, earliest_s: 0, latest_s: 14400, service_s: 30 },
+];
+
 export function seedDrafts(): Draft[] {
   const base = createDraft("Morning distribution");
   return [
+    {
+      ...clone(base),
+      id: uid(),
+      name: "Fleet input demo",
+      description:
+        "Pre-filled exactly what a user submits: three vehicles and nine delivery stops with demands and service windows.",
+      graph: {
+        ...clone(base.graph),
+        fleet: clone(demoFleet),
+        requests: clone(demoDeliveries),
+      },
+    },
     base,
     {
       ...clone(base),

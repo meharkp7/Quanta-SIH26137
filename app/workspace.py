@@ -71,6 +71,7 @@ def snapshot_scenario(request: SnapshotRequest) -> Scenario:
 
 class SnapshotService(PlatformService):
     def __init__(self, scenario: Scenario):
+        super().__init__()  # HERE feed handle; workspace never queries it, but keep base invariants.
         self.snapshot = scenario
         # Private, request-local cache. A user's snapshot cannot overwrite another user's solve.
         self._solve_cache = {}
@@ -85,18 +86,28 @@ class SnapshotService(PlatformService):
                 result['status'] = 'incomplete'
         return result
 
-    def _scenario(self, scenario_id, closed_edge_ids=()):
+    def _scenario(self, scenario_id, closed_edge_ids=(), *, live_traffic=False,
+                  strict=True, meta_out=None):
         closed = set(closed_edge_ids)
-        return self.snapshot.model_copy(update={"edges": tuple(
+        scenario = self.snapshot.model_copy(update={"edges": tuple(
             e.model_copy(update={"open_by_default": False}) if e.edge_id in closed else e
             for e in self.snapshot.edges)})
+        # Same HERE contract as the base class: an overlay request is strict by
+        # default (fails loudly without a key) and reports its honest meta.
+        if live_traffic:
+            scenario, meta = self.here.apply(scenario, strict=strict)
+            if meta_out is not None:
+                meta_out.clear()
+                meta_out.update(meta)
+        return scenario
 
     def _budget_for(self, scenario_id, options):
         if len(self.snapshot.edges) <= self.LARGE_GRAPH_EDGES:
             return options, None
         return SolveOptions(method=options.method, particles=min(options.particles, 6),
             evaluations=min(options.evaluations, 24), seed=options.seed,
-            closed_edge_ids=options.closed_edge_ids), "Large-network budget capped to 6 particles / 24 evaluations."
+            closed_edge_ids=options.closed_edge_ids,
+            live_traffic=options.live_traffic), "Large-network budget capped to 6 particles / 24 evaluations."
 
 
 router = APIRouter(prefix="/api/workspace", tags=["Workspace"])

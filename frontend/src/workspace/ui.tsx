@@ -13,6 +13,7 @@ import {
   Truck,
 } from "lucide-react";
 import { GeoMap, isGeoGraph } from "../GeoMap";
+import type { EpisodeData } from "../GeoMap";
 import type { Graph, ReplayFrame } from "../api";
 import type { Result } from "./data";
 
@@ -216,22 +217,26 @@ export function NetworkView({
   closed = [],
   movers = [],
   selected,
+  selectedVehicle,
   onSelect,
   onCloseRoad,
   onNode,
   pathEdges = [],
   compact = false,
+  episode,
 }: {
   graph: Graph;
   result?: Result | null;
   closed?: string[];
   movers?: ReplayFrame["vehicles"];
   selected?: string;
+  selectedVehicle?: string;
   onSelect?: (id: string) => void;
   onCloseRoad?: (id: string) => void;
   onNode?: (id: string) => void;
   pathEdges?: string[];
   compact?: boolean;
+  episode?: EpisodeData | null;
 }) {
   const [zoom, setZoom] = useState(1);
   const nodes = useMemo(
@@ -259,9 +264,11 @@ export function NetworkView({
           scenarioId={graph.scenario_id}
           movers={movers
             .filter((v) => v.lat != null)
-            .map((v) => ({ ...v, lat: v.lat!, lon: v.lon!, heading: 0 }))}
+            .map((v) => ({ ...v, lat: v.lat!, lon: v.lon!, heading: v.heading ?? 0 }))}
+          selectedVehicle={selectedVehicle}
           onPickEdge={onCloseRoad}
           onPickVehicle={(id) => onSelect?.(id)}
+          episode={episode}
         />
       </div>
     );

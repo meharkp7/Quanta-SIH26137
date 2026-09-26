@@ -28,6 +28,36 @@ Headless SUMO (no GUI):
 python -m src.sim.fixture
 ```
 
+## HERE integration (optional)
+
+The platform can use the [HERE API](https://www.here.com) in three places — every one of them key-optional and honestly labelled:
+
+| Feature | Endpoint | Where it shows up |
+|---|---|---|
+| Address search (geocoding) | `GET /api/here/geocode?q=…` | "HERE place search" box above the map → snaps a hit to the nearest graph node for **From**/**To** |
+| Live traffic → graph speeds | `GET /api/scenarios/{id}?live=true` + `live_traffic: true` on solve/path/validate | **Live traffic** toggle in the control-room sidebar |
+| HERE's own drive time | `POST /api/here/route` | API only — reported next to (never blended into) the in-graph Dijkstra result |
+| Map tile overlay | — | `VITE_HERE_API_KEY` in `frontend/.env.local` (rendering only) |
+
+Setup:
+
+1. Create a free key at <https://portal.here.com> → **Access keys**.
+2. Put it in the repo-root `.env` as `HERE_API_KEY=…` (or export it) and restart `python -m app.server`.
+3. Check `GET /api/here/status` — it reports `configured` locally, without spending a request.
+
+Behaviour **without** a key (or on the synthetic 5-job fixture, which has no real
+coordinates): nothing is faked. `/api/here/status` returns the reason, the graph
+read stays on static free-flow speeds and explains itself via
+`here_traffic.reason`, and a solve that explicitly asks for live traffic fails
+with a clear error instead of silently solving on stale speeds. When live data
+is used, flow refreshes on a 60 s cache, only edges within 150 m of a traversable
+HERE flow link are overridden (m/s values, contract floor 0.1 m/s), and the
+graph version gains a `:here-live` tag so cached payloads cannot serve stale speeds.
+
+Key code: `src/data/here_api.py` (stdlib-only HTTP client),
+`src/platform/here_feed.py` (matching + overlay), tests in
+`tests/test_here_feed.py` (fake client — no network in tests).
+
 ## What SIH wants vs what this repo is
 
 | SIH ask | In this repo |

@@ -6,6 +6,23 @@
     <meta name="theme-color" content="#141e31" />
     <meta name="description" content="Quanta brings fleet planning, adaptive routing and transparent algorithm comparisons into one company workspace." />
     <title>Quanta | Adaptive Fleet Intelligence</title>
+    <script>
+      // Apply the stored / OS theme before first paint so the app never
+      // flashes the wrong colour scheme. Mirrors src/quanta/theme.ts.
+      (function () {
+        try {
+          var stored = localStorage.getItem("quanta.theme") || "system";
+          var dark =
+            stored === "dark" ||
+            (stored !== "light" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

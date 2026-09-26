@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Activity, AlertTriangle, ArrowRight, ArrowLeftRight, Bot, CarFront, CheckCircle2, ChevronRight, CircleAlert, Gauge, Layers3, MapPinned, Minus, Pause, Play, Route, ScrollText, ShieldCheck, Sparkles, Square, TrafficCone, TrendingDown, TrendingUp, Trophy, X } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, ArrowLeftRight, Bot, CarFront, CheckCircle2, ChevronRight, CircleAlert, Gauge, Layers3, MapPinned, Minus, Pause, Play, Route, ScrollText, Search, ShieldCheck, Sparkles, Square, TrafficCone, TrendingDown, TrendingUp, Trophy, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
-import { api, CompareResult, Evidence, DrlDemo, Evaluation, Graph, PathResult, ReplayFrame, ReplayResult, ScenarioSummary, SolveResult, Story, StoryStep, SOLVE_TIMEOUT_MS, postJson } from "@/api";
+import { api, CompareResult, Evidence, DrlDemo, Evaluation, Graph, GraphNode, HereGeocode, HereStatus, PathResult, ReplayFrame, ReplayResult, ScenarioSummary, SolveResult, Story, StoryStep, SOLVE_TIMEOUT_MS, postJson } from "@/api";
 import { GeoMap, interpAlong, isGeoGraph, speedBandColor, TripCarGlyph } from "@/GeoMap";
 import { useCountUp, useInView, usePrefersReducedMotion } from "@/hooks";
 
@@ -29,6 +29,22 @@ function closureKey(ids: string[]): string {
   return [...ids].sort().join("\u0001");
 }
 
+// Nearest graph node to a HERE geocode hit. City-scale pick, so a local
+// flat-earth metric with the cosine longitude term is accurate enough.
+function nearestNode(nodes: GraphNode[], lat: number, lon: number): string | null {
+  let best: string | null = null;
+  let bestDist = Infinity;
+  const cos = Math.cos((lat * Math.PI) / 180);
+  for (const node of nodes) {
+    if (typeof node.lat !== "number" || typeof node.lon !== "number") continue;
+    const dy = node.lat - lat;
+    const dx = (node.lon - lon) * cos;
+    const distance = dx * dx + dy * dy;
+    if (distance < bestDist) { bestDist = distance; best = node.id; }
+  }
+  return best;
+}
+
 function App() {
   const [page, setPage] = useState<Page>("home");
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
@@ -36,6 +52,10 @@ function App() {
   const [graph, setGraph] = useState<Graph | null>(null);
   const [closed, setClosed] = useState<string[]>([]);
   const [method, setMethod] = useState("qpso");
+  // HERE integration: status comes from the backend (key present or not),
+  // the toggle opts solves/trips into the live-speed overlay.
+  const [hereStatus, setHereStatus] = useState<HereStatus | null>(null);
+  const [liveTraffic, setLiveTraffic] = useState(false);
   const [solve, setSolve] = useState<SolveResult | null>(null);
   const [previousSolve, setPreviousSolve] = useState<SolveResult | null>(null);
   const [replay, setReplay] = useState<ReplayFrame[]>([]);
@@ -77,6 +97,8 @@ function App() {
   scenarioRef.current = scenarioId;
   const methodRef = useRef(method);
   methodRef.current = method;
+  const liveTrafficRef = useRef(liveTraffic);
+  liveTrafficRef.current = liveTraffic;
   const graphRef = useRef(graph);
   graphRef.current = graph;
   const busyRef = useRef(busy);
@@ -98,14 +120,29 @@ function App() {
       .then(([catalog, nextGraph]) => { setScenarios(catalog.scenarios); setGraph(nextGraph); })
       .catch((err: Error) => setError(err.message));
     api<Evidence>("/api/evidence").then(setEvidence).catch(() => setEvidence({ available: false, reason: "Evidence endpoint unavailable" }));
+    // HERE key presence is reported by the backend; a failure just means
+    // the toggle stays disabled (the UI never guesses key status).
+    api<HereStatus>("/api/here/status").then(setHereStatus).catch(() => setHereStatus(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // `live=true` overlays HERE live speeds on the graph. The backend treats
+  // this read leniently: a HERE problem arrives as `here_traffic.reason`
+  // and the static graph still renders.
   useEffect(() => {
     if (page !== "simulation") return;
-    api<Graph>(`/api/scenarios/${scenarioId}?closed=${encodeURIComponent(closed.join(","))}`)
+    const live = liveTraffic ? "&live=true" : "";
+    api<Graph>(`/api/scenarios/${scenarioId}?closed=${encodeURIComponent(closed.join(","))}${live}`)
       .then(setGraph).catch((err: Error) => setError(err.message));
-  }, [scenarioId, closed, page]);
+  }, [scenarioId, closed, page, liveTraffic]);
+
+  // Live traffic needs both a key and a geo (OSM) map. If the selected
+  // scenario cannot support it, drop the toggle instead of letting the
+  // next solve fail on a stale flag.
+  useEffect(() => {
+    if (liveTraffic && graph && !graph.geo?.available) setLiveTraffic(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph, scenarioId]);
 
   // Position signature per frame — an identical signature means no vehicle
   // moved at all between those two frames (depot/service waits).
@@ -275,7 +312,7 @@ function App() {
       // Large real-city graphs solve with a smaller budget so the UI never hangs;
       // the backend enforces the same cap and reports it as budget_note.
       const large = (graph?.nodes.length || 0) > 100;
-      const result = await postJson<SolveResult>("/api/solve", { scenario_id: scenarioId, method, particles: large ? 6 : 12, evaluations: large ? 20 : 40, seed: 7, closed_edge_ids: closed }, SOLVE_TIMEOUT_MS);
+      const result = await postJson<SolveResult>("/api/solve", { scenario_id: scenarioId, method, particles: large ? 6 : 12, evaluations: large ? 20 : 40, seed: 7, closed_edge_ids: closed, live_traffic: liveTraffic }, SOLVE_TIMEOUT_MS);
       setPreviousSolve(solve);
       setSolve(result);
       if (result.cached) {
@@ -325,7 +362,7 @@ function App() {
     }
     setTripBusy(true);
     try {
-      const path = await postJson<PathResult>("/api/path", { scenario_id: scenarioId, source: tripFrom, target: tripTo, closed_edge_ids: closed }, SOLVE_TIMEOUT_MS);
+      const path = await postJson<PathResult>("/api/path", { scenario_id: scenarioId, source: tripFrom, target: tripTo, closed_edge_ids: closed, live_traffic: liveTraffic }, SOLVE_TIMEOUT_MS);
       if (!path.feasible || !path.node_ids || path.node_ids.length < 2) {
         setTrip(null);
         toast({ kind: "error", title: "No legal path", message: path.error || "No directed path exists between these points — check closures", duration: 5000 });
@@ -381,6 +418,7 @@ function App() {
         evaluations: 4,
         seed: 7,
         closed_edge_ids: closures,
+        live_traffic: liveTrafficRef.current,
       }, SOLVE_TIMEOUT_MS);
       if (!result.evaluation?.feasible) {
         setAutoPlan("Quick pass failed — running the selected optimizer…");
@@ -391,6 +429,7 @@ function App() {
           evaluations: large ? 20 : 40,
           seed: 7,
           closed_edge_ids: closures,
+          live_traffic: liveTrafficRef.current,
         }, SOLVE_TIMEOUT_MS);
       }
       if (!result.evaluation.feasible) throw new Error("no feasible plan under these closures");
@@ -451,7 +490,7 @@ function App() {
     }
     setVehBusy(true);
     try {
-      const path = await postJson<PathResult>("/api/path", { scenario_id: scenarioId, source: vehSel.from, target: vehTo, closed_edge_ids: closed }, SOLVE_TIMEOUT_MS);
+      const path = await postJson<PathResult>("/api/path", { scenario_id: scenarioId, source: vehSel.from, target: vehTo, closed_edge_ids: closed, live_traffic: liveTraffic }, SOLVE_TIMEOUT_MS);
       if (!path.feasible || !path.node_ids || path.node_ids.length < 2) {
         toast({ kind: "error", title: "No legal path", message: path.error || "No directed path from this vehicle under current closures", duration: 5000 });
         return;
@@ -600,7 +639,7 @@ function App() {
         <div className="headline-row reveal" style={{ "--d": "60ms" } as CSSProperties}><div><h1>See the decision.<br /><em>Trust the route.</em></h1><p className="lede">Quanta turns traffic disruption into a validated delivery plan in seconds.</p></div><div className="step-rail"><Step label="Observe" active /><Step label="Predict" /><Step label="Replan" /><Step label="Prove" /></div></div>
         <Card className="map-card reveal lift" style={{ "--d": "120ms" } as CSSProperties}>
           <CardHeader><div><CardTitle><MapPinned size={17} /> City operations map</CardTitle><CardDescription>Directed roads, delivery fleet, and the route selected by the optimizer.</CardDescription></div><Badge key={closed.length ? `closed-${closed.length}` : "clear"} variant={closed.length ? "warning" : "success"} className="badge-pulse">{closed.length ? `${closed.length} ROAD CLOSURE` : "NETWORK CLEAR"}</Badge></CardHeader>
-          <CardContent><div className="trip-dispatch"><span className="trip-dispatch-label"><CarFront size={13} /> Dispatch trip</span><select aria-label="Trip origin" value={tripFrom} onChange={(e) => { setTripFrom(e.target.value); setTrip(null); }}>{["Depots", "Delivery points"].map((group) => { const opts = tripOptions.filter((o) => o.group === group); return opts.length ? <optgroup key={`from-${group}`} label={group}>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup> : null; })}</select><span className="trip-arrow"><ArrowRight size={14} /></span><select aria-label="Trip destination" value={tripTo} onChange={(e) => { setTripTo(e.target.value); setTrip(null); }}>{["Depots", "Delivery points"].map((group) => { const opts = tripOptions.filter((o) => o.group === group); return opts.length ? <optgroup key={`to-${group}`} label={group}>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup> : null; })}</select><button className="trip-swap" aria-label="Swap origin and destination" title="Swap" onClick={() => { setTripFrom(tripTo); setTripTo(tripFrom); setTrip(null); }}><ArrowLeftRight size={14} /></button><Button size="sm" onClick={runTrip} disabled={tripBusy || !tripFrom || !tripTo}>{tripBusy ? "Routing…" : "Send vehicle"}</Button>{trip && <button className="trip-swap" aria-label="Clear trip" title="Clear trip" onClick={() => { setTrip(null); setTripPct(0); }}><X size={14} /></button>}{trip && <span className="trip-status">{(trip.distanceM / 1000).toFixed(2)} km · {trip.timeS.toFixed(0)}s · {tripPct < 1 ? `${Math.round(tripPct * 100)}%` : "arrived"}</span>}</div>{(vehSel || vehTrip) && <div className="veh-dispatch">{vehTrip ? (<><span className="trip-dispatch-label"><CarFront size={13} /> Vehicle {vehTrip.id} rerouting</span><span className="veh-from">From · {vehTripLabel(vehTrip.from)} → {vehTripLabel(vehTrip.to)}</span><span className="trip-status">{vehPct < 1 ? `${Math.round(vehPct * 100)}%` : "arrived"} · {(vehTrip.distanceM / 1000).toFixed(2)} km</span><button className="trip-swap" aria-label="Cancel vehicle re-route" title="Cancel re-route" onClick={() => { setVehTrip(null); setVehPct(0); }}><X size={14} /></button></>) : vehSel ? (<><span className="trip-dispatch-label"><CarFront size={13} /> Vehicle {vehSel.id}</span><span className="veh-from">From · {vehTripLabel(vehSel.from)}</span><span className="trip-arrow"><ArrowRight size={14} /></span><select aria-label="Vehicle destination" value={vehTo} onChange={(e) => setVehTo(e.target.value)}>{["Depots", "Delivery points"].map((group) => { const opts = tripOptions.filter((o) => o.group === group); return opts.length ? <optgroup key={`veh-${group}`} label={group}>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup> : null; })}</select><Button size="sm" onClick={dispatchVehicle} disabled={vehBusy || !vehTo}>{vehBusy ? "Routing…" : "Re-route vehicle"}</Button><button className="trip-swap" aria-label="Deselect vehicle" title="Deselect" onClick={() => { setVehSel(null); setVehTo(""); }}><X size={14} /></button></>) : null}</div>}<NetworkMap graph={graph} routeEdges={activeEdges} previousRouteEdges={prevEdges} closed={replay.length ? (activeFrame?.closed || []) : closed} movers={shownMovers} prevMovers={prevMovers} vtrip={vehTrip ? { id: vehTrip.id, nodeIds: vehTrip.nodeIds, edgeIds: vehTrip.edgeIds, pct: vehPct } : null} selectedVehicle={vehSel?.id ?? vehTrip?.id ?? null} onPickVehicle={onPickVehicle} replayPct={replay.length ? ((frame + 1) / replay.length) * 100 : 0} incidents={replayMeta?.incidents} scenarioId={scenarioId} trip={trip ? { nodeIds: trip.nodeIds, edgeIds: trip.edgeIds, pct: tripPct } : null} onPickEdge={toggleEdgeClosure} />{solve?.budget_note && <p className="small-copy budget-note">{solve.budget_note}</p>}{solve?.cached && <p className="small-copy budget-note">Served from the in-memory solve cache — identical repeat solves return instantly.</p>}<div className="replay-bar"><span className="replay-time">{activeFrame ? `t = ${activeFrame.t.toFixed(0)}s` : "No replay loaded"}</span><input aria-label="SUMO replay timeline" type="range" min="0" max={Math.max(0, replay.length - 1)} value={frame} onChange={(event) => { setIsPlaying(false); setFrame(Number(event.target.value)); }} disabled={!replay.length} /><span className="replay-count">{replay.length ? `${frame + 1} / ${replay.length}` : "—"}</span></div><div className="replay-sub"><button className="replay-toggle" onClick={toggleReplay} disabled={busy === "replay"} aria-label={isPlaying ? "Pause replay" : "Play replay"}>{isPlaying ? <Pause size={13} /> : <Play size={13} />}</button><div className="speed-ctl" role="group" aria-label="Playback speed">{SPEEDS.map((option) => <button key={option} className={speed === option ? "speed-active" : ""} onClick={() => setSpeed(option)}>{option}x</button>)}</div><span className="replay-vehicles">{activeFrame ? `${activeFrame.vehicles.length} vehicles` : "0 vehicles"}</span><span className="replay-hint">{isPlaying ? "Space · idle waits fast-forwarded" : "Space to play / pause"}</span></div>{replayMeta?.incidents?.length ? <div className="incident-banner" role="status"><TrafficCone size={14} /><span>{replayMeta.incidents.map((i) => i.trigger_time_s <= 0 ? `${i.edge_id} · selected incident (blocked from t=0)` : `${i.edge_id} closes at t=${i.trigger_time_s.toFixed(0)}s`).join(" · ")}</span><small>{replayMeta?.mode === "kinematic_mock" ? "Enforced in the replay — new entry forbidden, vehicles on-link clear it" : "Enforced in SUMO — new entry forbidden, vehicles on-link clear it"}</small></div> : null}</CardContent>
+          <CardContent>{graph?.geo?.available && <HereSearch status={hereStatus} nodes={graph.nodes} onPick={(nodeId, role) => { if (role === "from") setTripFrom(nodeId); else setTripTo(nodeId); setTrip(null); toast({ kind: "info", title: role === "from" ? "Origin set from HERE search" : "Destination set from HERE search", message: `Snapped to the nearest graph node ${shortEdge(nodeId)}`, duration: 3500 }); }} />}<div className="trip-dispatch"><span className="trip-dispatch-label"><CarFront size={13} /> Dispatch trip</span><select aria-label="Trip origin" value={tripFrom} onChange={(e) => { setTripFrom(e.target.value); setTrip(null); }}>{["Depots", "Delivery points"].map((group) => { const opts = tripOptions.filter((o) => o.group === group); return opts.length ? <optgroup key={`from-${group}`} label={group}>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup> : null; })}</select><span className="trip-arrow"><ArrowRight size={14} /></span><select aria-label="Trip destination" value={tripTo} onChange={(e) => { setTripTo(e.target.value); setTrip(null); }}>{["Depots", "Delivery points"].map((group) => { const opts = tripOptions.filter((o) => o.group === group); return opts.length ? <optgroup key={`to-${group}`} label={group}>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup> : null; })}</select><button className="trip-swap" aria-label="Swap origin and destination" title="Swap" onClick={() => { setTripFrom(tripTo); setTripTo(tripFrom); setTrip(null); }}><ArrowLeftRight size={14} /></button><Button size="sm" onClick={runTrip} disabled={tripBusy || !tripFrom || !tripTo}>{tripBusy ? "Routing…" : "Send vehicle"}</Button>{trip && <button className="trip-swap" aria-label="Clear trip" title="Clear trip" onClick={() => { setTrip(null); setTripPct(0); }}><X size={14} /></button>}{trip && <span className="trip-status">{(trip.distanceM / 1000).toFixed(2)} km · {trip.timeS.toFixed(0)}s · {tripPct < 1 ? `${Math.round(tripPct * 100)}%` : "arrived"}</span>}</div>{(vehSel || vehTrip) && <div className="veh-dispatch">{vehTrip ? (<><span className="trip-dispatch-label"><CarFront size={13} /> Vehicle {vehTrip.id} rerouting</span><span className="veh-from">From · {vehTripLabel(vehTrip.from)} → {vehTripLabel(vehTrip.to)}</span><span className="trip-status">{vehPct < 1 ? `${Math.round(vehPct * 100)}%` : "arrived"} · {(vehTrip.distanceM / 1000).toFixed(2)} km</span><button className="trip-swap" aria-label="Cancel vehicle re-route" title="Cancel re-route" onClick={() => { setVehTrip(null); setVehPct(0); }}><X size={14} /></button></>) : vehSel ? (<><span className="trip-dispatch-label"><CarFront size={13} /> Vehicle {vehSel.id}</span><span className="veh-from">From · {vehTripLabel(vehSel.from)}</span><span className="trip-arrow"><ArrowRight size={14} /></span><select aria-label="Vehicle destination" value={vehTo} onChange={(e) => setVehTo(e.target.value)}>{["Depots", "Delivery points"].map((group) => { const opts = tripOptions.filter((o) => o.group === group); return opts.length ? <optgroup key={`veh-${group}`} label={group}>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup> : null; })}</select><Button size="sm" onClick={dispatchVehicle} disabled={vehBusy || !vehTo}>{vehBusy ? "Routing…" : "Re-route vehicle"}</Button><button className="trip-swap" aria-label="Deselect vehicle" title="Deselect" onClick={() => { setVehSel(null); setVehTo(""); }}><X size={14} /></button></>) : null}</div>}<NetworkMap graph={graph} routeEdges={activeEdges} previousRouteEdges={prevEdges} closed={replay.length ? (activeFrame?.closed || []) : closed} movers={shownMovers} prevMovers={prevMovers} vtrip={vehTrip ? { id: vehTrip.id, nodeIds: vehTrip.nodeIds, edgeIds: vehTrip.edgeIds, pct: vehPct } : null} selectedVehicle={vehSel?.id ?? vehTrip?.id ?? null} onPickVehicle={onPickVehicle} replayPct={replay.length ? ((frame + 1) / replay.length) * 100 : 0} incidents={replayMeta?.incidents} scenarioId={scenarioId} trip={trip ? { nodeIds: trip.nodeIds, edgeIds: trip.edgeIds, pct: tripPct } : null} onPickEdge={toggleEdgeClosure} />{solve?.budget_note && <p className="small-copy budget-note">{solve.budget_note}</p>}{solve?.cached && <p className="small-copy budget-note">Served from the in-memory solve cache — identical repeat solves return instantly.</p>}<div className="replay-bar"><span className="replay-time">{activeFrame ? `t = ${activeFrame.t.toFixed(0)}s` : "No replay loaded"}</span><input aria-label="SUMO replay timeline" type="range" min="0" max={Math.max(0, replay.length - 1)} value={frame} onChange={(event) => { setIsPlaying(false); setFrame(Number(event.target.value)); }} disabled={!replay.length} /><span className="replay-count">{replay.length ? `${frame + 1} / ${replay.length}` : "—"}</span></div><div className="replay-sub"><button className="replay-toggle" onClick={toggleReplay} disabled={busy === "replay"} aria-label={isPlaying ? "Pause replay" : "Play replay"}>{isPlaying ? <Pause size={13} /> : <Play size={13} />}</button><div className="speed-ctl" role="group" aria-label="Playback speed">{SPEEDS.map((option) => <button key={option} className={speed === option ? "speed-active" : ""} onClick={() => setSpeed(option)}>{option}x</button>)}</div><span className="replay-vehicles">{activeFrame ? `${activeFrame.vehicles.length} vehicles` : "0 vehicles"}</span><span className="replay-hint">{isPlaying ? "Space · idle waits fast-forwarded" : "Space to play / pause"}</span></div>{replayMeta?.incidents?.length ? <div className="incident-banner" role="status"><TrafficCone size={14} /><span>{replayMeta.incidents.map((i) => i.trigger_time_s <= 0 ? `${i.edge_id} · selected incident (blocked from t=0)` : `${i.edge_id} closes at t=${i.trigger_time_s.toFixed(0)}s`).join(" · ")}</span><small>{replayMeta?.mode === "kinematic_mock" ? "Enforced in the replay — new entry forbidden, vehicles on-link clear it" : "Enforced in SUMO — new entry forbidden, vehicles on-link clear it"}</small></div> : null}</CardContent>
         </Card>
         <div className="kpi-grid"><CountKpi icon={<Gauge />} label="Travel time" value={solve ? solve.evaluation.time_s : null} format={(n) => `${n.toFixed(0)} s`} delay="160ms" /><CountKpi icon={<Route />} label="Distance" value={solve ? solve.evaluation.distance_m / 1000 : null} format={(n) => `${n.toFixed(2)} km`} delay="220ms" /><Kpi icon={<CarFront />} label="Completed delivery" value={solve ? `${solve.evaluation.vehicles.reduce((sum, v) => sum + v.order.length, 0)} / ${graph?.requests.length || 5}` : "—"} accent={solve?.evaluation.all_served ? "good" : ""} delay="280ms" /><CountKpi icon={<Activity />} label="Replanning latency" value={solve ? solve.elapsed_s : null} format={(n) => `${n.toFixed(2)} s`} delay="340ms" /></div>
       </section>
@@ -614,7 +653,7 @@ function App() {
               <optgroup label="City fixtures">{fixtures.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</optgroup>
               {delhi.length > 0 && <optgroup label="Real Delhi maps">{delhi.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</optgroup>}
             </>);
-          })()}</select></Field><Field label="Optimizer"><select value={method} onChange={(e) => setMethod(e.target.value)}><option value="qpso">QPSO · quantum-inspired</option><option value="pso">PSO · classical comparator</option><option value="alns">ALNS · adaptive heuristic</option><option value="constructive">Constructive baseline</option></select></Field><div className="field"><span>Incident</span><div className="incident-box"><select aria-label="Add road closure" value="" onChange={(e) => { if (e.target.value) toggleEdgeClosure(e.target.value); }}><option value="">Add road closure…</option>{graph?.edges.map((edge) => <option key={edge.id} value={edge.id}>{edge.id} · {edge.from} → {edge.to}</option>)}</select>{closed.length > 0 ? <div className="closure-chips">{closed.map((id) => { const edge = graph?.edges.find((x) => x.id === id); return <span className="closure-chip" key={id} title={edge ? `${id} · ${edge.from} → ${edge.to}` : id}><em>{shortEdge(id)}</em><button type="button" aria-label={`Unblock ${id}`} onClick={() => toggleEdgeClosure(id)}><X size={11} /></button></span>; })}<button type="button" className="chip-clear" onClick={() => setClosed([])}>Clear</button></div> : <p className="incident-hint">Click any road on the map to block it as the incident — click it again to unblock. Hover shows the road id.</p>}</div></div><div className="button-stack">{autoPlan && <span className="auto-plan-chip">{autoPlan}</span>}<Button size="lg" onClick={runSolve} disabled={!!busy || !!autoPlan}><Sparkles size={16} /> {busy === "solve" ? "Solving…" : "Solve & validate"}</Button><Button size="lg" variant="outline" onClick={toggleReplay} disabled={busy === "replay"}>{isPlaying ? <Pause size={16} /> : <Play size={16} />} {busy === "replay" ? "Loading SUMO…" : replay.length ? (isPlaying ? "Pause SUMO replay" : "Resume SUMO replay") : "Load SUMO replay"}</Button><Button size="lg" variant="outline" onClick={openStory}><ScrollText size={16} /> Guided demo</Button></div></CardContent></Card>
+          })()}</select></Field><Field label="Optimizer"><select value={method} onChange={(e) => setMethod(e.target.value)}><option value="qpso">QPSO · quantum-inspired</option><option value="pso">PSO · classical comparator</option><option value="alns">ALNS · adaptive heuristic</option><option value="constructive">Constructive baseline</option></select></Field><div className="field"><span>Live traffic</span><label className="live-toggle"><input type="checkbox" checked={liveTraffic} disabled={!hereStatus?.configured || !graph?.geo?.available} onChange={(e) => { const on = e.target.checked; setLiveTraffic(on); toast({ kind: "info", title: on ? "HERE live traffic on" : "HERE live traffic off", message: on ? "Solves, trips, and the graph now overlay HERE live speeds." : "Static free-flow speeds again — press Solve to re-plan.", duration: 4000 }); }} /><span className="live-toggle-track" aria-hidden="true"><i /></span><em>{liveTraffic ? "HERE live speeds" : "Static free flow"}</em></label>{!hereStatus?.configured ? <p className="incident-hint">Set <code>HERE_API_KEY</code> on the backend (free key at portal.here.com) to enable live traffic.</p> : graph && !graph.geo?.available ? <p className="incident-hint">Live traffic needs a real map — switch to a Delhi OSM scenario (the city fixture has no coordinates to match).</p> : liveTraffic && graph?.here_traffic ? <p className="incident-hint">{graph.here_traffic.applied ? `Live: ${graph.here_traffic.matched ?? 0} of ${graph.here_traffic.edges ?? graph.edges.length} roads use HERE speeds${graph.here_traffic.source_updated ? ` · observed ${graph.here_traffic.source_updated}` : ""}` : `Live traffic unavailable: ${graph.here_traffic.reason || "no data"}`}</p> : null}</div><div className="field"><span>Incident</span><div className="incident-box"><select aria-label="Add road closure" value="" onChange={(e) => { if (e.target.value) toggleEdgeClosure(e.target.value); }}><option value="">Add road closure…</option>{graph?.edges.map((edge) => <option key={edge.id} value={edge.id}>{edge.id} · {edge.from} → {edge.to}</option>)}</select>{closed.length > 0 ? <div className="closure-chips">{closed.map((id) => { const edge = graph?.edges.find((x) => x.id === id); return <span className="closure-chip" key={id} title={edge ? `${id} · ${edge.from} → ${edge.to}` : id}><em>{shortEdge(id)}</em><button type="button" aria-label={`Unblock ${id}`} onClick={() => toggleEdgeClosure(id)}><X size={11} /></button></span>; })}<button type="button" className="chip-clear" onClick={() => setClosed([])}>Clear</button></div> : <p className="incident-hint">Click any road on the map to block it as the incident — click it again to unblock. Hover shows the road id.</p>}</div></div><div className="button-stack">{autoPlan && <span className="auto-plan-chip">{autoPlan}</span>}<Button size="lg" onClick={runSolve} disabled={!!busy || !!autoPlan}><Sparkles size={16} /> {busy === "solve" ? "Solving…" : "Solve & validate"}</Button><Button size="lg" variant="outline" onClick={toggleReplay} disabled={busy === "replay"}>{isPlaying ? <Pause size={16} /> : <Play size={16} />} {busy === "replay" ? "Loading SUMO…" : replay.length ? (isPlaying ? "Pause SUMO replay" : "Resume SUMO replay") : "Load SUMO replay"}</Button><Button size="lg" variant="outline" onClick={openStory}><ScrollText size={16} /> Guided demo</Button></div></CardContent></Card>
         <Card className="why-card reveal lift" style={{ "--d": "240ms" } as CSSProperties}><CardHeader><CardTitle><Bot size={17} /> Why did it choose this?</CardTitle></CardHeader><CardContent>{tripOptions.length ? <div className="decision-list"><Decision icon={<MapPinned />} title={`${tripFromLabel} → ${tripToLabel}`} body={`Going from ${tripFrom || "?"} to ${tripTo || "?"}.${closed.length ? ` ${closed.length} road closure(s) active — blocked roads are excluded from route search.` : " Network clear — all directed roads are open."}`} /><Decision icon={<Route />} title={trip ? "How the route was picked: shortest directed path (Dijkstra)" : "How routes get picked: Dijkstra least travel time"} body={trip ? `${trip.nodeIds.length - 1} road segments · ${(trip.distanceM / 1000).toFixed(2)} km · ${trip.timeS.toFixed(0)}s travel${trip.congestionS > 0 ? ` (+${trip.congestionS.toFixed(0)}s congestion vs free flow)` : ""} — the least-travel-time path over open directed roads. Vehicle ${tripPct < 1 ? `en route — ${Math.round(tripPct * 100)}%` : "arrived"}.` : "Pick From/To above the map and press Send vehicle — the path is recomputed live against current closures."} />{vehTrip && <Decision icon={<CarFront />} title={`Vehicle ${vehTrip.id}: rerouted on demand`} body={`From ${vehTripLabel(vehTrip.from)} to ${vehTripLabel(vehTrip.to)} — ${vehTrip.nodeIds.length - 1} segments · ${(vehTrip.distanceM / 1000).toFixed(2)} km · least-travel-time Dijkstra under ${closed.length} closure(s)${vehPct < 1 ? ` — vehicle ${Math.round(vehPct * 100)}% en route` : " — arrived"}.`} />}{solve && <Decision icon={<ShieldCheck />} title="Validator-first" body={solve.evaluation.feasible ? "Every vehicle, customer, time window, and depot return passed." : "The independent validator found a constraint issue."} />}{solve && <Decision icon={<Activity />} title="Search trace" body={`${solve.method} evaluated ${solve.evaluations || "multiple"} candidate plans.`} />}</div> : <div className="empty-explain"><Bot size={30} /><p>Loading network…</p></div>}</CardContent></Card>
       </aside>
       <section className="bottom-grid"><CompareStrip current={solve} previous={previousSolve} /><Card className="reveal lift" style={{ "--d": "60ms" } as CSSProperties}><CardHeader><CardTitle>Route result</CardTitle><CardDescription>The exact customer order and road path returned by the backend.</CardDescription></CardHeader><CardContent><RouteTable result={solve} />{solve && <><Separator /><div className="route-subhead">Delivery timeline</div><VehicleGantt result={solve} /><div className="route-subhead">Validator report</div><ViolationsPanel evaluation={solve.evaluation} /></>}</CardContent></Card><Card className="reveal lift" style={{ "--d": "120ms" } as CSSProperties}><CardHeader><CardTitle>Convergence</CardTitle><CardDescription>Lower objective is better. This is the optimizer’s actual evaluation trace.</CardDescription></CardHeader><CardContent><Trace values={solve?.trace?.best || []} diversity={solve?.trace?.diversity} traceKey={solve ? `${solve.method}-${solve.evaluations || 0}-${(solve.trace?.best || []).length}` : "empty"} /></CardContent></Card><Card className="timeline-card reveal" style={{ "--d": "180ms" } as CSSProperties}><CardHeader><CardTitle>What happened</CardTitle><CardDescription>A short audit trail for the current run.</CardDescription></CardHeader><CardContent><Timeline solve={solve} replay={replay} /></CardContent></Card></section>
@@ -622,6 +661,78 @@ function App() {
     {storyOpen && <StoryPanel story={story} status={stepStatus} autoPlaying={autoPlaying} onRun={runStoryStep} onAutoPlay={autoPlayStory} onAbort={abortStory} onClose={() => { abortStory(); setStoryOpen(false); }} compare={compareResult} current={solve} />}
   </div>
 );
+}
+
+// ── HERE place search: address → nearest graph node for the From/To picks ──
+function HereSearch({ status, nodes, onPick }: {
+  status: HereStatus | null;
+  nodes: GraphNode[];
+  onPick: (nodeId: string, role: "from" | "to") => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<HereGeocode["results"]>([]);
+  const [note, setNote] = useState("");
+  const configured = !!status?.configured;
+  const geoNodes = useMemo(() => nodes.filter((n) => typeof n.lat === "number" && typeof n.lon !== "undefined" && typeof n.lon === "number"), [nodes]);
+
+  async function runSearch() {
+    const text = query.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    setNote("");
+    setResults([]);
+    try {
+      const payload = await api<HereGeocode>(`/api/here/geocode?q=${encodeURIComponent(text)}&limit=5`, undefined, 20000);
+      setResults(payload.results || []);
+      if (!payload.results?.length) setNote("No match — try a more specific address.");
+    } catch (err) {
+      setNote((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="here-search">
+      <span className="trip-dispatch-label"><Search size={13} /> HERE place search</span>
+      {!configured ? (
+        <span className="here-hint">Address search activates when HERE_API_KEY is set on the backend (portal.here.com).</span>
+      ) : (
+        <>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void runSearch(); } }}
+            placeholder="Address or place, e.g. Connaught Place, New Delhi"
+            aria-label="Search an address with HERE"
+          />
+          <button type="button" onClick={() => void runSearch()} disabled={busy || !query.trim()}>{busy ? "Searching…" : "Search"}</button>
+        </>
+      )}
+      {note && <em className="here-note">{note}</em>}
+      {results.length > 0 && (
+        <div className="here-results">
+          {results.map((item, index) => {
+            const nodeId = geoNodes.length ? nearestNode(geoNodes, item.lat, item.lon) : null;
+            return (
+              <div className="here-result" key={`${item.lat},${item.lon},${index}`}>
+                <span title={item.label}>{item.label}{typeof item.distance_m === "number" ? ` · ${(item.distance_m / 1000).toFixed(1)} km` : ""}</span>
+                {nodeId ? (
+                  <span className="here-pick">
+                    <button type="button" onClick={() => onPick(nodeId, "from")}>From</button>
+                    <button type="button" onClick={() => onPick(nodeId, "to")}>To</button>
+                  </span>
+                ) : (
+                  <em className="here-note">no graph node nearby</em>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Home({ onStart }: { onStart: () => void }) { return <div className="home-shell"><header className="home-nav"><button className="brand-button"><span className="brand-mark">✦</span><span>QUANTA</span></button><Button variant="outline" size="sm" onClick={onStart}>Open control room <ArrowRight size={14} /></Button></header><main className="home-main"><div className="hero-copy reveal"><Badge variant="outline">SMART ROUTING FOR DYNAMIC CITIES</Badge><h1>When the city changes,<br /><em>the route adapts.</em></h1><p>Quanta is an adaptive dispatch system for delivery fleets. It watches a directed road network, forecasts near-term traffic, and searches for a route that is legal, fast, and ready to execute.</p><div className="hero-actions"><Button size="lg" onClick={onStart}>Launch live simulation <ArrowRight size={17} /></Button><a href="#method">See the method <ChevronRight size={15} /></a></div><div className="hero-proof"><span><CheckCircle2 size={15} /> Independent validation</span><span><CheckCircle2 size={15} /> SUMO execution</span><span><CheckCircle2 size={15} /> QPSO + baselines</span></div><div className="hero-stats"><HeroStat value={4} label="OPTIMIZERS LIVE" /><HeroStat value={3} label="FORECAST HORIZONS" /><HeroStat value={5} label="JOBS IN FIXTURE" /></div></div><div className="hero-visual" aria-hidden="true"><div className="orbital orbital-one" /><div className="orbital orbital-two" /><div className="city-core"><Layers3 size={42} /><span>LIVE<br />NETWORK</span></div><div className="hero-node node-a" /><div className="hero-node node-b" /><div className="hero-node node-c" /><div className="hero-line line-a" /><div className="hero-line line-b" /><div className="hero-line line-c" /><div className="hero-float float-one"><span className="live-dot" /> FORECAST v1</div><div className="hero-float float-two">QPSO <strong>READY</strong></div></div></main><section id="method" className="home-method"><div><span className="eyebrow">THE DECISION LOOP</span><h2>From signal to safe action.</h2></div><div className="method-grid"><ScrollReveal delay="0ms"><Method number="01" icon={<Activity />} title="Observe" text="Traffic, closures, fleet position, and delivery windows enter one causal state." /></ScrollReveal><ScrollReveal delay="90ms"><Method number="02" icon={<Bot />} title="Predict" text="The graph forecaster estimates speed by road and horizon with measurable uncertainty." /></ScrollReveal><ScrollReveal delay="180ms"><Method number="03" icon={<Sparkles />} title="Optimize" text="QPSO searches a route plan, while an independent validator protects feasibility." /></ScrollReveal><ScrollReveal delay="270ms"><Method number="04" icon={<ShieldCheck />} title="Prove" text="SUMO executes the plan so the result can be replayed and inspected." /></ScrollReveal></div></section></div> }
