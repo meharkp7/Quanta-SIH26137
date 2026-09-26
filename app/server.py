@@ -24,6 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src.platform.service import PlatformService, SolveOptions
+from src.data.here_api import HEREError, HERENotConfigured
 from src.runtime.loop import DemoLoop
 from app.auth import config, verify_company
 from app.workspace import router as workspace_router
@@ -55,11 +56,11 @@ async def company_access(request: Request, call_next):
     if path.startswith("/api/") and request.method != "OPTIONS":
         # Public reads contain only catalog/demo data, never a company's saved records.
         public_read = request.method == "GET" and path.startswith((
-            "/api/health", "/api/meta", "/api/scenarios", "/api/evidence", "/api/demo/", "/api/episodes"))
+            "/api/health", "/api/meta", "/api/scenarios", "/api/evidence", "/api/demo/", "/api/episodes", "/api/here/"))
         company = request.headers.get("x-company-id", "")
         token = request.headers.get("authorization", "")
         demo_allowed = config("QUANTA_ALLOW_DEMO", "true").lower() == "true"
-        demo_compute = path in ("/api/solve", "/api/compare", "/api/path", "/api/validate", "/api/sumo/replay") or path.startswith("/api/workspace/")
+        demo_compute = path in ("/api/solve", "/api/compare", "/api/path", "/api/validate", "/api/sumo/replay", "/api/here/route") or path.startswith("/api/workspace/")
         configured = bool(config("SUPABASE_URL"))
         try:
             if token or company:
@@ -96,12 +97,18 @@ class SolveRequest(BaseModel):
     evaluations: int = Field(default=40, ge=4, le=400)
     seed: int = 7
     closed_edge_ids: list[str] = Field(default_factory=list)
+    live_traffic: bool = Field(
+        default=False,
+        description="Overlay HERE live speeds on the graph before solving; "
+        "fails with a clear error when HERE is not usable.",
+    )
 
 
 class ValidateRequest(BaseModel):
     scenario_id: str = Field(default="S3_BASE", min_length=1)
     plan: dict[str, list[str]] | None = None
     closed_edge_ids: list[str] = Field(default_factory=list)
+    live_traffic: bool = False
 
 
 class PathRequest(BaseModel):
@@ -109,6 +116,17 @@ class PathRequest(BaseModel):
     source: str = Field(min_length=1)
     target: str = Field(min_length=1)
     closed_edge_ids: list[str] = Field(default_factory=list)
+    live_traffic: bool = False
+
+
+class HereRouteRequest(BaseModel):
+    """HERE v8's own route between two graph nodes (its own measurement)."""
+
+    scenario_id: str = Field(default="S3_BASE", min_length=1)
+    source: str = Field(min_length=1)
+    target: str = Field(min_length=1)
+    closed_edge_ids: list[str] = Field(default_factory=list)
+    transport_mode: Literal["car", "truck"] = "car"
 
 
 class CompareRequest(SolveRequest):
@@ -168,11 +186,20 @@ def _solve_options(request: SolveRequest) -> SolveOptions:
         evaluations=request.evaluations,
         seed=request.seed,
         closed_edge_ids=tuple(request.closed_edge_ids),
+        live_traffic=request.live_traffic,
     )
 
 
 def _bad_request(exc: Exception) -> HTTPException:
-    """Keep internal exception details useful while using a consistent status."""
+    """Keep internal exception details useful while using a consistent status.
+
+    HERE failures get honest upstream statuses instead of a blanket 400:
+    409 when no key is configured, 502 when HERE itself failed.
+    """
+    if isinstance(exc, HERENotConfigured):
+        return HTTPException(status_code=409, detail=str(exc))
+    if isinstance(exc, HEREError):
+        return HTTPException(status_code=502, detail=str(exc))
     return HTTPException(status_code=400, detail=str(exc))
 
 
@@ -408,10 +435,15 @@ def scenarios() -> dict:
 
 
 @app.get("/api/scenarios/{scenario_id}")
-def scenario_graph(scenario_id: str, closed: str = "") -> dict:
+def scenario_graph(scenario_id: str, closed: str = "", live: bool = False) -> dict:
+    """Graph payload; ``live=true`` overlays HERE live speeds (lenient).
+
+    HERE problems never break this read — they surface as
+    ``here_traffic.reason`` while the static graph stays intact.
+    """
     closed_ids = [item.strip() for item in closed.split(",") if item.strip()]
     try:
-        return service.graph(scenario_id, closed_ids)
+        return service.graph(scenario_id, closed_ids, live_traffic=live)
     except Exception as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -489,6 +521,7 @@ def validate(request: ValidateRequest) -> dict:
             request.scenario_id,
             request.plan,
             request.closed_edge_ids,
+            live_traffic=request.live_traffic,
         )
     except Exception as exc:
         raise _bad_request(exc) from exc
@@ -515,6 +548,7 @@ def compare(request: CompareRequest) -> dict:
             seed=request.seed,
             closed_edge_ids=request.closed_edge_ids,
             methods=request.methods,
+            live_traffic=request.live_traffic,
         )
     except Exception as exc:
         raise _bad_request(exc) from exc
@@ -528,6 +562,54 @@ def shortest_path(request: PathRequest) -> dict:
             request.target,
             request.scenario_id,
             request.closed_edge_ids,
+            live_traffic=request.live_traffic,
+        )
+    except Exception as exc:
+        raise _bad_request(exc) from exc
+
+
+# ──────────────────────────────────────────────────────────────────────
+# HERE integration (optional — see src/data/here_api.py for the key setup)
+# ──────────────────────────────────────────────────────────────────────
+
+@app.get("/api/here/status")
+def here_status() -> dict:
+    """Whether a HERE key is configured (checked locally — no probe)."""
+    return service.here_status()
+
+
+@app.get("/api/here/geocode")
+def here_geocode(q: str = "", limit: int = 5, lat: float | None = None, lon: float | None = None) -> dict:
+    """Address/place search via HERE Geocoding v1."""
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="query parameter 'q' is required")
+    at = (lat, lon) if lat is not None and lon is not None else None
+    try:
+        return service.here_geocode(q, limit=limit, at=at)
+    except Exception as exc:
+        raise _bad_request(exc) from exc
+
+
+@app.get("/api/here/traffic")
+def here_traffic(scenario_id: str = "S3_BASE", closed: str = "") -> dict:
+    """Live-overlay status for a map: matched counts or an honest reason."""
+    closed_ids = [item.strip() for item in closed.split(",") if item.strip()]
+    try:
+        return service.here_traffic(scenario_id, closed_ids)
+    except Exception as exc:
+        raise _bad_request(exc) from exc
+
+
+@app.post("/api/here/route")
+def here_route(request: HereRouteRequest) -> dict:
+    """HERE v8's own traffic-enabled drive time between two graph nodes."""
+    try:
+        return service.here_route(
+            request.source,
+            request.target,
+            request.scenario_id,
+            request.closed_edge_ids,
+            transport_mode=request.transport_mode,
         )
     except Exception as exc:
         raise _bad_request(exc) from exc
